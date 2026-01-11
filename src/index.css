@@ -1,0 +1,80 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif;
+  background-color: #f0f2f5;
+}
+
+/* 打印專用樣式 */
+@media print {
+  @page {
+    size: A4;
+    margin: 10mm;
+  }
+  body {
+    background-color: white;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    overflow: visible !important;
+    height: auto !important;
+  }
+  #root {
+    overflow: visible !important;
+    height: auto !important;
+  }
+  
+  .no-print, nav, .sidebar, .modal-overlay {
+    display: none !important;
+  }
+  
+  .doc-print-container { 
+    display: block !important; 
+    position: absolute; 
+    top: 0; 
+    left: 0; 
+    width: 100%; 
+    background: white; 
+    z-index: 9999;
+    padding: 0;
+  }
+  .report-container {
+    display: block !important;
+    width: 100%;
+    box-shadow: none;
+  }
+  .page-break {
+    page-break-before: always;
+  }
+  
+  body.printing-doc #root > div {
+    visibility: hidden;
+  }
+  body.printing-doc .doc-print-container {
+    visibility: visible;
+  }
+  
+  .bg-slate-50 {
+    background-color: #f8fafc !important;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+.modal-overlay {
+  background-color: rgba(0, 0, 0, 0.5);
+}
+.paper {
+  background: white;
+  box-shadow: 0 0 10px rgba(0,0,0,0.1);
+  padding: 40px;
+  min-height: 800px;
+  font-family: "Times New Roman", "MingLiU", serif;
+}

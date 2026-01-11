@@ -272,9 +272,9 @@ const App = () => {
                 });
                 await batch.commit();
                 count += chunk.length;
-                console.log(`Uploaded ${count} records...`);
+                console.log(\`Uploaded \${count} records...\`);
             }
-            alert(`成功匯入 ${count} 筆記錄到雲端！`);
+            alert(\`成功匯入 \${count} 筆記錄到雲端！\`);
         } catch (err) { 
             console.error(err);
             alert("匯入失敗: " + err); 
@@ -368,7 +368,7 @@ const App = () => {
       const href = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = href;
-      link.download = `Charles_Finance_Data.json`;
+      link.download = \`Charles_Finance_Data.json\`;
       document.body.appendChild(link);
       link.click();
   };
@@ -609,7 +609,7 @@ const App = () => {
                           {id: 'insurance', icon: 'Shield', label: '保險金庫 (Insurance)'},
                           {id: 'education', icon: 'GraduationCap', label: '升學導航 (Education)'},
                           {id: 'property', icon: 'Home', label: '物業管理 (Property)'},
-                      ].map(item => { const IconComp = Icons[item.icon]; return (<button key={item.id} onClick={()=>{setActiveTab(item.id); setReportMode(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${activeTab===item.id && !reportMode ?'bg-blue-600 text-white':'hover:bg-slate-800'}`}><IconComp /> {item.label}</button>)})}
+                      ].map(item => { const IconComp = Icons[item.icon as keyof typeof Icons]; return (<button key={item.id} onClick={()=>{setActiveTab(item.id); setReportMode(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${activeTab===item.id && !reportMode ?'bg-blue-600 text-white':'hover:bg-slate-800'}`}><IconComp /> {item.label}</button>)})}
                   </nav>
                   <div className="p-4 border-t border-slate-800 space-y-2">
                        <button onClick={()=>{setReportMode(true); setActiveTab('report');}} className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-bold shadow"><Icons.Printer /> 綜合報告</button>
@@ -633,7 +633,7 @@ const App = () => {
                                   <StatCard title="保險總投入" value={`$${(Object.values(stats.insuranceByMember).flat().reduce((a,b)=>a+b.totalPaid,0)/1000000).toFixed(2)}M`} subtext="全家保障" color="indigo" iconName="ShieldCheck" />
                                   <StatCard title="最大類別" value={stats.byCat[0]?.name || '-'} subtext={`${((stats.byCat[0]?.value/stats.total)*100).toFixed(0)}%`} color="orange" iconName="PieChart" />
                               </div>
-                              <div className="bg-white p-6 rounded-xl border shadow-sm h-96"><h3 className="font-bold text-slate-700 mb-4">支出趨勢</h3><ResponsiveContainer><AreaChart data={stats.byYear}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="year"/><YAxis tickFormatter={(v)=>`${v/1000}k`}/><Tooltip/><Area type="monotone" dataKey="amount" stroke="#2563EB" fill="#3B82F6"/></AreaChart></ResponsiveContainer></div>
+                              <div className="bg-white p-6 rounded-xl border shadow-sm h-96"><h3 className="font-bold text-slate-700 mb-4">支出趨勢</h3><ResponsiveContainer><AreaChart data={stats.byYear}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="year"/><YAxis tickFormatter={(v:any)=>`${v/1000}k`}/><Tooltip/><Area type="monotone" dataKey="amount" stroke="#2563EB" fill="#3B82F6"/></AreaChart></ResponsiveContainer></div>
                           </div>
                       )}
                       
@@ -691,7 +691,7 @@ const App = () => {
                               </div>
                               <div className="bg-white p-6 rounded-xl border shadow-sm h-80">
                                   <h3 className="font-bold text-slate-700 mb-4">未來 10 年資金需求預測</h3>
-                                  <ResponsiveContainer><BarChart data={eduForecast.data}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="year" /><YAxis tickFormatter={(v)=>`${v/1000}k`}/><Tooltip formatter={(v)=>`$${v.toLocaleString()}`} /><Legend /><Bar dataKey="vCost" name="Virginia" stackId="a" fill="#EC4899" /><Bar dataKey="jCost" name="Jason" stackId="a" fill="#3B82F6" /></BarChart></ResponsiveContainer>
+                                  <ResponsiveContainer><BarChart data={eduForecast.data}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="year" /><YAxis tickFormatter={(v:any)=>`${v/1000}k`}/><Tooltip formatter={(v:any)=>`$${v.toLocaleString()}`} /><Legend /><Bar dataKey="vCost" name="Virginia" stackId="a" fill="#EC4899" /><Bar dataKey="jCost" name="Jason" stackId="a" fill="#3B82F6" /></BarChart></ResponsiveContainer>
                               </div>
                               
                               <div className="bg-slate-100 p-4 rounded-xl">

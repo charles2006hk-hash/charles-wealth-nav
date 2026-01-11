@@ -30,7 +30,7 @@ const db = getFirestore(app);
 
 // --- Types ---
 interface Transaction {
-  id: string; // Firestore IDs are strings
+  id: string; 
   date: string;
   merchant: string;
   amount: number;
@@ -81,7 +81,16 @@ interface DocConfig {
   tenantID?: string;
 }
 
-// --- Icons (Inline SVGs) ---
+interface InsurancePolicy {
+    name: string;
+    totalPaid: number;
+    note: string;
+    lastPaid: string;
+    endYear: number | null;
+    rawMerchant: string;
+}
+
+// --- Icons ---
 const Icons = {
   Tag: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/></svg>,
   DollarSign: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
@@ -164,6 +173,7 @@ const StatCard = ({ title, value, subtext, color, iconName }: { title: string, v
 // --- Main App Component ---
 const App: React.FC = () => {
   // --- Firestore States ---
+  // Fix 1: Add type parameters to useState
   const [data, setData] = useState<Transaction[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [eduDB, setEduDB] = useState<Record<string, EduConfig>>(INITIAL_EDUCATION_DB);
@@ -203,25 +213,24 @@ const App: React.FC = () => {
   useEffect(() => {
     // 1. Transactions
     const q = query(collection(db, "transactions"), orderBy("date", "desc"));
-    const unsubTx = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
+    const unsubTx = onSnapshot(q, (snapshot) => {
+      // Fix 4: Cast Firestore data to Transaction type
       const txs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
       setData(txs);
       setDataLoaded(true);
     });
 
     // 2. Properties
-    const unsubProp = onSnapshot(collection(db, "properties"), (snapshot: QuerySnapshot<DocumentData>) => {
+    const unsubProp = onSnapshot(collection(db, "properties"), (snapshot) => {
       const props = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Property));
-      // 如果雲端沒有物業資料，且本地是空的，這裡可以選擇是否初始化預設資料
       setProperties(props);
     });
 
-    // 3. Education Config (Stored as a single doc 'settings/education')
-    const unsubEdu = onSnapshot(doc(db, "settings", "education"), (docSnap: DocumentSnapshot<DocumentData>) => {
+    // 3. Education Config
+    const unsubEdu = onSnapshot(doc(db, "settings", "education"), (docSnap) => {
       if (docSnap.exists()) {
         setEduDB(docSnap.data() as Record<string, EduConfig>);
       } else {
-        // Init default if not exists
         setDoc(doc(db, "settings", "education"), INITIAL_EDUCATION_DB);
       }
     });
@@ -250,7 +259,6 @@ const App: React.FC = () => {
             const json = JSON.parse(result);
             const list = Array.isArray(json) ? json : (json.data || []);
             
-            // Batch write to Firestore (limit 500 per batch)
             const batchSize = 450;
             let chunks = [];
             for (let i = 0; i < list.length; i += batchSize) {
@@ -292,22 +300,18 @@ const App: React.FC = () => {
 
   const clearData = async () => {
       if(window.confirm('危險：確定清除雲端所有交易記錄？此操作無法復原。')) {
-          // 在沒有後端的情況下，前端不建議執行大量刪除，改為提示
-          setIsProcessing(true); // 觸發一下狀態以示回應
+          setIsProcessing(true);
           alert("為防止誤刪，請聯絡管理員進行批量刪除，或手動刪除特定項目。");
           setIsProcessing(false);
       }
   };
 
-  // 修改了這裡：將 merchant 參數更名為 _merchant 表示暫時不使用，避免 TypeScript 報錯
   const updateCategory = async (id: string, newCat: string, _merchant: string, applyToAll: boolean) => {
       try {
-          // Update single
           const txRef = doc(db, "transactions", id);
           await updateDoc(txRef, { category: newCat });
 
           if (applyToAll) {
-              // 批量更新邏輯暫時略過，以節省寫入配額
               alert("批量更新功能在雲端模式下暫時停用，以節省寫入配額。");
           }
       } catch (e) {
@@ -367,7 +371,7 @@ const App: React.FC = () => {
   };
 
   const updateEduDB = async (newConfig: Record<string, EduConfig>) => {
-      setEduDB(newConfig); // Optimistic update
+      setEduDB(newConfig); 
       await setDoc(doc(db, "settings", "education"), newConfig);
   };
 
@@ -403,7 +407,8 @@ const App: React.FC = () => {
       const total = filtered.reduce((a,b) => a + b.amount, 0);
       const byYear: Record<string, number> = {}; 
       const byCat: Record<string, number> = {}; 
-      const insuranceByMember: Record<string, any[]> = {};
+      // Fix 2: Type insuranceByMember accumulator
+      const insuranceByMember: Record<string, InsurancePolicy[]> = {};
 
       filtered.forEach(d => {
           if(!byYear[d.year]) byYear[d.year] = 0; byYear[d.year] += d.amount;
@@ -414,7 +419,6 @@ const App: React.FC = () => {
               let policyName = d.merchant;
               if(policyName.includes('Insurance:')) { policyName = policyName.split('Insurance:')[1].trim(); } else { policyName = policyName.replace(/AXA_|Prudential_|Manulift_/gi, '').split('(')[0].trim(); }
               const existing = insuranceByMember[memberKey].find(p => p.name === policyName);
-              // Simplified for Firestore data structure consistency check
               const txDate = d.date || '';
               if(existing) { 
                   existing.totalPaid += d.amount; 
@@ -448,7 +452,8 @@ const App: React.FC = () => {
       return { 
         total, 
         count: filtered.length, 
-        byYear: Object.entries(byYear).map(([k,v])=>({year:k, amount:v})).sort((a:any,b:any)=>a.year-b.year), 
+        // Fix 3: Explicitly type sort parameters
+        byYear: Object.entries(byYear).map(([k,v])=>({year:k, amount:v})).sort((a,b)=>Number(a.year)-Number(b.year)), 
         byCat: Object.entries(byCat).map(([k,v])=>({name:k, value:v})).sort((a,b)=>b.value-a.value), 
         insuranceByMember, 
         propStats, 
@@ -458,7 +463,9 @@ const App: React.FC = () => {
 
   const eduForecast = useMemo(() => {
       const db = eduDB || INITIAL_EDUCATION_DB;
-      const regV = db[eduRegionV] || INITIAL_EDUCATION_DB.UK; const regJ = db[eduRegionJ] || INITIAL_EDUCATION_DB.AUS;
+      // Fix 3: Add fallback or type assertion if key is missing (though Record<string, ...> handles it)
+      const regV = db[eduRegionV] || INITIAL_EDUCATION_DB.UK; 
+      const regJ = db[eduRegionJ] || INITIAL_EDUCATION_DB.AUS;
       const currentYear = new Date().getFullYear(); const forecast = []; let totalNeeded = 0;
       for(let i=0; i<12; i++) {
           const year = currentYear + i; let vCost = 0; let jCost = 0;
@@ -472,7 +479,6 @@ const App: React.FC = () => {
       return { data: forecast, totalNeeded: Math.round(totalNeeded) };
   }, [eduRegionV, eduRegionJ, childType, eduDB]);
 
-  // Doc Preview
   const DocPreview = () => {
       const prop = properties.find(p => p.id === docConfig.propId) || { name: '未知物業' };
       if (docConfig.type === 'receipt') {
@@ -793,6 +799,45 @@ const App: React.FC = () => {
                       <div className="flex gap-2 mt-6">
                           <button onClick={handleSaveProperty} className="flex-1 bg-blue-600 text-white py-2 rounded font-bold hover:bg-blue-700">保存</button>
                           <button onClick={()=>setPropModalOpen(false)} className="flex-1 bg-slate-200 text-slate-700 py-2 rounded hover:bg-slate-300">取消</button>
+                      </div>
+                  </div>
+              </div>
+          )}
+
+          {/* Document Modal (Restored) */}
+          {isDocModalOpen && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
+                  <div className="bg-white rounded-xl shadow-2xl p-6 w-[800px] h-[90vh] flex flex-col">
+                      <div className="flex justify-between items-center mb-4 border-b pb-2">
+                          <h3 className="text-xl font-bold flex items-center gap-2"><Icons.FileText /> 文書生成器</h3>
+                          <button onClick={()=>setDocModalOpen(false)} className="text-slate-400 hover:text-slate-600">✕</button>
+                      </div>
+                      <div className="flex gap-6 flex-1 overflow-hidden">
+                          {/* Left: Controls */}
+                          <div className="w-1/3 space-y-4 overflow-y-auto pr-2">
+                              <div><label className="block text-xs font-bold text-slate-500 mb-1">文件類型</label><div className="flex rounded bg-slate-100 p-1"><button onClick={()=>setDocConfig({...docConfig, type:'receipt'})} className={`flex-1 text-xs py-1 rounded ${docConfig.type==='receipt'?'bg-white shadow text-blue-600':'text-slate-500'}`}>收據</button><button onClick={()=>setDocConfig({...docConfig, type:'lease'})} className={`flex-1 text-xs py-1 rounded ${docConfig.type==='lease'?'bg-white shadow text-blue-600':'text-slate-500'}`}>租約</button></div></div>
+                              <div><label className="block text-xs font-bold text-slate-500 mb-1">選擇物業</label><select className="w-full border rounded p-2 text-sm" value={docConfig.propId} onChange={e=>{ const p = properties.find(x=>x.id===e.target.value); setDocConfig({...docConfig, propId:e.target.value, amount: p?p.estRent:0}); }}>{properties.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+                              <div><label className="block text-xs font-bold text-slate-500 mb-1">租客姓名</label><input type="text" className="w-full border rounded p-2 text-sm" value={docConfig.tenant} onChange={e=>setDocConfig({...docConfig, tenant:e.target.value})} /></div>
+                              {docConfig.type === 'receipt' ? (
+                                  <div><label className="block text-xs font-bold text-slate-500 mb-1">租期 (Period)</label><input type="text" className="w-full border rounded p-2 text-sm" value={docConfig.period} onChange={e=>setDocConfig({...docConfig, period:e.target.value})} placeholder="e.g. Jan 2025" /></div>
+                              ) : (
+                                  <>
+                                      <div><label className="block text-xs font-bold text-slate-500 mb-1">身份證號 (首4位)</label><input type="text" className="w-full border rounded p-2 text-sm" value={docConfig.tenantID} onChange={e=>setDocConfig({...docConfig, tenantID:e.target.value})} /></div>
+                                      <div className="flex gap-2"><div><label className="block text-xs font-bold text-slate-500">起租日</label><input type="date" className="w-full border rounded p-2 text-sm" value={docConfig.startDate} onChange={e=>setDocConfig({...docConfig, startDate:e.target.value})} /></div><div><label className="block text-xs font-bold text-slate-500">完結日</label><input type="date" className="w-full border rounded p-2 text-sm" value={docConfig.endDate} onChange={e=>setDocConfig({...docConfig, endDate:e.target.value})} /></div></div>
+                                      <div><label className="block text-xs font-bold text-slate-500 mb-1">按金 ($)</label><input type="number" className="w-full border rounded p-2 text-sm" value={docConfig.deposit} onChange={e=>setDocConfig({...docConfig, deposit:Number(e.target.value)})} /></div>
+                                  </>
+                              )}
+                              <div><label className="block text-xs font-bold text-slate-500 mb-1">租金金額 ($)</label><input type="number" className="w-full border rounded p-2 text-sm" value={docConfig.amount} onChange={e=>setDocConfig({...docConfig, amount:Number(e.target.value)})} /></div>
+                              <div><label className="block text-xs font-bold text-slate-500 mb-1">簽署人 (業主/代理人)</label><input type="text" className="w-full border rounded p-2 text-sm" value={docConfig.landlord} onChange={e=>setDocConfig({...docConfig, landlord:e.target.value})} /></div>
+                              
+                              <button onClick={()=>handlePrintDoc()} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold shadow hover:bg-blue-700 mt-4"><Icons.Printer /> 列印文件</button>
+                          </div>
+                          {/* Right: Preview */}
+                          <div className="w-2/3 bg-slate-200 rounded-lg p-8 overflow-y-auto flex justify-center">
+                              <div className="paper w-full max-w-[600px] text-black">
+                                  <DocPreview />
+                              </div>
+                          </div>
                       </div>
                   </div>
               </div>

@@ -1,3 +1,275 @@
+#!/bin/bash
+
+echo "🚀 開始自動部署腳本 (語法修正版)..."
+
+# 1. 清理舊檔案
+rm -f package.json package-lock.json tsconfig.json vite.config.ts index.html
+rm -rf src
+
+# 2. 建立資料夾
+mkdir -p src
+
+# 3. 建立 package.json
+echo "📦 建立設定檔..."
+cat > package.json << 'EOF'
+{
+  "name": "charles-finance-app",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "firebase": "^10.8.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "recharts": "^2.10.3",
+    "clsx": "^2.1.0",
+    "tailwind-merge": "^2.2.1",
+    "idb-keyval": "^6.2.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.17",
+    "postcss": "^8.4.33",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5.2.2",
+    "vite": "^5.0.8"
+  }
+}
+EOF
+
+# 4. 建立 tsconfig.json
+cat > tsconfig.json << 'EOF'
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["src"],
+  "references": [{ "path": "./tsconfig.node.json" }]
+}
+EOF
+
+# 5. 建立 tsconfig.node.json
+cat > tsconfig.node.json << 'EOF'
+{
+  "compilerOptions": {
+    "composite": true,
+    "skipLibCheck": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowSyntheticDefaultImports": true
+  },
+  "include": ["vite.config.ts"]
+}
+EOF
+
+# 6. 建立 vite.config.ts
+cat > vite.config.ts << 'EOF'
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+// https://vitejs.dev/config/
+export default defineConfig({
+  plugins: [react()],
+})
+EOF
+
+# 7. 建立 index.html
+cat > index.html << 'EOF'
+<!doctype html>
+<html lang="zh-HK">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Charles's 家庭導航</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+EOF
+
+# 8. 建立 tailwind.config.js
+cat > tailwind.config.js << 'EOF'
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+  ],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+}
+EOF
+
+# 9. 建立 postcss.config.js
+cat > postcss.config.js << 'EOF'
+export default {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+}
+EOF
+
+# 10. 建立 .gitignore
+cat > .gitignore << 'EOF'
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs
+*.njsproj
+*.sln
+*.sw?
+EOF
+
+# 11. 建立 src/vite-env.d.ts
+cat > src/vite-env.d.ts << 'EOF'
+/// <reference types="vite/client" />
+EOF
+
+# 12. 建立 src/main.tsx
+cat > src/main.tsx << 'EOF'
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import App from './App.tsx'
+import './index.css'
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+)
+EOF
+
+# 13. 建立 src/index.css
+cat > src/index.css << 'EOF'
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif;
+  background-color: #f0f2f5;
+}
+
+/* 打印專用樣式 */
+@media print {
+  @page {
+    size: A4;
+    margin: 10mm;
+  }
+  body {
+    background-color: white;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    overflow: visible !important;
+    height: auto !important;
+  }
+  #root {
+    overflow: visible !important;
+    height: auto !important;
+  }
+  
+  .no-print, nav, .sidebar, .modal-overlay {
+    display: none !important;
+  }
+  
+  .doc-print-container { 
+    display: block !important; 
+    position: absolute; 
+    top: 0; 
+    left: 0; 
+    width: 100%; 
+    background: white; 
+    z-index: 9999;
+    padding: 0;
+  }
+  .report-container {
+    display: block !important;
+    width: 100%;
+    box-shadow: none;
+  }
+  .page-break {
+    page-break-before: always;
+  }
+  
+  body.printing-doc #root > div {
+    visibility: hidden;
+  }
+  body.printing-doc .doc-print-container {
+    visibility: visible;
+  }
+  
+  .bg-slate-50 {
+    background-color: #f8fafc !important;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+.modal-overlay {
+  background-color: rgba(0, 0, 0, 0.5);
+}
+.paper {
+  background: white;
+  box-shadow: 0 0 10px rgba(0,0,0,0.1);
+  padding: 40px;
+  min-height: 800px;
+  font-family: "Times New Roman", "MingLiU", serif;
+}
+EOF
+
+# 14. 建立 src/App.tsx (核心邏輯 - 含 Firebase 與 語法修正)
+echo "📝 寫入 App.tsx..."
+cat > src/App.tsx << 'EOF'
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
@@ -810,3 +1082,21 @@ const App = () => {
 };
 
 export default App;
+EOF
+
+# 15. 安裝套件
+echo "⬇️ 安裝套件中..."
+npm install
+
+# 16. Git 初始化與推送
+echo "☁️ 初始化 Git 並上傳..."
+git init
+git add .
+git commit -m "Auto deploy with Firebase setup"
+git branch -M main
+# 注意：這裡使用您的 GitHub 網址
+git remote remove origin 2>/dev/null || true
+git remote add origin https://github.com/charles2006hk-hash/charles-wealth-nav.git
+git push -u origin main --force
+
+echo "✅ 部署完成！請等待 Vercel 自動建置。"

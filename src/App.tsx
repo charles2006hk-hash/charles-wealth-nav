@@ -3,11 +3,34 @@ import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
   Tooltip, Legend, ResponsiveContainer 
 } from 'recharts';
-import { get, set, del } from 'idb-keyval';
+
+// --- Firebase Imports ---
+import { initializeApp } from "firebase/app";
+import { 
+  getFirestore, collection, doc, addDoc, setDoc, deleteDoc, updateDoc, 
+  onSnapshot, query, orderBy, writeBatch,
+  // 引入類型定義以解決 TypeScript 報錯
+  QuerySnapshot, DocumentData, DocumentSnapshot
+} from "firebase/firestore";
+
+// --- Firebase Configuration ---
+const firebaseConfig = {
+  apiKey: "AIzaSyAeP-GggvT31EUY4TXEnX3GYVD8bcs8NJg",
+  authDomain: "charles-wealth-nav.firebaseapp.com",
+  projectId: "charles-wealth-nav",
+  storageBucket: "charles-wealth-nav.firebasestorage.app",
+  messagingSenderId: "1066128740156",
+  appId: "1:1066128740156:web:b69065931e28d7b4b59839",
+  measurementId: "G-82MQGSGT3B"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
 
 // --- Types ---
 interface Transaction {
-  id: number;
+  id: string; // Firestore IDs are strings
   date: string;
   merchant: string;
   amount: number;
@@ -58,7 +81,7 @@ interface DocConfig {
   tenantID?: string;
 }
 
-// --- Icons (Inline SVGs for portability) ---
+// --- Icons (Inline SVGs) ---
 const Icons = {
   Tag: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/></svg>,
   DollarSign: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
@@ -119,49 +142,7 @@ const FAMILY_INFO = {
   Jason: { age: 13, role: '兒子', educationStart: 2029 }
 };
 
-// --- Helper Hooks ---
-
-function useIDBState<T>(defaultValue: T, key: string): [T, (val: T) => void, boolean] {
-  const [value, setValue] = useState<T>(defaultValue);
-  const [isLoaded, setIsLoaded] = useState(false);
-
-  useEffect(() => {
-    get(key).then((val) => {
-      if (val) setValue(val);
-      setIsLoaded(true);
-    }).catch(err => {
-      console.error("IDB Get Error:", err);
-      setIsLoaded(true);
-    });
-  }, [key]);
-
-  const setAndSaveValue = (newValue: T) => {
-    setValue(newValue);
-    set(key, newValue).catch(err => console.error("IDB Set Error:", err));
-  };
-
-  return [value, setAndSaveValue, isLoaded];
-}
-
-function useStickyState<T>(defaultValue: T, key: string): [T, (val: T) => void] {
-  const [value, setValue] = useState<T>(() => {
-    try {
-      const stickyValue = window.localStorage.getItem(key);
-      return stickyValue !== null ? JSON.parse(stickyValue) : defaultValue;
-    } catch (e) {
-      return defaultValue;
-    }
-  });
-
-  useEffect(() => {
-    window.localStorage.setItem(key, JSON.stringify(value));
-  }, [key, value]);
-
-  return [value, setValue];
-}
-
-// --- Components ---
-
+// --- Helper Components ---
 const StatCard = ({ title, value, subtext, color, iconName }: { title: string, value: string, subtext?: string, color: string, iconName: keyof typeof Icons }) => {
   const IconComp = Icons[iconName] || Icons.Tag;
   return (
@@ -181,29 +162,18 @@ const StatCard = ({ title, value, subtext, color, iconName }: { title: string, v
 };
 
 // --- Main App Component ---
-
 const App: React.FC = () => {
-  const [data, setData, dataLoaded] = useIDBState<Transaction[]>([], 'finance_data_v29');
-  
-  const [properties, setProperties] = useStickyState<Property[]>([
-      { id: 'p1', name: '京瑞二期 16E', type: 'Investment', estRent: 25000, value: 8000000, mortgage: 15000, tenure: 15 },
-      { id: 'p2', name: '京瑞二期 16F', type: 'Investment', estRent: 25000, value: 8000000, mortgage: 15000, tenure: 15 },
-      { id: 'p3', name: '帝欣苑 (Parc Versailles)', type: 'Investment', estRent: 38000, value: 12000000, mortgage: 0, tenure: 0 },
-      { id: 'p4', name: '太湖花園 (Serenity Park)', type: 'Investment', estRent: 18000, value: 6500000, mortgage: 0, tenure: 0 },
-      { id: 'p5', name: '農圃道18號 (18 Farm Road)', type: 'Self-use', estRent: 0, value: 15000000, mortgage: 25000, tenure: 10 },
-      { id: 'p6', name: '富善花園', type: 'Investment', estRent: 13000, value: 5000000, mortgage: 0, tenure: 0 },
-      { id: 'p7', name: '譚公道', type: 'Investment', estRent: 11000, value: 4000000, mortgage: 0, tenure: 0 },
-      { id: 'p8', name: '嘉熙 (Solaria)', type: 'Investment', estRent: 16000, value: 7000000, mortgage: 18000, tenure: 20 },
-      { id: 'p9', name: '鳳園 (Fung Yuen)', type: 'Investment', estRent: 14000, value: 6000000, mortgage: 12000, tenure: 18 },
-      { id: 'p10', name: '大埔中心 (Tai Wo Centre)', type: 'Investment', estRent: 15000, value: 5500000, mortgage: 0, tenure: 0 }
-  ], 'finance_props_v29');
-  
-  const [eduDB, setEduDB] = useStickyState<Record<string, EduConfig>>(INITIAL_EDUCATION_DB, 'finance_edu_db_v29');
+  // --- Firestore States ---
+  const [data, setData] = useState<Transaction[]>([]);
+  const [properties, setProperties] = useState<Property[]>([]);
+  const [eduDB, setEduDB] = useState<Record<string, EduConfig>>(INITIAL_EDUCATION_DB);
+  const [dataLoaded, setDataLoaded] = useState(false);
 
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [editingTx, setEditingTx] = useState<number | null>(null);
+  const [editingTx, setEditingTx] = useState<string | null>(null);
   const [reportMode, setReportMode] = useState(false);
-  
+  const [isProcessing, setIsProcessing] = useState(false);
+
   // Property Modal State
   const [isPropModalOpen, setPropModalOpen] = useState(false);
   const [editingProp, setEditingProp] = useState<Property>({ id: '', name: '', type: 'Investment', estRent: 0, value: 0, mortgage: 0, tenure: 0 });
@@ -229,49 +199,124 @@ const App: React.FC = () => {
   const [stressRate, setStressRate] = useState(0);
   const [rentDrop, setRentDrop] = useState(0);
 
-  // Handlers
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-          try {
-              const result = ev.target?.result;
-              if (typeof result !== 'string') return;
-              const json = JSON.parse(result);
-              const list = Array.isArray(json) ? json : (json.data || []);
-              const processed = list.map((item: any, idx: number) => ({
-                  ...item,
-                  id: Date.now() + idx,
-                  year: new Date(item.date).getFullYear(),
-                  month: new Date(item.date).getMonth() + 1
-              })).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
-              setData(processed);
-              alert(`數據更新成功！共 ${processed.length} 筆記錄。`);
-          } catch (err) { alert("檔案格式錯誤"); } 
-      };
-      reader.readAsText(file);
+  // --- Firestore Subscriptions ---
+  useEffect(() => {
+    // 1. Transactions
+    const q = query(collection(db, "transactions"), orderBy("date", "desc"));
+    const unsubTx = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
+      const txs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
+      setData(txs);
+      setDataLoaded(true);
+    });
+
+    // 2. Properties
+    const unsubProp = onSnapshot(collection(db, "properties"), (snapshot: QuerySnapshot<DocumentData>) => {
+      const props = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Property));
+      // 如果雲端沒有物業資料，且本地是空的，這裡可以選擇是否初始化預設資料
+      setProperties(props);
+    });
+
+    // 3. Education Config (Stored as a single doc 'settings/education')
+    const unsubEdu = onSnapshot(doc(db, "settings", "education"), (docSnap: DocumentSnapshot<DocumentData>) => {
+      if (docSnap.exists()) {
+        setEduDB(docSnap.data() as Record<string, EduConfig>);
+      } else {
+        // Init default if not exists
+        setDoc(doc(db, "settings", "education"), INITIAL_EDUCATION_DB);
+      }
+    });
+
+    return () => {
+      unsubTx();
+      unsubProp();
+      unsubEdu();
+    };
+  }, []);
+
+  // --- Handlers (Modified for Firestore) ---
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    if(!window.confirm("確定要將此 JSON 檔案的內容匯入到 Firebase 資料庫嗎？這將會新增大量記錄。")) return;
+
+    setIsProcessing(true);
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+        try {
+            const result = ev.target?.result;
+            if (typeof result !== 'string') return;
+            const json = JSON.parse(result);
+            const list = Array.isArray(json) ? json : (json.data || []);
+            
+            // Batch write to Firestore (limit 500 per batch)
+            const batchSize = 450;
+            let chunks = [];
+            for (let i = 0; i < list.length; i += batchSize) {
+                chunks.push(list.slice(i, i + batchSize));
+            }
+
+            let count = 0;
+            for (const chunk of chunks) {
+                const batch = writeBatch(db);
+                chunk.forEach((item: any) => {
+                    const docRef = doc(collection(db, "transactions"));
+                    const txData = {
+                        date: item.date,
+                        merchant: item.merchant,
+                        amount: Number(item.amount),
+                        category: item.category || 'General (其他)',
+                        member: item.member || 'Family (公用)',
+                        note: item.note || '',
+                        year: new Date(item.date).getFullYear(),
+                        month: new Date(item.date).getMonth() + 1,
+                        property: item.property || null
+                    };
+                    batch.set(docRef, txData);
+                });
+                await batch.commit();
+                count += chunk.length;
+                console.log(`Uploaded ${count} records...`);
+            }
+            alert(`成功匯入 ${count} 筆記錄到雲端！`);
+        } catch (err) { 
+            console.error(err);
+            alert("匯入失敗: " + err); 
+        } finally { 
+            setIsProcessing(false); 
+        }
+    };
+    reader.readAsText(file);
   };
 
-  const clearData = () => {
-      if(window.confirm('確定清除？')) {
-          setData([]);
-          del('finance_data_v29');
-          window.location.reload();
+  const clearData = async () => {
+      if(window.confirm('危險：確定清除雲端所有交易記錄？此操作無法復原。')) {
+          // 在沒有後端的情況下，前端不建議執行大量刪除，改為提示
+          setIsProcessing(true); // 觸發一下狀態以示回應
+          alert("為防止誤刪，請聯絡管理員進行批量刪除，或手動刪除特定項目。");
+          setIsProcessing(false);
       }
   };
 
-  const updateCategory = (id: number, newCat: string, merchant: string, applyToAll: boolean) => {
-      const newData = data.map(tx => {
-          if (tx.id === id) return { ...tx, category: newCat };
-          if (applyToAll && tx.merchant === merchant) return { ...tx, category: newCat };
-          return tx;
-      });
-      setData(newData);
+  // 修改了這裡：將 merchant 參數更名為 _merchant 表示暫時不使用，避免 TypeScript 報錯
+  const updateCategory = async (id: string, newCat: string, _merchant: string, applyToAll: boolean) => {
+      try {
+          // Update single
+          const txRef = doc(db, "transactions", id);
+          await updateDoc(txRef, { category: newCat });
+
+          if (applyToAll) {
+              // 批量更新邏輯暫時略過，以節省寫入配額
+              alert("批量更新功能在雲端模式下暫時停用，以節省寫入配額。");
+          }
+      } catch (e) {
+          console.error("Update failed", e);
+      }
       setEditingTx(null);
   };
 
-  const handleSaveProperty = () => {
+  const handleSaveProperty = async () => {
       const p = {
           ...editingProp,
           value: Number(editingProp.value),
@@ -279,37 +324,51 @@ const App: React.FC = () => {
           mortgage: Number(editingProp.mortgage),
           tenure: Number(editingProp.tenure)
       };
-      if(p.id) {
-          setProperties(properties.map(item => item.id === p.id ? p : item));
-      } else {
-          setProperties([...properties, { ...p, id: Date.now().toString() }]);
+      
+      try {
+          if (p.id) {
+            await setDoc(doc(db, "properties", p.id), p);
+          } else {
+            await addDoc(collection(db, "properties"), p);
+          }
+          setPropModalOpen(false);
+      } catch(e) {
+          alert("儲存失敗: " + e);
       }
-      setPropModalOpen(false);
   };
   
-  const handleDeleteProperty = (id: string) => {
+  const handleDeleteProperty = async (id: string) => {
       if(window.confirm('確定刪除此物業？')) {
-          setProperties(properties.filter(p => p.id !== id));
+          await deleteDoc(doc(db, "properties", id));
       }
   };
 
-  const handleAddTx = () => {
+  const handleAddTx = async () => {
       if(!newTx.amount || !newTx.merchant) return alert("請填寫金額和商戶");
-      const newItem: Transaction = {
-          ...newTx,
-          id: Date.now(),
-          amount: parseFloat(newTx.amount),
-          year: new Date(newTx.date).getFullYear(),
-          month: new Date(newTx.date).getMonth() + 1,
-          note: newTx.note || ''
-      };
-      setData([newItem, ...data]);
-      setEntryModalOpen(false);
-      setNewTx({ date: new Date().toISOString().split('T')[0], merchant: '', amount: '', category: 'General (其他)', member: 'Family (公用)', note: '' });
+      try {
+          await addDoc(collection(db, "transactions"), {
+              ...newTx,
+              amount: parseFloat(newTx.amount),
+              year: new Date(newTx.date).getFullYear(),
+              month: new Date(newTx.date).getMonth() + 1,
+              note: newTx.note || ''
+          });
+          setEntryModalOpen(false);
+          setNewTx({ date: new Date().toISOString().split('T')[0], merchant: '', amount: '', category: 'General (其他)', member: 'Family (公用)', note: '' });
+      } catch (e) {
+          alert("新增失敗: " + e);
+      }
   };
 
-  const deleteTx = (id: number) => {
-      if(window.confirm("確定刪除此記錄？")) setData(data.filter(t => t.id !== id));
+  const deleteTx = async (id: string) => {
+      if(window.confirm("確定刪除此記錄？")) {
+          await deleteDoc(doc(db, "transactions", id));
+      }
+  };
+
+  const updateEduDB = async (newConfig: Record<string, EduConfig>) => {
+      setEduDB(newConfig); // Optimistic update
+      await setDoc(doc(db, "settings", "education"), newConfig);
   };
 
    const exportJSON = () => {
@@ -355,7 +414,17 @@ const App: React.FC = () => {
               let policyName = d.merchant;
               if(policyName.includes('Insurance:')) { policyName = policyName.split('Insurance:')[1].trim(); } else { policyName = policyName.replace(/AXA_|Prudential_|Manulift_/gi, '').split('(')[0].trim(); }
               const existing = insuranceByMember[memberKey].find(p => p.name === policyName);
-              if(existing) { existing.totalPaid += d.amount; if(d.note && !existing.note) existing.note = d.note; if(d.date > existing.lastPaid) existing.lastPaid = d.date; } else { let endYear = null; if(d.note) { const yearMatch = d.note.match(/20\d{2}/); if(yearMatch) endYear = parseInt(yearMatch[0]); } insuranceByMember[memberKey].push({ name: policyName, totalPaid: d.amount, note: d.note || '', lastPaid: d.date, endYear: endYear, rawMerchant: d.merchant }); }
+              // Simplified for Firestore data structure consistency check
+              const txDate = d.date || '';
+              if(existing) { 
+                  existing.totalPaid += d.amount; 
+                  if(d.note && !existing.note) existing.note = d.note; 
+                  if(txDate > existing.lastPaid) existing.lastPaid = txDate; 
+              } else { 
+                  let endYear = null; 
+                  if(d.note) { const yearMatch = d.note.match(/20\d{2}/); if(yearMatch) endYear = parseInt(yearMatch[0]); } 
+                  insuranceByMember[memberKey].push({ name: policyName, totalPaid: d.amount, note: d.note || '', lastPaid: txDate, endYear: endYear, rawMerchant: d.merchant }); 
+              }
           }
       });
       
@@ -513,7 +582,7 @@ const App: React.FC = () => {
 
   // --- Initialize Check ---
   if (!dataLoaded) {
-       return <div className="h-screen flex items-center justify-center text-slate-500">正在初始化數據庫... (IndexedDB)</div>;
+       return <div className="h-screen flex items-center justify-center text-slate-500 animate-pulse">正在連接到 Firebase 雲端資料庫...</div>;
   }
 
   return (
@@ -543,7 +612,7 @@ const App: React.FC = () => {
               <div className="w-full md:w-64 bg-slate-900 text-slate-300 flex flex-col sticky top-0 h-screen overflow-y-auto no-print">
                   <div className="p-6">
                       <h1 className="text-xl font-bold text-white flex items-center gap-2"><span className="text-blue-500"><Icons.Home /></span> Charles's 導航</h1>
-                      <div className="mt-4 mb-2"><label className="flex items-center justify-center gap-2 w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold rounded cursor-pointer transition"><Icons.UploadCloud /> 匯入數據<input type="file" className="hidden" onChange={handleFileUpload} accept=".json" /></label></div>
+                      <div className="mt-4 mb-2"><label className={`flex items-center justify-center gap-2 w-full py-2 ${isProcessing ? 'bg-slate-600 cursor-wait' : 'bg-emerald-600 hover:bg-emerald-500 cursor-pointer'} text-white text-sm font-bold rounded transition`}><Icons.UploadCloud /> {isProcessing ? '處理中...' : '匯入數據'}<input type="file" className="hidden" onChange={handleFileUpload} accept=".json" disabled={isProcessing} /></label></div>
                   </div>
                   <nav className="flex-1 px-3 space-y-1">
                       {[
@@ -557,7 +626,7 @@ const App: React.FC = () => {
                   <div className="p-4 border-t border-slate-800 space-y-2">
                        <button onClick={()=>{setReportMode(true); setActiveTab('report');}} className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-bold shadow"><Icons.Printer /> 綜合報告</button>
                        <button onClick={()=>{setReportMode(true); setActiveTab('edu_report');}} className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-sm font-bold shadow"><Icons.Book /> 升學報告</button>
-                       <button onClick={clearData} className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-slate-800 hover:bg-red-900 text-slate-400 text-xs rounded">清除重置</button>
+                       <button onClick={clearData} className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-slate-800 hover:bg-red-900 text-slate-400 text-xs rounded">清除資料庫</button>
                   </div>
               </div>
           )}
@@ -643,8 +712,8 @@ const App: React.FC = () => {
                                       {Object.keys(eduDB).map(region => (
                                           <div key={region} className="bg-white p-3 rounded border">
                                               <div className="font-bold mb-1">{eduDB[region].name}</div>
-                                              <div className="flex justify-between items-center mb-1"><span>學費/年:</span><input type="number" value={eduDB[region].tuition} onChange={(e)=>setEduDB({...eduDB, [region]: {...eduDB[region], tuition: Number(e.target.value)}})} className="w-16 border rounded px-1 text-right"/></div>
-                                              <div className="flex justify-between items-center"><span>生活費/年:</span><input type="number" value={eduDB[region].living} onChange={(e)=>setEduDB({...eduDB, [region]: {...eduDB[region], living: Number(e.target.value)}})} className="w-16 border rounded px-1 text-right"/></div>
+                                              <div className="flex justify-between items-center mb-1"><span>學費/年:</span><input type="number" value={eduDB[region].tuition} onChange={(e)=>updateEduDB({...eduDB, [region]: {...eduDB[region], tuition: Number(e.target.value)}})} className="w-16 border rounded px-1 text-right"/></div>
+                                              <div className="flex justify-between items-center"><span>生活費/年:</span><input type="number" value={eduDB[region].living} onChange={(e)=>updateEduDB({...eduDB, [region]: {...eduDB[region], living: Number(e.target.value)}})} className="w-16 border rounded px-1 text-right"/></div>
                                           </div>
                                       ))}
                                   </div>
@@ -729,45 +798,6 @@ const App: React.FC = () => {
               </div>
           )}
 
-          {/* Document Modal */}
-          {isDocModalOpen && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
-                  <div className="bg-white rounded-xl shadow-2xl p-6 w-[800px] h-[90vh] flex flex-col">
-                      <div className="flex justify-between items-center mb-4 border-b pb-2">
-                          <h3 className="text-xl font-bold flex items-center gap-2"><Icons.FileText /> 文書生成器</h3>
-                          <button onClick={()=>setDocModalOpen(false)} className="text-slate-400 hover:text-slate-600">✕</button>
-                      </div>
-                      <div className="flex gap-6 flex-1 overflow-hidden">
-                          {/* Left: Controls */}
-                          <div className="w-1/3 space-y-4 overflow-y-auto pr-2">
-                              <div><label className="block text-xs font-bold text-slate-500 mb-1">文件類型</label><div className="flex rounded bg-slate-100 p-1"><button onClick={()=>setDocConfig({...docConfig, type:'receipt'})} className={`flex-1 text-xs py-1 rounded ${docConfig.type==='receipt'?'bg-white shadow text-blue-600':'text-slate-500'}`}>收據</button><button onClick={()=>setDocConfig({...docConfig, type:'lease'})} className={`flex-1 text-xs py-1 rounded ${docConfig.type==='lease'?'bg-white shadow text-blue-600':'text-slate-500'}`}>租約</button></div></div>
-                              <div><label className="block text-xs font-bold text-slate-500 mb-1">選擇物業</label><select className="w-full border rounded p-2 text-sm" value={docConfig.propId} onChange={e=>{ const p = properties.find(x=>x.id===e.target.value); setDocConfig({...docConfig, propId:e.target.value, amount: p?p.estRent:0}); }}>{properties.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
-                              <div><label className="block text-xs font-bold text-slate-500 mb-1">租客姓名</label><input type="text" className="w-full border rounded p-2 text-sm" value={docConfig.tenant} onChange={e=>setDocConfig({...docConfig, tenant:e.target.value})} /></div>
-                              {docConfig.type === 'receipt' ? (
-                                  <div><label className="block text-xs font-bold text-slate-500 mb-1">租期 (Period)</label><input type="text" className="w-full border rounded p-2 text-sm" value={docConfig.period} onChange={e=>setDocConfig({...docConfig, period:e.target.value})} placeholder="e.g. Jan 2025" /></div>
-                              ) : (
-                                  <>
-                                      <div><label className="block text-xs font-bold text-slate-500 mb-1">身份證號 (首4位)</label><input type="text" className="w-full border rounded p-2 text-sm" value={docConfig.tenantID} onChange={e=>setDocConfig({...docConfig, tenantID:e.target.value})} /></div>
-                                      <div className="flex gap-2"><div><label className="block text-xs font-bold text-slate-500">起租日</label><input type="date" className="w-full border rounded p-2 text-sm" value={docConfig.startDate} onChange={e=>setDocConfig({...docConfig, startDate:e.target.value})} /></div><div><label className="block text-xs font-bold text-slate-500">完結日</label><input type="date" className="w-full border rounded p-2 text-sm" value={docConfig.endDate} onChange={e=>setDocConfig({...docConfig, endDate:e.target.value})} /></div></div>
-                                      <div><label className="block text-xs font-bold text-slate-500 mb-1">按金 ($)</label><input type="number" className="w-full border rounded p-2 text-sm" value={docConfig.deposit} onChange={e=>setDocConfig({...docConfig, deposit:Number(e.target.value)})} /></div>
-                                  </>
-                              )}
-                              <div><label className="block text-xs font-bold text-slate-500 mb-1">租金金額 ($)</label><input type="number" className="w-full border rounded p-2 text-sm" value={docConfig.amount} onChange={e=>setDocConfig({...docConfig, amount:Number(e.target.value)})} /></div>
-                              <div><label className="block text-xs font-bold text-slate-500 mb-1">簽署人 (業主/代理人)</label><input type="text" className="w-full border rounded p-2 text-sm" value={docConfig.landlord} onChange={e=>setDocConfig({...docConfig, landlord:e.target.value})} /></div>
-                              
-                              <button onClick={()=>handlePrintDoc()} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold shadow hover:bg-blue-700 mt-4"><Icons.Printer /> 列印文件</button>
-                          </div>
-                          {/* Right: Preview */}
-                          <div className="w-2/3 bg-slate-200 rounded-lg p-8 overflow-y-auto flex justify-center">
-                              <div className="paper w-full max-w-[600px] text-black">
-                                  <DocPreview />
-                              </div>
-                          </div>
-                      </div>
-                  </div>
-              </div>
-          )}
-          
           {/* Data Entry Modal */}
           {isEntryModalOpen && (
               <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">

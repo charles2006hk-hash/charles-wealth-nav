@@ -3,32 +3,11 @@ import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
   Tooltip, Legend, ResponsiveContainer 
 } from 'recharts';
-
-// --- Firebase Imports ---
-import { initializeApp } from "firebase/app";
-import { 
-  getFirestore, collection, doc, addDoc, setDoc, deleteDoc, updateDoc, 
-  onSnapshot, query, orderBy, writeBatch
-} from "firebase/firestore";
-
-// --- Firebase Configuration ---
-const firebaseConfig = {
-  apiKey: "AIzaSyAeP-GggvT31EUY4TXEnX3GYVD8bcs8NJg",
-  authDomain: "charles-wealth-nav.firebaseapp.com",
-  projectId: "charles-wealth-nav",
-  storageBucket: "charles-wealth-nav.firebasestorage.app",
-  messagingSenderId: "1066128740156",
-  appId: "1:1066128740156:web:b69065931e28d7b4b59839",
-  measurementId: "G-82MQGSGT3B"
-};
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+import { get, set, del } from 'idb-keyval';
 
 // --- Types ---
 interface Transaction {
-  id: string;
+  id: number;
   date: string;
   merchant: string;
   amount: number;
@@ -79,7 +58,7 @@ interface DocConfig {
   tenantID?: string;
 }
 
-// --- Icons ---
+// --- Icons (Inline SVGs for portability) ---
 const Icons = {
   Tag: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/></svg>,
   DollarSign: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
@@ -112,7 +91,7 @@ const CATEGORIES = [
 
 const MEMBERS = ['Charles', 'Carmen', 'Virginia', 'Jason', 'Family (公用)'];
 
-const INITIAL_EDUCATION_DB = {
+const INITIAL_EDUCATION_DB: Record<string, EduConfig> = {
   HK: { 
       name: '香港 (HK)', years: 4, tuition: 42100, living: 60000, salary: 19000, 
       notes: '性價比最高，人脈在本地。',
@@ -140,8 +119,50 @@ const FAMILY_INFO = {
   Jason: { age: 13, role: '兒子', educationStart: 2029 }
 };
 
-// --- Helper Components ---
-const StatCard = ({ title, value, subtext, color, iconName }) => {
+// --- Helper Hooks ---
+
+function useIDBState<T>(defaultValue: T, key: string): [T, (val: T) => void, boolean] {
+  const [value, setValue] = useState<T>(defaultValue);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  useEffect(() => {
+    get(key).then((val) => {
+      if (val) setValue(val);
+      setIsLoaded(true);
+    }).catch(err => {
+      console.error("IDB Get Error:", err);
+      setIsLoaded(true);
+    });
+  }, [key]);
+
+  const setAndSaveValue = (newValue: T) => {
+    setValue(newValue);
+    set(key, newValue).catch(err => console.error("IDB Set Error:", err));
+  };
+
+  return [value, setAndSaveValue, isLoaded];
+}
+
+function useStickyState<T>(defaultValue: T, key: string): [T, (val: T) => void] {
+  const [value, setValue] = useState<T>(() => {
+    try {
+      const stickyValue = window.localStorage.getItem(key);
+      return stickyValue !== null ? JSON.parse(stickyValue) : defaultValue;
+    } catch (e) {
+      return defaultValue;
+    }
+  });
+
+  useEffect(() => {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  }, [key, value]);
+
+  return [value, setValue];
+}
+
+// --- Components ---
+
+const StatCard = ({ title, value, subtext, color, iconName }: { title: string, value: string, subtext?: string, color: string, iconName: keyof typeof Icons }) => {
   const IconComp = Icons[iconName] || Icons.Tag;
   return (
       <div className={`bg-white p-5 rounded-xl shadow-sm border border-slate-100 flex flex-col justify-between h-full`}>
@@ -160,21 +181,32 @@ const StatCard = ({ title, value, subtext, color, iconName }) => {
 };
 
 // --- Main App Component ---
-const App = () => {
-  // --- Firestore States ---
-  const [data, setData] = useState([]);
-  const [properties, setProperties] = useState([]);
-  const [eduDB, setEduDB] = useState(INITIAL_EDUCATION_DB);
-  const [dataLoaded, setDataLoaded] = useState(false);
+
+const App: React.FC = () => {
+  const [data, setData, dataLoaded] = useIDBState<Transaction[]>([], 'finance_data_v29');
+  
+  const [properties, setProperties] = useStickyState<Property[]>([
+      { id: 'p1', name: '京瑞二期 16E', type: 'Investment', estRent: 25000, value: 8000000, mortgage: 15000, tenure: 15 },
+      { id: 'p2', name: '京瑞二期 16F', type: 'Investment', estRent: 25000, value: 8000000, mortgage: 15000, tenure: 15 },
+      { id: 'p3', name: '帝欣苑 (Parc Versailles)', type: 'Investment', estRent: 38000, value: 12000000, mortgage: 0, tenure: 0 },
+      { id: 'p4', name: '太湖花園 (Serenity Park)', type: 'Investment', estRent: 18000, value: 6500000, mortgage: 0, tenure: 0 },
+      { id: 'p5', name: '農圃道18號 (18 Farm Road)', type: 'Self-use', estRent: 0, value: 15000000, mortgage: 25000, tenure: 10 },
+      { id: 'p6', name: '富善花園', type: 'Investment', estRent: 13000, value: 5000000, mortgage: 0, tenure: 0 },
+      { id: 'p7', name: '譚公道', type: 'Investment', estRent: 11000, value: 4000000, mortgage: 0, tenure: 0 },
+      { id: 'p8', name: '嘉熙 (Solaria)', type: 'Investment', estRent: 16000, value: 7000000, mortgage: 18000, tenure: 20 },
+      { id: 'p9', name: '鳳園 (Fung Yuen)', type: 'Investment', estRent: 14000, value: 6000000, mortgage: 12000, tenure: 18 },
+      { id: 'p10', name: '大埔中心 (Tai Wo Centre)', type: 'Investment', estRent: 15000, value: 5500000, mortgage: 0, tenure: 0 }
+  ], 'finance_props_v29');
+  
+  const [eduDB, setEduDB] = useStickyState<Record<string, EduConfig>>(INITIAL_EDUCATION_DB, 'finance_edu_db_v29');
 
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [editingTx, setEditingTx] = useState(null);
+  const [editingTx, setEditingTx] = useState<number | null>(null);
   const [reportMode, setReportMode] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-
+  
   // Property Modal State
   const [isPropModalOpen, setPropModalOpen] = useState(false);
-  const [editingProp, setEditingProp] = useState({ id: '', name: '', type: 'Investment', estRent: 0, value: 0, mortgage: 0, tenure: 0 });
+  const [editingProp, setEditingProp] = useState<Property>({ id: '', name: '', type: 'Investment', estRent: 0, value: 0, mortgage: 0, tenure: 0 });
   
   // Transaction Modal State
   const [isEntryModalOpen, setEntryModalOpen] = useState(false);
@@ -182,7 +214,7 @@ const App = () => {
 
   // Document Modal State
   const [isDocModalOpen, setDocModalOpen] = useState(false);
-  const [docConfig, setDocConfig] = useState({ type: 'receipt', propId: '', tenant: '', period: '', amount: 0, deposit: 0, startDate: '', endDate: '', landlord: 'Charles Lam' });
+  const [docConfig, setDocConfig] = useState<DocConfig>({ type: 'receipt', propId: '', tenant: '', period: '', amount: 0, deposit: 0, startDate: '', endDate: '', landlord: 'Charles Lam' });
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -197,117 +229,49 @@ const App = () => {
   const [stressRate, setStressRate] = useState(0);
   const [rentDrop, setRentDrop] = useState(0);
 
-  // --- Firestore Subscriptions ---
-  useEffect(() => {
-    // 1. Transactions
-    const q = query(collection(db, "transactions"), orderBy("date", "desc"));
-    const unsubTx = onSnapshot(q, (snapshot) => {
-      const txs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setData(txs);
-      setDataLoaded(true);
-    });
-
-    // 2. Properties
-    const unsubProp = onSnapshot(collection(db, "properties"), (snapshot) => {
-      const props = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setProperties(props);
-    });
-
-    // 3. Education Config
-    const unsubEdu = onSnapshot(doc(db, "settings", "education"), (docSnap) => {
-      if (docSnap.exists()) {
-        setEduDB(docSnap.data());
-      } else {
-        setDoc(doc(db, "settings", "education"), INITIAL_EDUCATION_DB);
-      }
-    });
-
-    return () => {
-      unsubTx();
-      unsubProp();
-      unsubEdu();
-    };
-  }, []);
-
-  // --- Handlers ---
-
-  const handleFileUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    if(!window.confirm("確定要將此 JSON 檔案的內容匯入到 Firebase 資料庫嗎？這將會新增大量記錄。")) return;
-
-    setIsProcessing(true);
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-        try {
-            const result = ev.target?.result;
-            if (typeof result !== 'string') return;
-            const json = JSON.parse(result);
-            const list = Array.isArray(json) ? json : (json.data || []);
-            
-            const batchSize = 450;
-            let chunks = [];
-            for (let i = 0; i < list.length; i += batchSize) {
-                chunks.push(list.slice(i, i + batchSize));
-            }
-
-            let count = 0;
-            for (const chunk of chunks) {
-                const batch = writeBatch(db);
-                chunk.forEach((item) => {
-                    const docRef = doc(collection(db, "transactions"));
-                    const txData = {
-                        date: item.date,
-                        merchant: item.merchant,
-                        amount: Number(item.amount),
-                        category: item.category || 'General (其他)',
-                        member: item.member || 'Family (公用)',
-                        note: item.note || '',
-                        year: new Date(item.date).getFullYear(),
-                        month: new Date(item.date).getMonth() + 1,
-                        property: item.property || null
-                    };
-                    batch.set(docRef, txData);
-                });
-                await batch.commit();
-                count += chunk.length;
-                console.log(`Uploaded ${count} records...`);
-            }
-            alert(`成功匯入 ${count} 筆記錄到雲端！`);
-        } catch (err) { 
-            console.error(err);
-            alert("匯入失敗: " + err); 
-        } finally { 
-            setIsProcessing(false); 
-        }
-    };
-    reader.readAsText(file);
+  // Handlers
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+          try {
+              const result = ev.target?.result;
+              if (typeof result !== 'string') return;
+              const json = JSON.parse(result);
+              const list = Array.isArray(json) ? json : (json.data || []);
+              const processed = list.map((item: any, idx: number) => ({
+                  ...item,
+                  id: Date.now() + idx,
+                  year: new Date(item.date).getFullYear(),
+                  month: new Date(item.date).getMonth() + 1
+              })).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+              setData(processed);
+              alert(`數據更新成功！共 ${processed.length} 筆記錄。`);
+          } catch (err) { alert("檔案格式錯誤"); } 
+      };
+      reader.readAsText(file);
   };
 
-  const clearData = async () => {
-      if(window.confirm('危險：確定清除雲端所有交易記錄？此操作無法復原。')) {
-          setIsProcessing(true);
-          alert("為防止誤刪，請聯絡管理員進行批量刪除，或手動刪除特定項目。");
-          setIsProcessing(false);
+  const clearData = () => {
+      if(window.confirm('確定清除？')) {
+          setData([]);
+          del('finance_data_v29');
+          window.location.reload();
       }
   };
 
-  const updateCategory = async (id, newCat, _merchant, applyToAll) => {
-      try {
-          const txRef = doc(db, "transactions", id);
-          await updateDoc(txRef, { category: newCat });
-
-          if (applyToAll) {
-              alert("批量更新功能在雲端模式下暫時停用，以節省寫入配額。");
-          }
-      } catch (e) {
-          console.error("Update failed", e);
-      }
+  const updateCategory = (id: number, newCat: string, merchant: string, applyToAll: boolean) => {
+      const newData = data.map(tx => {
+          if (tx.id === id) return { ...tx, category: newCat };
+          if (applyToAll && tx.merchant === merchant) return { ...tx, category: newCat };
+          return tx;
+      });
+      setData(newData);
       setEditingTx(null);
   };
 
-  const handleSaveProperty = async () => {
+  const handleSaveProperty = () => {
       const p = {
           ...editingProp,
           value: Number(editingProp.value),
@@ -315,51 +279,37 @@ const App = () => {
           mortgage: Number(editingProp.mortgage),
           tenure: Number(editingProp.tenure)
       };
-      
-      try {
-          if (p.id) {
-            await setDoc(doc(db, "properties", p.id), p);
-          } else {
-            await addDoc(collection(db, "properties"), p);
-          }
-          setPropModalOpen(false);
-      } catch(e) {
-          alert("儲存失敗: " + e);
+      if(p.id) {
+          setProperties(properties.map(item => item.id === p.id ? p : item));
+      } else {
+          setProperties([...properties, { ...p, id: Date.now().toString() }]);
       }
+      setPropModalOpen(false);
   };
   
-  const handleDeleteProperty = async (id) => {
+  const handleDeleteProperty = (id: string) => {
       if(window.confirm('確定刪除此物業？')) {
-          await deleteDoc(doc(db, "properties", id));
+          setProperties(properties.filter(p => p.id !== id));
       }
   };
 
-  const handleAddTx = async () => {
+  const handleAddTx = () => {
       if(!newTx.amount || !newTx.merchant) return alert("請填寫金額和商戶");
-      try {
-          await addDoc(collection(db, "transactions"), {
-              ...newTx,
-              amount: parseFloat(newTx.amount),
-              year: new Date(newTx.date).getFullYear(),
-              month: new Date(newTx.date).getMonth() + 1,
-              note: newTx.note || ''
-          });
-          setEntryModalOpen(false);
-          setNewTx({ date: new Date().toISOString().split('T')[0], merchant: '', amount: '', category: 'General (其他)', member: 'Family (公用)', note: '' });
-      } catch (e) {
-          alert("新增失敗: " + e);
-      }
+      const newItem: Transaction = {
+          ...newTx,
+          id: Date.now(),
+          amount: parseFloat(newTx.amount),
+          year: new Date(newTx.date).getFullYear(),
+          month: new Date(newTx.date).getMonth() + 1,
+          note: newTx.note || ''
+      };
+      setData([newItem, ...data]);
+      setEntryModalOpen(false);
+      setNewTx({ date: new Date().toISOString().split('T')[0], merchant: '', amount: '', category: 'General (其他)', member: 'Family (公用)', note: '' });
   };
 
-  const deleteTx = async (id) => {
-      if(window.confirm("確定刪除此記錄？")) {
-          await deleteDoc(doc(db, "transactions", id));
-      }
-  };
-
-  const updateEduDB = async (newConfig) => {
-      setEduDB(newConfig); 
-      await setDoc(doc(db, "settings", "education"), newConfig);
+  const deleteTx = (id: number) => {
+      if(window.confirm("確定刪除此記錄？")) setData(data.filter(t => t.id !== id));
   };
 
    const exportJSON = () => {
@@ -392,9 +342,9 @@ const App = () => {
       if(searchTerm) filtered = filtered.filter(d => d.merchant.toLowerCase().includes(searchTerm.toLowerCase()));
       
       const total = filtered.reduce((a,b) => a + b.amount, 0);
-      const byYear = {}; 
-      const byCat = {}; 
-      const insuranceByMember = {};
+      const byYear: Record<string, number> = {}; 
+      const byCat: Record<string, number> = {}; 
+      const insuranceByMember: Record<string, any[]> = {};
 
       filtered.forEach(d => {
           if(!byYear[d.year]) byYear[d.year] = 0; byYear[d.year] += d.amount;
@@ -405,16 +355,7 @@ const App = () => {
               let policyName = d.merchant;
               if(policyName.includes('Insurance:')) { policyName = policyName.split('Insurance:')[1].trim(); } else { policyName = policyName.replace(/AXA_|Prudential_|Manulift_/gi, '').split('(')[0].trim(); }
               const existing = insuranceByMember[memberKey].find(p => p.name === policyName);
-              const txDate = d.date || '';
-              if(existing) { 
-                  existing.totalPaid += d.amount; 
-                  if(d.note && !existing.note) existing.note = d.note; 
-                  if(txDate > existing.lastPaid) existing.lastPaid = txDate; 
-              } else { 
-                  let endYear = null; 
-                  if(d.note) { const yearMatch = d.note.match(/20\d{2}/); if(yearMatch) endYear = parseInt(yearMatch[0]); } 
-                  insuranceByMember[memberKey].push({ name: policyName, totalPaid: d.amount, note: d.note || '', lastPaid: txDate, endYear: endYear, rawMerchant: d.merchant }); 
-              }
+              if(existing) { existing.totalPaid += d.amount; if(d.note && !existing.note) existing.note = d.note; if(d.date > existing.lastPaid) existing.lastPaid = d.date; } else { let endYear = null; if(d.note) { const yearMatch = d.note.match(/20\d{2}/); if(yearMatch) endYear = parseInt(yearMatch[0]); } insuranceByMember[memberKey].push({ name: policyName, totalPaid: d.amount, note: d.note || '', lastPaid: d.date, endYear: endYear, rawMerchant: d.merchant }); }
           }
       });
       
@@ -438,7 +379,7 @@ const App = () => {
       return { 
         total, 
         count: filtered.length, 
-        byYear: Object.entries(byYear).map(([k,v])=>({year:k, amount:v})).sort((a,b)=>a.year-b.year), 
+        byYear: Object.entries(byYear).map(([k,v])=>({year:k, amount:v})).sort((a:any,b:any)=>a.year-b.year), 
         byCat: Object.entries(byCat).map(([k,v])=>({name:k, value:v})).sort((a,b)=>b.value-a.value), 
         insuranceByMember, 
         propStats, 
@@ -462,6 +403,7 @@ const App = () => {
       return { data: forecast, totalNeeded: Math.round(totalNeeded) };
   }, [eduRegionV, eduRegionJ, childType, eduDB]);
 
+  // Doc Preview
   const DocPreview = () => {
       const prop = properties.find(p => p.id === docConfig.propId) || { name: '未知物業' };
       if (docConfig.type === 'receipt') {
@@ -569,8 +511,9 @@ const App = () => {
     </div>
   );
 
+  // --- Initialize Check ---
   if (!dataLoaded) {
-       return <div className="h-screen flex items-center justify-center text-slate-500 animate-pulse">正在連接到 Firebase 雲端資料庫...</div>;
+       return <div className="h-screen flex items-center justify-center text-slate-500">正在初始化數據庫... (IndexedDB)</div>;
   }
 
   return (
@@ -600,7 +543,7 @@ const App = () => {
               <div className="w-full md:w-64 bg-slate-900 text-slate-300 flex flex-col sticky top-0 h-screen overflow-y-auto no-print">
                   <div className="p-6">
                       <h1 className="text-xl font-bold text-white flex items-center gap-2"><span className="text-blue-500"><Icons.Home /></span> Charles's 導航</h1>
-                      <div className="mt-4 mb-2"><label className={`flex items-center justify-center gap-2 w-full py-2 ${isProcessing ? 'bg-slate-600 cursor-wait' : 'bg-emerald-600 hover:bg-emerald-500 cursor-pointer'} text-white text-sm font-bold rounded transition`}><Icons.UploadCloud /> {isProcessing ? '處理中...' : '匯入數據'}<input type="file" className="hidden" onChange={handleFileUpload} accept=".json" disabled={isProcessing} /></label></div>
+                      <div className="mt-4 mb-2"><label className="flex items-center justify-center gap-2 w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold rounded cursor-pointer transition"><Icons.UploadCloud /> 匯入數據<input type="file" className="hidden" onChange={handleFileUpload} accept=".json" /></label></div>
                   </div>
                   <nav className="flex-1 px-3 space-y-1">
                       {[
@@ -609,12 +552,12 @@ const App = () => {
                           {id: 'insurance', icon: 'Shield', label: '保險金庫 (Insurance)'},
                           {id: 'education', icon: 'GraduationCap', label: '升學導航 (Education)'},
                           {id: 'property', icon: 'Home', label: '物業管理 (Property)'},
-                      ].map(item => { const IconComp = Icons[item.icon]; return (<button key={item.id} onClick={()=>{setActiveTab(item.id); setReportMode(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${activeTab===item.id && !reportMode ?'bg-blue-600 text-white':'hover:bg-slate-800'}`}><IconComp /> {item.label}</button>)})}
+                      ].map(item => { const IconComp = Icons[item.icon as keyof typeof Icons]; return (<button key={item.id} onClick={()=>{setActiveTab(item.id); setReportMode(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${activeTab===item.id && !reportMode ?'bg-blue-600 text-white':'hover:bg-slate-800'}`}><IconComp /> {item.label}</button>)})}
                   </nav>
                   <div className="p-4 border-t border-slate-800 space-y-2">
                        <button onClick={()=>{setReportMode(true); setActiveTab('report');}} className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-bold shadow"><Icons.Printer /> 綜合報告</button>
                        <button onClick={()=>{setReportMode(true); setActiveTab('edu_report');}} className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-sm font-bold shadow"><Icons.Book /> 升學報告</button>
-                       <button onClick={clearData} className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-slate-800 hover:bg-red-900 text-slate-400 text-xs rounded">清除資料庫</button>
+                       <button onClick={clearData} className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-slate-800 hover:bg-red-900 text-slate-400 text-xs rounded">清除重置</button>
                   </div>
               </div>
           )}
@@ -633,7 +576,7 @@ const App = () => {
                                   <StatCard title="保險總投入" value={`$${(Object.values(stats.insuranceByMember).flat().reduce((a,b)=>a+b.totalPaid,0)/1000000).toFixed(2)}M`} subtext="全家保障" color="indigo" iconName="ShieldCheck" />
                                   <StatCard title="最大類別" value={stats.byCat[0]?.name || '-'} subtext={`${((stats.byCat[0]?.value/stats.total)*100).toFixed(0)}%`} color="orange" iconName="PieChart" />
                               </div>
-                              <div className="bg-white p-6 rounded-xl border shadow-sm h-96"><h3 className="font-bold text-slate-700 mb-4">支出趨勢</h3><ResponsiveContainer><AreaChart data={stats.byYear}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="year"/><YAxis tickFormatter={(v)=>`${v/1000}k`}/><Tooltip/><Area type="monotone" dataKey="amount" stroke="#2563EB" fill="#3B82F6"/></AreaChart></ResponsiveContainer></div>
+                              <div className="bg-white p-6 rounded-xl border shadow-sm h-96"><h3 className="font-bold text-slate-700 mb-4">支出趨勢</h3><ResponsiveContainer><AreaChart data={stats.byYear}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="year"/><YAxis tickFormatter={(v:any)=>`${v/1000}k`}/><Tooltip/><Area type="monotone" dataKey="amount" stroke="#2563EB" fill="#3B82F6"/></AreaChart></ResponsiveContainer></div>
                           </div>
                       )}
                       
@@ -691,7 +634,7 @@ const App = () => {
                               </div>
                               <div className="bg-white p-6 rounded-xl border shadow-sm h-80">
                                   <h3 className="font-bold text-slate-700 mb-4">未來 10 年資金需求預測</h3>
-                                  <ResponsiveContainer><BarChart data={eduForecast.data}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="year" /><YAxis tickFormatter={(v)=>`${v/1000}k`}/><Tooltip formatter={(v)=>`$${v.toLocaleString()}`} /><Legend /><Bar dataKey="vCost" name="Virginia" stackId="a" fill="#EC4899" /><Bar dataKey="jCost" name="Jason" stackId="a" fill="#3B82F6" /></BarChart></ResponsiveContainer>
+                                  <ResponsiveContainer><BarChart data={eduForecast.data}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="year" /><YAxis tickFormatter={(v:any)=>`${v/1000}k`}/><Tooltip formatter={(v:any)=>`$${v.toLocaleString()}`} /><Legend /><Bar dataKey="vCost" name="Virginia" stackId="a" fill="#EC4899" /><Bar dataKey="jCost" name="Jason" stackId="a" fill="#3B82F6" /></BarChart></ResponsiveContainer>
                               </div>
                               
                               <div className="bg-slate-100 p-4 rounded-xl">
@@ -700,8 +643,8 @@ const App = () => {
                                       {Object.keys(eduDB).map(region => (
                                           <div key={region} className="bg-white p-3 rounded border">
                                               <div className="font-bold mb-1">{eduDB[region].name}</div>
-                                              <div className="flex justify-between items-center mb-1"><span>學費/年:</span><input type="number" value={eduDB[region].tuition} onChange={(e)=>updateEduDB({...eduDB, [region]: {...eduDB[region], tuition: Number(e.target.value)}})} className="w-16 border rounded px-1 text-right"/></div>
-                                              <div className="flex justify-between items-center"><span>生活費/年:</span><input type="number" value={eduDB[region].living} onChange={(e)=>updateEduDB({...eduDB, [region]: {...eduDB[region], living: Number(e.target.value)}})} className="w-16 border rounded px-1 text-right"/></div>
+                                              <div className="flex justify-between items-center mb-1"><span>學費/年:</span><input type="number" value={eduDB[region].tuition} onChange={(e)=>setEduDB({...eduDB, [region]: {...eduDB[region], tuition: Number(e.target.value)}})} className="w-16 border rounded px-1 text-right"/></div>
+                                              <div className="flex justify-between items-center"><span>生活費/年:</span><input type="number" value={eduDB[region].living} onChange={(e)=>setEduDB({...eduDB, [region]: {...eduDB[region], living: Number(e.target.value)}})} className="w-16 border rounded px-1 text-right"/></div>
                                           </div>
                                       ))}
                                   </div>
@@ -772,7 +715,7 @@ const App = () => {
                       <h3 className="text-lg font-bold mb-4">{editingProp.id ? '編輯物業' : '新增物業'}</h3>
                       <div className="space-y-3">
                           <div><label className="text-xs text-slate-500">名稱</label><input type="text" value={editingProp.name} onChange={e=>setEditingProp({...editingProp, name:e.target.value})} className="w-full border rounded p-2 text-sm" /></div>
-                          <div><label className="text-xs text-slate-500">用途</label><select value={editingProp.type} onChange={e=>setEditingProp({...editingProp, type:e.target.value})} className="w-full border rounded p-2 text-sm"><option value="Investment">收租</option><option value="Self-use">自住</option></select></div>
+                          <div><label className="text-xs text-slate-500">用途</label><select value={editingProp.type} onChange={e=>setEditingProp({...editingProp, type:e.target.value as any})} className="w-full border rounded p-2 text-sm"><option value="Investment">收租</option><option value="Self-use">自住</option></select></div>
                           <div><label className="text-xs text-slate-500">估值 ($)</label><input type="number" value={editingProp.value} onChange={e=>setEditingProp({...editingProp, value:Number(e.target.value)})} className="w-full border rounded p-2 text-sm" /></div>
                           <div><label className="text-xs text-slate-500">租金 ($)</label><input type="number" value={editingProp.estRent} onChange={e=>setEditingProp({...editingProp, estRent:Number(e.target.value)})} className="w-full border rounded p-2 text-sm" /></div>
                           <div><label className="text-xs text-slate-500">每月供款 ($)</label><input type="number" value={editingProp.mortgage} onChange={e=>setEditingProp({...editingProp, mortgage:Number(e.target.value)})} className="w-full border rounded p-2 text-sm" /></div>
@@ -786,6 +729,45 @@ const App = () => {
               </div>
           )}
 
+          {/* Document Modal */}
+          {isDocModalOpen && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
+                  <div className="bg-white rounded-xl shadow-2xl p-6 w-[800px] h-[90vh] flex flex-col">
+                      <div className="flex justify-between items-center mb-4 border-b pb-2">
+                          <h3 className="text-xl font-bold flex items-center gap-2"><Icons.FileText /> 文書生成器</h3>
+                          <button onClick={()=>setDocModalOpen(false)} className="text-slate-400 hover:text-slate-600">✕</button>
+                      </div>
+                      <div className="flex gap-6 flex-1 overflow-hidden">
+                          {/* Left: Controls */}
+                          <div className="w-1/3 space-y-4 overflow-y-auto pr-2">
+                              <div><label className="block text-xs font-bold text-slate-500 mb-1">文件類型</label><div className="flex rounded bg-slate-100 p-1"><button onClick={()=>setDocConfig({...docConfig, type:'receipt'})} className={`flex-1 text-xs py-1 rounded ${docConfig.type==='receipt'?'bg-white shadow text-blue-600':'text-slate-500'}`}>收據</button><button onClick={()=>setDocConfig({...docConfig, type:'lease'})} className={`flex-1 text-xs py-1 rounded ${docConfig.type==='lease'?'bg-white shadow text-blue-600':'text-slate-500'}`}>租約</button></div></div>
+                              <div><label className="block text-xs font-bold text-slate-500 mb-1">選擇物業</label><select className="w-full border rounded p-2 text-sm" value={docConfig.propId} onChange={e=>{ const p = properties.find(x=>x.id===e.target.value); setDocConfig({...docConfig, propId:e.target.value, amount: p?p.estRent:0}); }}>{properties.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+                              <div><label className="block text-xs font-bold text-slate-500 mb-1">租客姓名</label><input type="text" className="w-full border rounded p-2 text-sm" value={docConfig.tenant} onChange={e=>setDocConfig({...docConfig, tenant:e.target.value})} /></div>
+                              {docConfig.type === 'receipt' ? (
+                                  <div><label className="block text-xs font-bold text-slate-500 mb-1">租期 (Period)</label><input type="text" className="w-full border rounded p-2 text-sm" value={docConfig.period} onChange={e=>setDocConfig({...docConfig, period:e.target.value})} placeholder="e.g. Jan 2025" /></div>
+                              ) : (
+                                  <>
+                                      <div><label className="block text-xs font-bold text-slate-500 mb-1">身份證號 (首4位)</label><input type="text" className="w-full border rounded p-2 text-sm" value={docConfig.tenantID} onChange={e=>setDocConfig({...docConfig, tenantID:e.target.value})} /></div>
+                                      <div className="flex gap-2"><div><label className="block text-xs font-bold text-slate-500">起租日</label><input type="date" className="w-full border rounded p-2 text-sm" value={docConfig.startDate} onChange={e=>setDocConfig({...docConfig, startDate:e.target.value})} /></div><div><label className="block text-xs font-bold text-slate-500">完結日</label><input type="date" className="w-full border rounded p-2 text-sm" value={docConfig.endDate} onChange={e=>setDocConfig({...docConfig, endDate:e.target.value})} /></div></div>
+                                      <div><label className="block text-xs font-bold text-slate-500 mb-1">按金 ($)</label><input type="number" className="w-full border rounded p-2 text-sm" value={docConfig.deposit} onChange={e=>setDocConfig({...docConfig, deposit:Number(e.target.value)})} /></div>
+                                  </>
+                              )}
+                              <div><label className="block text-xs font-bold text-slate-500 mb-1">租金金額 ($)</label><input type="number" className="w-full border rounded p-2 text-sm" value={docConfig.amount} onChange={e=>setDocConfig({...docConfig, amount:Number(e.target.value)})} /></div>
+                              <div><label className="block text-xs font-bold text-slate-500 mb-1">簽署人 (業主/代理人)</label><input type="text" className="w-full border rounded p-2 text-sm" value={docConfig.landlord} onChange={e=>setDocConfig({...docConfig, landlord:e.target.value})} /></div>
+                              
+                              <button onClick={()=>handlePrintDoc()} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold shadow hover:bg-blue-700 mt-4"><Icons.Printer /> 列印文件</button>
+                          </div>
+                          {/* Right: Preview */}
+                          <div className="w-2/3 bg-slate-200 rounded-lg p-8 overflow-y-auto flex justify-center">
+                              <div className="paper w-full max-w-[600px] text-black">
+                                  <DocPreview />
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+          )}
+          
           {/* Data Entry Modal */}
           {isEntryModalOpen && (
               <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">

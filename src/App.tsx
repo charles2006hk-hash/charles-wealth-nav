@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
+  Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell 
+} from 'recharts';
 import { initializeApp } from "firebase/app";
 import { 
-  getFirestore, collection, doc, addDoc, setDoc, deleteDoc, updateDoc, 
-  onSnapshot, query, orderBy, writeBatch,
-  QuerySnapshot, DocumentData, DocumentSnapshot
+  getFirestore, collection, doc, addDoc, setDoc, deleteDoc, 
+  onSnapshot, query, orderBy, writeBatch
 } from "firebase/firestore";
 
 // --- 1. Firebase 設定 ---
@@ -56,16 +59,21 @@ interface Property {
   address: string;
   type: 'Investment' | 'Self-use';
   status: 'Occupied' | 'Vacant' | 'Renovation';
+  
+  // 財務數據
   currentValue: number; 
   purchasePrice: number; 
   mortgageAmount: number; 
   outstandingLoan: number; 
+  estRent: number; // 修正：補回預估租金欄位
+  tenure: number;  // 修正：補回按揭年期欄位
+
+  // 支出設定
   managementFee: number;
   govtRates: number;
   govtRent: number;
 }
 
-// 擴充 Property 類型以包含計算後的欄位
 interface PropertyWithStats extends Property {
     income: number;
     expense: number;
@@ -128,11 +136,11 @@ const CATEGORIES = [
 const MEMBERS = ['Charles', 'Carmen', 'Virginia', 'Jason', 'Family'];
 
 const INITIAL_PROPERTIES_DATA: Property[] = [
-    { id: 'p1', name: '京瑞二期 16E', address: '沙田安群街1號京瑞廣場二期16樓E室', type: 'Investment', status: 'Occupied', currentValue: 8000000, purchasePrice: 6000000, mortgageAmount: 15000, outstandingLoan: 3000000, managementFee: 1200, govtRates: 1500, govtRent: 900 },
-    { id: 'p2', name: '京瑞二期 16F', address: '沙田安群街1號京瑞廣場二期16樓F室', type: 'Investment', status: 'Occupied', currentValue: 8000000, purchasePrice: 6000000, mortgageAmount: 15000, outstandingLoan: 3000000, managementFee: 1200, govtRates: 1500, govtRent: 900 },
-    { id: 'p3', name: '帝欣苑 (Parc Versailles)', address: '大埔梅樹坑路8號帝欣苑', type: 'Investment', status: 'Occupied', currentValue: 12000000, purchasePrice: 9000000, mortgageAmount: 0, outstandingLoan: 0, managementFee: 2500, govtRates: 3000, govtRent: 1800 },
-    { id: 'p4', name: '太湖花園 (Serenity Park)', address: '大埔大逸街太湖花園', type: 'Investment', status: 'Occupied', currentValue: 6500000, purchasePrice: 4000000, mortgageAmount: 0, outstandingLoan: 0, managementFee: 1500, govtRates: 1200, govtRent: 700 },
-    { id: 'p5', name: '農圃道18號 (18 Farm Road)', address: '土瓜灣農圃道18號', type: 'Self-use', status: 'Occupied', currentValue: 15000000, purchasePrice: 13000000, mortgageAmount: 25000, outstandingLoan: 6000000, managementFee: 3000, govtRates: 4000, govtRent: 2400 },
+    { id: 'p1', name: '京瑞二期 16E', address: '沙田安群街1號京瑞廣場二期16樓E室', type: 'Investment', status: 'Occupied', currentValue: 8000000, purchasePrice: 6000000, mortgageAmount: 15000, outstandingLoan: 3000000, managementFee: 1200, govtRates: 1500, govtRent: 900, estRent: 25000, tenure: 15 },
+    { id: 'p2', name: '京瑞二期 16F', address: '沙田安群街1號京瑞廣場二期16樓F室', type: 'Investment', status: 'Occupied', currentValue: 8000000, purchasePrice: 6000000, mortgageAmount: 15000, outstandingLoan: 3000000, managementFee: 1200, govtRates: 1500, govtRent: 900, estRent: 25000, tenure: 15 },
+    { id: 'p3', name: '帝欣苑 (Parc Versailles)', address: '大埔梅樹坑路8號帝欣苑', type: 'Investment', status: 'Occupied', currentValue: 12000000, purchasePrice: 9000000, mortgageAmount: 0, outstandingLoan: 0, managementFee: 2500, govtRates: 3000, govtRent: 1800, estRent: 38000, tenure: 0 },
+    { id: 'p4', name: '太湖花園 (Serenity Park)', address: '大埔大逸街太湖花園', type: 'Investment', status: 'Occupied', currentValue: 6500000, purchasePrice: 4000000, mortgageAmount: 0, outstandingLoan: 0, managementFee: 1500, govtRates: 1200, govtRent: 700, estRent: 18000, tenure: 0 },
+    { id: 'p5', name: '農圃道18號 (18 Farm Road)', address: '土瓜灣農圃道18號', type: 'Self-use', status: 'Occupied', currentValue: 15000000, purchasePrice: 13000000, mortgageAmount: 25000, outstandingLoan: 6000000, managementFee: 3000, govtRates: 4000, govtRent: 2400, estRent: 0, tenure: 10 },
 ];
 
 const INITIAL_EDUCATION_DB: Record<string, EduConfig> = {
@@ -187,9 +195,18 @@ const App: React.FC = () => {
       deposit: 0, startDate: '', endDate: '', landlord: 'Charles Lam', 
       paymentMethod: 'Cash', statementDateStart: '', statementDateEnd: '' 
   });
+  
+  // 文書生成器列印模式開關 (用於隱藏選單)
+  const [reportMode, setReportMode] = useState(false);
 
   // Filters
   const [ledgerFilter, setLedgerFilter] = useState('');
+  
+  // Dashboard Filters (Placeholder for future)
+  const [filterYear, setFilterYear] = useState('All');
+  const [filterMember, setFilterMember] = useState('All');
+  const [filterCategory, setFilterCategory] = useState('All');
+  const [searchTerm, setSearchTerm] = useState('');
 
   // 載入資料 (Firebase Listeners)
   useEffect(() => {
@@ -203,7 +220,8 @@ const App: React.FC = () => {
     const unsubLease = onSnapshot(collection(db, "leases"), s => 
         setLeases(s.docs.map(d => ({id: d.id, ...d.data()} as Lease))));
     
-    const unsubEdu = onSnapshot(doc(db, "settings", "education"), (docSnap: DocumentSnapshot<DocumentData>) => {
+    // 使用 onSnapshot 讀取但忽略參數，避免 TS6133 錯誤
+    const unsubEdu = onSnapshot(doc(db, "settings", "education"), (docSnap) => {
       if (docSnap.exists()) {
         setEduDB(docSnap.data() as Record<string, EduConfig>);
       } else {
@@ -268,7 +286,9 @@ const App: React.FC = () => {
             ...editingProp, 
             currentValue: Number(editingProp.currentValue), 
             purchasePrice: Number(editingProp.purchasePrice),
-            mortgageAmount: Number(editingProp.mortgageAmount)
+            mortgageAmount: Number(editingProp.mortgageAmount),
+            estRent: Number(editingProp.estRent),
+            tenure: Number(editingProp.tenure)
         };
         if(editingProp.id) await setDoc(doc(db, "properties", editingProp.id), pData);
         else await addDoc(collection(db, "properties"), pData);
@@ -280,7 +300,24 @@ const App: React.FC = () => {
       if(window.confirm('確定刪除?')) await deleteDoc(doc(db, col, id));
   };
 
-  const handlePrint = () => window.print();
+  const handlePrint = () => {
+      setReportMode(true);
+      setTimeout(() => {
+          window.print();
+          setReportMode(false);
+      }, 100);
+  };
+  
+  const handleExportJSON = () => {
+      const jsonString = JSON.stringify({ meta: { generated: new Date() }, data: transactions }, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const href = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = href;
+      link.download = `Charles_Finance_Data.json`;
+      document.body.appendChild(link);
+      link.click();
+  };
 
   // --- 視圖組件 (Views) ---
 
@@ -316,7 +353,7 @@ const App: React.FC = () => {
               {properties.length === 0 ? (
                   <button onClick={initializeDefaults} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-blue-300 bg-blue-50 rounded-xl hover:bg-blue-100 transition text-blue-500"><ICONS.Plus /><span className="mt-2 font-bold">初始化預設物業</span></button>
               ) : (
-                  <button onClick={() => { setEditingProp({ id: '', name: '', address: '', type: 'Investment', status: 'Vacant', currentValue: 0, purchasePrice: 0, mortgageAmount: 0, outstandingLoan: 0, managementFee: 0, govtRates: 0, govtRent: 0 }); setModalMode('property'); }} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-xl hover:bg-slate-50 transition text-slate-400 hover:text-slate-600"><ICONS.Plus /><span className="mt-2 font-bold">新增物業 Add Property</span></button>
+                  <button onClick={() => { setEditingProp({ id: '', name: '', address: '', type: 'Investment', status: 'Vacant', currentValue: 0, purchasePrice: 0, mortgageAmount: 0, outstandingLoan: 0, managementFee: 0, govtRates: 0, govtRent: 0, estRent: 0, tenure: 0 }); setModalMode('property'); }} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-xl hover:bg-slate-50 transition text-slate-400 hover:text-slate-600"><ICONS.Plus /><span className="mt-2 font-bold">新增物業 Add Property</span></button>
               )}
           </div>
       </div>
@@ -649,10 +686,18 @@ const App: React.FC = () => {
                   <div className="bg-white p-10 rounded-xl shadow animate-in fade-in">
                       <h2 className="text-2xl font-bold mb-4">數據中心 Data Hub</h2>
                       <p className="text-slate-500 mb-6">所有交易紀錄一覽 Table of All Transactions</p>
+                      <div className="flex gap-4 mb-4">
+                        <input type="text" placeholder="Search..." className="border rounded px-2 py-1 text-sm" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                        <select className="border rounded px-2 py-1" value={filterCategory} onChange={e=>setFilterCategory(e.target.value)}><option value="All">All Categories</option>{CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select>
+                        <select className="border rounded px-2 py-1" value={filterMember} onChange={e=>setFilterMember(e.target.value)}><option value="All">All Members</option>{MEMBERS.map(m=><option key={m} value={m}>{m}</option>)}</select>
+                        <select className="border rounded px-2 py-1" value={filterYear} onChange={e=>setFilterYear(e.target.value)}><option value="All">All Years</option>{[2024,2025,2026].map(y=><option key={y} value={y}>{y}</option>)}</select>
+                      </div>
                       <table className="w-full text-sm text-left">
                           <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0"><tr><th className="p-3">Date</th><th className="p-3">Merchant</th><th className="p-3">Amount</th><th className="p-3">Category</th><th className="p-3">Member</th></tr></thead>
                           <tbody className="divide-y">
-                              {transactions.slice(0, 50).map(t => (
+                              {transactions
+                                .filter(t => (filterCategory==='All'||t.category===filterCategory) && (searchTerm===''||t.merchant.includes(searchTerm)))
+                                .slice(0, 50).map(t => (
                                   <tr key={t.id} className="hover:bg-slate-50">
                                       <td className="p-3">{t.date}</td>
                                       <td className="p-3 font-medium">{t.merchant}</td>

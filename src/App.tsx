@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
-  Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell 
+  Tooltip, Legend, ResponsiveContainer 
 } from 'recharts';
 import { initializeApp } from "firebase/app";
 import { 
-  getFirestore, collection, doc, addDoc, setDoc, deleteDoc, updateDoc, 
+  getFirestore, collection, doc, addDoc, setDoc, deleteDoc, 
   onSnapshot, query, orderBy, writeBatch
 } from "firebase/firestore";
 
@@ -35,7 +35,7 @@ interface Transaction {
   year: number;
   month: number;
   propertyId?: string; 
-  tags?: string[]; // 標籤系統
+  tags?: string[]; 
   isVerified?: boolean; 
 }
 
@@ -60,20 +60,12 @@ interface Property {
   type: 'Investment' | 'Self-use';
   status: 'Occupied' | 'Vacant' | 'Renovation';
   
-  // 財務估值
+  // 財務數據
   currentValue: number; 
-  
-  // 買入紀錄
-  purchasePrice: number;
-  purchaseDate: string;
-  stampDuty: number;
-  agentFee: number;
-
-  // 按揭資料
-  bank: string;
-  mortgageAmount: number; // 月供
-  outstandingLoan: number; // 尚餘貸款
-  interestRate: number;
+  purchasePrice: number; 
+  mortgageAmount: number; 
+  outstandingLoan: number; 
+  estRent: number; 
   tenure: number;  
 
   // 支出設定
@@ -82,14 +74,12 @@ interface Property {
   govtRent: number;
 }
 
-// 擴充 Property 類型以包含計算後的欄位 (用於顯示)
 interface PropertyWithStats extends Property {
     income: number;
     expense: number;
     net: number;
     activeLease?: Lease;
     isLate: boolean;
-    estRent: number; // For calculation compatibility
 }
 
 interface EduConfig {
@@ -119,6 +109,15 @@ interface DocConfig {
   statementDateEnd?: string;
 }
 
+interface InsurancePolicy {
+    name: string;
+    totalPaid: number;
+    note: string;
+    lastPaid: string;
+    endYear: number | null;
+    rawMerchant: string;
+}
+
 // --- 3. 常數與圖示 ---
 const ICONS = {
   Home: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
@@ -135,8 +134,11 @@ const ICONS = {
   PieChart: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>,
   Shield: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
   GraduationCap: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>,
+  ShieldCheck: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>,
+  Edit2: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>,
 };
 
+// --- Constants ---
 const CATEGORIES = [
   'Rental Income (租金收入)', 'Management Fee (管理費)', 'Govt Rates (差餉)', 'Govt Rent (地租)',
   'Mortgage Payment (按揭供款)', 'Repair & Maint (維修)', 'Tax (稅項)', 
@@ -144,6 +146,14 @@ const CATEGORIES = [
   'Credit Card', 'Education', 'Transport', 'Telecom', 'Shopping', 'Dining', 'Medical', 'General'
 ];
 const MEMBERS = ['Charles', 'Carmen', 'Virginia', 'Jason', 'Family'];
+
+const INITIAL_PROPERTIES_DATA: Property[] = [
+    { id: 'p1', name: '京瑞二期 16E', address: '沙田安群街1號京瑞廣場二期16樓E室', type: 'Investment', status: 'Occupied', currentValue: 8000000, purchasePrice: 6000000, mortgageAmount: 15000, outstandingLoan: 3000000, managementFee: 1200, govtRates: 1500, govtRent: 900, estRent: 25000, tenure: 15 },
+    { id: 'p2', name: '京瑞二期 16F', address: '沙田安群街1號京瑞廣場二期16樓F室', type: 'Investment', status: 'Occupied', currentValue: 8000000, purchasePrice: 6000000, mortgageAmount: 15000, outstandingLoan: 3000000, managementFee: 1200, govtRates: 1500, govtRent: 900, estRent: 25000, tenure: 15 },
+    { id: 'p3', name: '帝欣苑 (Parc Versailles)', address: '大埔梅樹坑路8號帝欣苑', type: 'Investment', status: 'Occupied', currentValue: 12000000, purchasePrice: 9000000, mortgageAmount: 0, outstandingLoan: 0, managementFee: 2500, govtRates: 3000, govtRent: 1800, estRent: 38000, tenure: 0 },
+    { id: 'p4', name: '太湖花園 (Serenity Park)', address: '大埔大逸街太湖花園', type: 'Investment', status: 'Occupied', currentValue: 6500000, purchasePrice: 4000000, mortgageAmount: 0, outstandingLoan: 0, managementFee: 1500, govtRates: 1200, govtRent: 700, estRent: 18000, tenure: 0 },
+    { id: 'p5', name: '農圃道18號 (18 Farm Road)', address: '土瓜灣農圃道18號', type: 'Self-use', status: 'Occupied', currentValue: 15000000, purchasePrice: 13000000, mortgageAmount: 25000, outstandingLoan: 6000000, managementFee: 3000, govtRates: 4000, govtRent: 2400, estRent: 0, tenure: 10 },
+];
 
 const INITIAL_EDUCATION_DB: Record<string, EduConfig> = {
   HK: { name: '香港 (HK)', years: 4, tuition: 42100, living: 60000, salary: 19000, notes: '本地', paths: { academic: 'HKU/CUHK', vocational: 'IVE/THEi' } },
@@ -205,6 +215,8 @@ const App: React.FC = () => {
   const [eduRegionV, setEduRegionV] = useState('UK');
   const [eduRegionJ, setEduRegionJ] = useState('AUS');
   const [childType, setChildType] = useState('Vocational');
+  const [stressRate, setStressRate] = useState(0);
+  const [rentDrop, setRentDrop] = useState(0);
 
   useEffect(() => {
     const qTx = query(collection(db, "transactions"), orderBy("date", "desc"));
@@ -217,6 +229,7 @@ const App: React.FC = () => {
     const unsubLease = onSnapshot(collection(db, "leases"), s => 
         setLeases(s.docs.map(d => ({id: d.id, ...d.data()} as Lease))));
     
+    // 使用 onSnapshot 讀取但忽略參數，避免 TS6133 錯誤
     const unsubEdu = onSnapshot(doc(db, "settings", "education"), (docSnap) => {
       if (docSnap.exists()) {
         setEduDB(docSnap.data() as Record<string, EduConfig>);
@@ -266,15 +279,30 @@ const App: React.FC = () => {
     const total = filtered.reduce((a,b) => a + b.amount, 0);
     const byYear: Record<string, number> = {}; 
     const byCat: Record<string, number> = {}; 
-    const insuranceByMember: Record<string, any[]> = {};
+    const insuranceByMember: Record<string, InsurancePolicy[]> = {};
 
     filtered.forEach(d => {
         if(!byYear[d.year]) byYear[d.year] = 0; byYear[d.year] += d.amount;
         const cat = d.category || 'Other'; if(!byCat[cat]) byCat[cat] = 0; byCat[cat] += d.amount;
+        
+        // 簡單的保險統計邏輯
         if (cat.includes('Insurance')) {
             let memberKey = d.member === 'Family (公用)' ? 'Charles' : d.member;
             if(!insuranceByMember[memberKey]) insuranceByMember[memberKey] = [];
-            insuranceByMember[memberKey].push({ name: d.merchant, totalPaid: d.amount, note: d.note || '' });
+            // 檢查是否已存在
+            const existing = insuranceByMember[memberKey].find(p => p.name === d.merchant);
+            if(existing) {
+                 existing.totalPaid += d.amount;
+            } else {
+                 insuranceByMember[memberKey].push({ 
+                     name: d.merchant, 
+                     totalPaid: d.amount, 
+                     note: d.note || '',
+                     lastPaid: d.date,
+                     endYear: null,
+                     rawMerchant: d.merchant
+                 });
+            }
         }
     });
     
@@ -357,15 +385,6 @@ const App: React.FC = () => {
       link.click();
   };
 
-  const handleUpdateCategory = async (id: string, newCat: string) => {
-      try {
-          const txRef = doc(db, "transactions", id);
-          await updateDoc(txRef, { category: newCat });
-      } catch (e) {
-          console.error("Update failed", e);
-      }
-  };
-
   const updateEduDB = async (newConfig: Record<string, EduConfig>) => {
       setEduDB(newConfig); 
       await setDoc(doc(db, "settings", "education"), newConfig);
@@ -402,6 +421,9 @@ const App: React.FC = () => {
               ))}
               
                <button onClick={() => { setEditingProp({ id: '', name: '', address: '', type: 'Investment', status: 'Vacant', currentValue: 0, purchasePrice: 0, mortgageAmount: 0, outstandingLoan: 0, managementFee: 0, govtRates: 0, govtRent: 0, estRent: 0, tenure: 0 }); setModalMode('property'); }} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-xl hover:bg-slate-50 transition text-slate-400 hover:text-slate-600"><ICONS.Plus /><span className="mt-2 font-bold">新增物業 Add Property</span></button>
+               {properties.length === 0 && (
+                  <button onClick={initializeDefaults} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-blue-300 bg-blue-50 rounded-xl hover:bg-blue-100 transition text-blue-500"><ICONS.Plus /><span className="mt-2 font-bold">初始化預設物業</span></button>
+              )}
           </div>
       </div>
   );
@@ -474,7 +496,7 @@ const App: React.FC = () => {
                                 {pTransactions.filter(t => JSON.stringify(t).toLowerCase().includes(ledgerFilter.toLowerCase())).map(t => (
                                     <tr key={t.id} className="hover:bg-blue-50">
                                         <td className="p-3">{t.date}</td>
-                                        <td className="p-3"><select className="bg-transparent border-none" value={t.category} onChange={e => handleUpdateCategory(t.id, e.target.value)}>{CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select></td>
+                                        <td className="p-3"><span className="px-2 py-1 bg-slate-100 rounded text-xs">{t.category}</span></td>
                                         <td className="p-3 font-medium">{t.merchant} <span className="text-slate-400 text-xs">{t.note}</span></td>
                                         <td className={`p-3 font-mono font-bold ${t.category.includes('Income') ? 'text-emerald-600' : 'text-red-500'}`}>{t.category.includes('Income') ? '+' : '-'}{formatCurrency(t.amount)}</td>
                                         <td className="p-3 flex gap-1">{t.tags?.map(tag => <span key={tag} className="text-xs bg-yellow-100 text-yellow-800 px-1 rounded">#{tag}</span>)}</td>

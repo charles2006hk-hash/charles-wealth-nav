@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
+  Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell 
+} from 'recharts';
 import { initializeApp } from "firebase/app";
 import { 
-  getFirestore, collection, doc, addDoc, setDoc, deleteDoc, updateDoc, 
-  onSnapshot, query, orderBy, writeBatch,
-  QuerySnapshot, DocumentData, DocumentSnapshot
+  getFirestore, collection, doc, addDoc, setDoc, deleteDoc, 
+  onSnapshot, query, orderBy, writeBatch, where
 } from "firebase/firestore";
 
 // --- 1. Firebase 設定 ---
@@ -106,6 +109,15 @@ interface DocConfig {
   statementDateEnd?: string;
 }
 
+interface InsurancePolicy {
+    name: string;
+    totalPaid: number;
+    note: string;
+    lastPaid: string;
+    endYear: number | null;
+    rawMerchant: string;
+}
+
 // --- 3. 常數與圖示 ---
 const ICONS = {
   Home: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
@@ -194,13 +206,10 @@ const App: React.FC = () => {
       paymentMethod: 'Cash', statementDateStart: '', statementDateEnd: '' 
   });
   
-  // 文書生成器列印模式開關 (用於隱藏選單)
   const [reportMode, setReportMode] = useState(false);
 
   // Filters
   const [ledgerFilter, setLedgerFilter] = useState('');
-  
-  // Dashboard Filters (Placeholder for future)
   const [filterYear, setFilterYear] = useState('All');
   const [filterMember, setFilterMember] = useState('All');
   const [filterCategory, setFilterCategory] = useState('All');
@@ -218,7 +227,6 @@ const App: React.FC = () => {
     const unsubLease = onSnapshot(collection(db, "leases"), s => 
         setLeases(s.docs.map(d => ({id: d.id, ...d.data()} as Lease))));
     
-    // 使用 onSnapshot 讀取但忽略參數，避免 TS6133 錯誤
     const unsubEdu = onSnapshot(doc(db, "settings", "education"), (docSnap) => {
       if (docSnap.exists()) {
         setEduDB(docSnap.data() as Record<string, EduConfig>);
@@ -255,6 +263,7 @@ const App: React.FC = () => {
 
   const totalValuation = properties.reduce((sum, p) => sum + (p.currentValue || 0), 0);
   const totalMonthlyRent = leases.filter(l => l.status === 'Active').reduce((sum, l) => sum + (l.monthlyRent || 0), 0);
+  const insuranceByMember: Record<string, InsurancePolicy[]> = {}; // 保險統計 Placeholder
 
   // --- 操作函數 (Actions) ---
   const initializeDefaults = async () => {
@@ -358,7 +367,6 @@ const App: React.FC = () => {
   );
 
   const PropertyDetailView = ({ propId }: { propId: string }) => {
-    // 使用 propStats 確保能讀取到 activeLease
     const p = propStats.find(x => x.id === propId);
     if (!p) return <div>Property not found</div>;
     
@@ -436,7 +444,6 @@ const App: React.FC = () => {
                      <div className="flex justify-between items-center">
                         <h3 className="font-bold">租約紀錄 Lease History</h3>
                         <button onClick={()=>{
-                            // 這裡簡化，實際應有新增租約的介面
                             const newLease = { propertyId: p.id, tenantName: 'New Tenant', status: 'Active', startDate: '2026-01-01', endDate: '2027-01-01', monthlyRent: 15000 };
                             addDoc(collection(db, "leases"), newLease);
                         }} className="text-sm text-blue-600 hover:underline">+ Register New Lease (Demo)</button>
@@ -481,7 +488,6 @@ const App: React.FC = () => {
                         </div>
                         
                         <div><label className="block text-xs font-bold text-slate-500">Property</label><select className="w-full border rounded p-1" value={docConfig.propId} onChange={e=>{
-                             // 使用 propStats 確保能讀取到 activeLease
                              const p = propStats.find(x=>x.id===e.target.value);
                              if(p) setDocConfig({...docConfig, propId: p.id, amount: p.activeLease?.monthlyRent || 0, tenant: p.activeLease?.tenantName || '' });
                         }}>{properties.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
@@ -514,7 +520,6 @@ const App: React.FC = () => {
   };
 
   const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig: DocConfig, properties: Property[], transactions: Transaction[] }) => {
-    // 這裡只需要基礎資料，無需 activeLease
     const prop = properties.find(p => p.id === docConfig.propId) || { name: 'Unknown Property', address: '' } as Property;
 
     if (docConfig.type === 'receipt') {

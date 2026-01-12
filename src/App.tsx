@@ -4,7 +4,6 @@ import {
   getFirestore, collection, doc, addDoc, setDoc, deleteDoc, updateDoc, 
   onSnapshot, query, orderBy, writeBatch
 } from "firebase/firestore";
-// 雖然目前沒用到圖表，但保留引用以便未來擴充，或可移除以節省空間。這裡移除以通過檢查。
 
 // --- 1. Firebase 設定 ---
 const firebaseConfig = {
@@ -46,8 +45,6 @@ interface Lease {
   monthlyRent: number;
   deposit: number;
   status: 'Active' | 'Terminated';
-  rentFreeStart?: string;
-  rentFreeEnd?: string;
 }
 
 interface Property {
@@ -56,14 +53,12 @@ interface Property {
   address: string;
   type: 'Investment' | 'Self-use';
   status: 'Occupied' | 'Vacant' | 'Renovation';
-  
   currentValue: number; 
   purchasePrice: number; 
   mortgageAmount: number; 
   outstandingLoan: number; 
   estRent: number; 
   tenure: number;  
-
   managementFee: number;
   govtRates: number;
   govtRent: number;
@@ -76,7 +71,7 @@ interface PropertyWithStats extends Property {
     activeLease?: Lease;
     isLate: boolean;
     estRent: number;
-    stressedExpense: number; // For risk analysis
+    stressedExpense: number; 
 }
 
 interface EduConfig {
@@ -106,14 +101,10 @@ interface DocConfig {
   statementDateEnd?: string;
 }
 
-// 恢復使用的保險介面
 interface InsurancePolicy {
     name: string;
     totalPaid: number;
     note: string;
-    lastPaid: string;
-    endYear: number | null;
-    rawMerchant: string;
 }
 
 // --- 3. 常數與圖示 ---
@@ -136,7 +127,6 @@ const ICONS = {
   Edit2: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>,
 };
 
-// --- Constants ---
 const CATEGORIES = [
   'Rental Income (租金收入)', 'Management Fee (管理費)', 'Govt Rates (差餉)', 'Govt Rent (地租)',
   'Mortgage Payment (按揭供款)', 'Repair & Maint (維修)', 'Tax (稅項)', 
@@ -227,7 +217,6 @@ const App: React.FC = () => {
     const unsubLease = onSnapshot(collection(db, "leases"), s => 
         setLeases(s.docs.map(d => ({id: d.id, ...d.data()} as Lease))));
     
-    // 使用 onSnapshot 讀取但忽略參數，避免 TS6133 錯誤
     const unsubEdu = onSnapshot(doc(db, "settings", "education"), (docSnap) => {
       if (docSnap.exists()) {
         setEduDB(docSnap.data() as Record<string, EduConfig>);
@@ -257,13 +246,12 @@ const App: React.FC = () => {
                 if (daysSince > 35) isLate = true;
             }
         }
-        // 計算 estRent (如果沒有租約，使用市場預估，否則使用實際租金)
         const estRent = activeLease ? activeLease.monthlyRent : (p.estRent || 0);
         const stressedExpense = (p.managementFee + p.mortgageAmount) * (1 + stressRate * 0.01);
 
         return { ...p, income, expense, net: income - expense, activeLease, isLate, estRent, stressedExpense } as PropertyWithStats;
     });
-  }, [properties, transactions, leases, stressRate]); // Add stressRate dependency
+  }, [properties, transactions, leases, stressRate]);
 
   const totalValuation = properties.reduce((sum, p) => sum + (p.currentValue || 0), 0);
   const totalMonthlyRent = leases.filter(l => l.status === 'Active').reduce((sum, l) => sum + (l.monthlyRent || 0), 0);
@@ -278,18 +266,15 @@ const App: React.FC = () => {
     const total = filtered.reduce((a,b) => a + b.amount, 0);
     const byYear: Record<string, number> = {}; 
     const byCat: Record<string, number> = {}; 
-    // 這裡我們需要定義 insuranceByMember 的類型
     const insuranceByMember: Record<string, InsurancePolicy[]> = {};
 
     filtered.forEach(d => {
         if(!byYear[d.year]) byYear[d.year] = 0; byYear[d.year] += d.amount;
         const cat = d.category || 'Other'; if(!byCat[cat]) byCat[cat] = 0; byCat[cat] += d.amount;
         
-        // 恢復保險統計邏輯
         if (cat.includes('Insurance')) {
             let memberKey = d.member === 'Family (公用)' ? 'Charles' : d.member;
             if(!insuranceByMember[memberKey]) insuranceByMember[memberKey] = [];
-            // 檢查是否已存在
             const existing = insuranceByMember[memberKey].find(p => p.name === d.merchant);
             if(existing) {
                  existing.totalPaid += d.amount;
@@ -309,8 +294,8 @@ const App: React.FC = () => {
     return { 
         total, 
         count: filtered.length, 
-        byYear: Object.entries(byYear).map(([k,v])=>({year:k, amount:v})).sort((a,b)=>Number(a.year)-Number(b.year)), 
-        byCat: Object.entries(byCat).map(([k,v])=>({name:k, value:v})).sort((a,b)=>b.value-a.value), 
+        byYear: Object.entries(byYear).map(([k,v])=>({year:k, amount:v})).sort((a:any,b:any)=>Number(a.year)-Number(b.year)), 
+        byCat: Object.entries(byCat).map(([k,v])=>({name:k, value:v})).sort((a:any,b:any)=>b.value-a.value), 
         insuranceByMember
     };
   }, [transactions, filterYear, filterMember, filterCategory, searchTerm]);
@@ -330,7 +315,17 @@ const App: React.FC = () => {
         totalNeeded += (vCost + jCost); forecast.push({ year, vCost: Math.round(vCost), jCost: Math.round(jCost), total: Math.round(vCost+jCost) });
     }
     return { data: forecast, totalNeeded: Math.round(totalNeeded) };
-  }, [eduRegionV, eduRegionJ, childType, eduDB]); // Removed duplicate deps
+  }, [eduRegionV, eduRegionJ, childType, eduDB]);
+
+  const initializeDefaults = async () => {
+    if(!window.confirm("初始化預設物業？")) return;
+    const batch = writeBatch(db);
+    INITIAL_PROPERTIES_DATA.forEach(p => {
+        const ref = doc(collection(db, "properties"));
+        batch.set(ref, p);
+    });
+    await batch.commit();
+  };
 
   const handleSaveTransaction = async () => {
       if(!editingTx) return;
@@ -718,7 +713,7 @@ const App: React.FC = () => {
   }
 
   return (
-      <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 text-slate-900">
+      <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 text-slate-900 font-sans">
           <style>{`
             @media print {
                 @page { size: A4; margin: 10mm; }

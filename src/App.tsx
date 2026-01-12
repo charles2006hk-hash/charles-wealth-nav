@@ -58,23 +58,26 @@ interface Property {
   type: 'Investment' | 'Self-use';
   status: 'Occupied' | 'Vacant' | 'Renovation';
   
-  // 財務數據
+  // 財務數據 (估值)
   currentValue: number; 
   
   // 買入流程詳情
-  purchasePrice: number; // 總價
+  purchasePrice: number; // 總價 (自動計算)
   initialDeposit: number; // 細訂
   furtherDeposit: number; // 大訂
-  balancePayment: number; // 尾數
+  balancePayment: number; // 尾數 (Cash Balance)
   mortgageLoan: number; // 按揭貸款額
   
-  // 按揭
+  // 按揭詳情
+  bank: string;
+  interestRate: number; // 利率
   mortgageAmount: number; // 月供
   outstandingLoan: number; // 尚餘欠款
-  
-  estRent: number; 
   tenure: number;  
   
+  // 租務
+  estRent: number; 
+
   // 支出設定
   managementFee: number;
   govtRates: number;
@@ -159,8 +162,7 @@ const CATEGORIES = [
 const MEMBERS = ['Charles', 'Carmen', 'Virginia', 'Jason', 'Family'];
 
 const INITIAL_PROPERTIES_DATA: Property[] = [
-    { id: 'p1', name: '京瑞二期 16E', address: '沙田安群街1號京瑞廣場二期16樓E室', type: 'Investment', status: 'Occupied', currentValue: 8000000, purchasePrice: 6000000, initialDeposit: 300000, furtherDeposit: 300000, balancePayment: 5400000, mortgageLoan: 3000000, mortgageAmount: 15000, outstandingLoan: 3000000, managementFee: 1200, govtRates: 1500, govtRent: 900, estRent: 25000, tenure: 15 },
-    { id: 'p2', name: '京瑞二期 16F', address: '沙田安群街1號京瑞廣場二期16樓F室', type: 'Investment', status: 'Occupied', currentValue: 8000000, purchasePrice: 6000000, initialDeposit: 300000, furtherDeposit: 300000, balancePayment: 5400000, mortgageLoan: 3000000, mortgageAmount: 15000, outstandingLoan: 3000000, managementFee: 1200, govtRates: 1500, govtRent: 900, estRent: 25000, tenure: 15 },
+    { id: 'p1', name: '京瑞二期 16E', address: '沙田安群街1號京瑞廣場二期16樓E室', type: 'Investment', status: 'Occupied', currentValue: 8000000, purchasePrice: 6000000, initialDeposit: 300000, furtherDeposit: 300000, balancePayment: 5400000, mortgageLoan: 3000000, mortgageAmount: 15000, outstandingLoan: 3000000, managementFee: 1200, govtRates: 1500, govtRent: 900, estRent: 25000, tenure: 15, interestRate: 3.5, bank: 'BOC' },
 ];
 
 const INITIAL_EDUCATION_DB: Record<string, EduConfig> = {
@@ -883,7 +885,7 @@ const App: React.FC = () => {
                                         <td className="p-3">{t.date}</td>
                                         <td className="p-3"><select className="bg-transparent border-none" value={t.category} onChange={e => handleUpdateCategory(t.id, e.target.value)}>{CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select></td>
                                         <td className="p-3 font-medium">{t.merchant} <span className="text-slate-400 text-xs">{t.note}</span></td>
-                                        <td className={`p-3 font-mono font-bold ${t.category.includes('Income') ? 'text-emerald-600' : 'text-red-500'}`}>{t.category.includes('Income') ? '+' : '-'}{formatCurrency(t.amount)}</td>
+                                        <td className={`p-3 font-mono font-bold ${t.category?.includes('Income') ? 'text-emerald-600' : 'text-red-500'}`}>{t.category?.includes('Income') ? '+' : '-'}{formatCurrency(t.amount)}</td>
                                         <td className="p-3 flex gap-1">{t.tags?.map(tag => <span key={tag} className="text-xs bg-yellow-100 text-yellow-800 px-1 rounded">#{tag}</span>)}</td>
                                         <td className="p-3"><button onClick={() => deleteItem('transactions', t.id)} className="text-red-400 hover:text-red-600"><ICONS.Trash /></button></td>
                                     </tr>

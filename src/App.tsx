@@ -58,7 +58,7 @@ interface Property {
   type: 'Investment' | 'Self-use';
   status: 'Occupied' | 'Vacant' | 'Renovation';
   
-  // 財務數據 (估值)
+  // 財務數據
   currentValue: number; 
   
   // 買入流程詳情
@@ -1035,11 +1035,11 @@ const App: React.FC = () => {
                         <p className="text-slate-500">所有交易紀錄一覽 Table of All Transactions</p>
                         <div className="flex gap-2">
                             <label className="flex items-center gap-2 px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 cursor-pointer">
-                                <ICONS.Upload /> 匯入 Import JSON
+                                <ICONS.Plus /> 匯入 Import JSON
                                 <input type="file" className="hidden" onChange={handleFileUpload} accept=".json" />
                             </label>
                             <button onClick={handleExportJSON} className="px-3 py-1 bg-slate-600 text-white text-xs rounded hover:bg-slate-700 flex items-center gap-2">
-                                <ICONS.Download /> 導出 Export JSON
+                                <ICONS.FileText /> 導出 Export JSON
                             </button>
                         </div>
                       </div>

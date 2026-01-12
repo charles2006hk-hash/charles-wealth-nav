@@ -201,7 +201,7 @@ const StatCard = ({ title, value, subtext, color, iconName }: any) => {
 };
 
 // --- 5. 獨立組件: 文書預覽內容 ---
-const DocPreviewContent = ({ docConfig, properties }: { docConfig: DocConfig, properties: Property[] }) => {
+const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig: DocConfig, properties: Property[], transactions: Transaction[] }) => {
     const prop = properties.find(p => p.id === docConfig.propId) || { name: 'Unknown Property', address: '' } as Property;
 
     if (docConfig.type === 'receipt') {
@@ -219,6 +219,36 @@ const DocPreviewContent = ({ docConfig, properties }: { docConfig: DocConfig, pr
             </div>
         );
     } 
+    
+    if (docConfig.type === 'statement') {
+        const filteredTxs = transactions
+            .filter(t => t.propertyId === docConfig.propId && (!docConfig.statementDateStart || t.date >= docConfig.statementDateStart) && (!docConfig.statementDateEnd || t.date <= docConfig.statementDateEnd))
+            .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        
+        return (
+            <div className="bg-white p-10 w-[210mm] min-h-[297mm] text-black font-serif">
+                <h1 className="text-2xl font-bold text-center underline mb-6">RENTAL STATEMENT 租務對數單</h1>
+                <div className="flex justify-between mb-8">
+                    <div><p><strong>Property:</strong> {prop.name}</p><p><strong>Address:</strong> {prop.address}</p></div>
+                    <div className="text-right"><p><strong>Tenant:</strong> {docConfig.tenant}</p><p><strong>Period:</strong> {docConfig.statementDateStart || 'Start'} to {docConfig.statementDateEnd || 'Now'}</p></div>
+                </div>
+                <table className="w-full border-collapse border border-black text-sm">
+                    <thead><tr className="bg-gray-100"><th className="border border-black p-2">Date</th><th className="border border-black p-2">Description / Note</th><th className="border border-black p-2 text-right">Debit (Due)</th><th className="border border-black p-2 text-right">Credit (Paid)</th></tr></thead>
+                    <tbody>
+                        {filteredTxs.length === 0 && <tr><td colSpan={4} className="p-4 text-center">No records found for this period.</td></tr>}
+                        {filteredTxs.map(t => (
+                            <tr key={t.id}>
+                                <td className="border border-black p-2">{t.date}</td>
+                                <td className="border border-black p-2">{t.category} - {t.note}</td>
+                                <td className="border border-black p-2 text-right">{t.category.includes('Income') ? '' : formatCurrency(t.amount)}</td>
+                                <td className="border border-black p-2 text-right">{t.category.includes('Income') ? formatCurrency(t.amount) : ''}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        );
+    }
 
     return (
         <div className="doc-print-container text-black font-serif text-sm leading-relaxed">
@@ -540,7 +570,7 @@ const App: React.FC = () => {
         let isLate = false;
         if (activeLease && p.status === 'Occupied') {
             const lastRentTx = pTxs
-                .filter(t => t.category.includes('Rental Income'))
+                .filter(t => t.category?.includes('Rental Income'))
                 .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
             if (lastRentTx) {
                 const daysSince = (new Date().getTime() - new Date(lastRentTx.date).getTime()) / (1000 * 3600 * 24);
@@ -855,7 +885,7 @@ const App: React.FC = () => {
                                         <td className="p-3">{t.date}</td>
                                         <td className="p-3"><select className="bg-transparent border-none" value={t.category} onChange={e => handleUpdateCategory(t.id, e.target.value)}>{CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select></td>
                                         <td className="p-3 font-medium">{t.merchant} <span className="text-slate-400 text-xs">{t.note}</span></td>
-                                        <td className={`p-3 font-mono font-bold ${t.category.includes('Income') ? 'text-emerald-600' : 'text-red-500'}`}>{t.category.includes('Income') ? '+' : '-'}{formatCurrency(t.amount)}</td>
+                                        <td className={`p-3 font-mono font-bold ${t.category?.includes('Income') ? 'text-emerald-600' : 'text-red-500'}`}>{t.category?.includes('Income') ? '+' : '-'}{formatCurrency(t.amount)}</td>
                                         <td className="p-3 flex gap-1">{t.tags?.map(tag => <span key={tag} className="text-xs bg-yellow-100 text-yellow-800 px-1 rounded">#{tag}</span>)}</td>
                                         <td className="p-3"><button onClick={() => deleteItem('transactions', t.id)} className="text-red-400 hover:text-red-600"><ICONS.Trash /></button></td>
                                     </tr>

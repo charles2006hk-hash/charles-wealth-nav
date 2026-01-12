@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, 
-  Tooltip, Legend, ResponsiveContainer, BarChart, Bar 
+  Tooltip, Legend, ResponsiveContainer 
 } from 'recharts';
 import { initializeApp } from "firebase/app";
 import { 
@@ -203,7 +203,6 @@ const App: React.FC = () => {
   
   const [reportMode, setReportMode] = useState(false);
 
-  // Filters & Parameters
   const [ledgerFilter, setLedgerFilter] = useState('');
   const [filterYear, setFilterYear] = useState('All');
   const [filterMember, setFilterMember] = useState('All');
@@ -311,7 +310,7 @@ const App: React.FC = () => {
 
   const eduForecast = useMemo(() => {
     const db = eduDB || INITIAL_EDUCATION_DB;
-    // 使用參數
+    // Explicitly use the variables here to avoid TS6133
     const regV = db[eduRegionV] || INITIAL_EDUCATION_DB.UK; 
     const regJ = db[eduRegionJ] || INITIAL_EDUCATION_DB.AUS;
     const currentYear = new Date().getFullYear(); const forecast = []; let totalNeeded = 0;

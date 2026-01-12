@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
-  Tooltip, Legend, ResponsiveContainer 
+  Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell 
 } from 'recharts';
 import { initializeApp } from "firebase/app";
 import { 
@@ -166,7 +166,7 @@ const FAMILY_INFO = {
 const convertNumberToEnglish = (n: any) => (Number(n) || 0).toString(); 
 const formatCurrency = (val: any) => `$${(Number(val) || 0).toLocaleString()}`;
 
-// --- 4. 獨立的文件預覽組件 (解決嵌套過深與閉合問題) ---
+// --- 4. 獨立組件: 文書預覽內容 (DocPreviewContent) ---
 const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig: DocConfig, properties: Property[], transactions: Transaction[] }) => {
     const prop = properties.find(p => p.id === docConfig.propId) || { name: 'Unknown Property', address: '' } as Property;
 
@@ -218,7 +218,7 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
 
     return (
         <div className="doc-print-container text-black font-serif text-sm leading-relaxed">
-          {/* Page 1 */}
+          {/* Page 1: Clauses 1-7 */}
           <div className="w-[210mm] min-h-[297mm] p-10 bg-white mx-auto relative page-break">
             <div className="text-right text-xs mb-4">Ref. No./編號: ________</div>
             <h1 className="text-2xl font-bold text-center mb-6 underline">TENANCY AGREEMENT 租約</h1>
@@ -266,7 +266,7 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
              <div className="absolute bottom-4 right-10 text-xs">Page 1 of 4</div>
           </div>
 
-          {/* Page 2: Continued Clauses & Signatures */}
+          {/* Page 2: Clauses 8-16, Deposit Receipt & Signatures */}
           <div className="w-[210mm] min-h-[297mm] p-10 bg-white mx-auto relative page-break">
              <ol className="list-decimal pl-6 space-y-3 text-sm" start={8}>
                  <li>
@@ -337,11 +337,30 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
              <div className="absolute bottom-4 right-10 text-xs">Page 2 of 4</div>
           </div>
 
-          {/* Page 3: Schedule I */}
+          {/* Page 3: Key Receipt & Schedule I */}
           <div className="w-[210mm] min-h-[297mm] p-10 bg-white mx-auto relative page-break">
+            
+             <div className="mb-12 border-b-2 border-black pb-8">
+                <h2 className="font-bold text-lg mb-4">KEY RECEIPT 鎖匙收據</h2>
+                <p className="mb-4 text-sm">Acknowledged the receipt of keys of the premises by the Tenant 租客接收業主所交屬該物業之鎖匙：</p>
+                
+                <div className="space-y-2 mb-8 text-sm">
+                    <label className="flex items-center gap-2"><input type="checkbox" /> Main Door (大門)</label>
+                    <label className="flex items-center gap-2"><input type="checkbox" /> Iron Gate (鐵閘)</label>
+                    <label className="flex items-center gap-2"><input type="checkbox" /> Mail Box (信箱)</label>
+                    <label className="flex items-center gap-2"><input type="checkbox" /> Bedroom (睡房)</label>
+                    <label className="flex items-center gap-2"><input type="checkbox" /> Other (其他): _________________</label>
+                </div>
+
+                <div className="w-1/2">
+                    <div className="h-16 border-b border-black mb-2"></div>
+                     <p className="text-sm">Tenant's Signature 租客簽署</p>
+                </div>
+             </div>
+
             <h1 className="text-2xl font-bold text-center mb-8 underline">Schedule I 附表一</h1>
             
-            <table className="w-full border-collapse border border-black">
+            <table className="w-full border-collapse border border-black text-sm">
                 <tbody>
                     <tr>
                         <td className="border border-black p-4 w-1/4 font-bold bg-gray-50">The Premises<br/>物業地址</td>
@@ -385,25 +404,6 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
                     </tr>
                 </tbody>
             </table>
-
-             <div className="mt-12 pt-8 border-t-2 border-black">
-                <h2 className="font-bold text-lg mb-4">KEY RECEIPT 鎖匙收據</h2>
-                <p className="mb-4 text-sm">Acknowledged the receipt of keys of the premises by the Tenant 租客接收業主所交屬該物業之鎖匙：</p>
-                
-                <div className="space-y-2 mb-8 text-sm">
-                    <label className="flex items-center gap-2"><input type="checkbox" /> Main Door (大門)</label>
-                    <label className="flex items-center gap-2"><input type="checkbox" /> Iron Gate (鐵閘)</label>
-                    <label className="flex items-center gap-2"><input type="checkbox" /> Mail Box (信箱)</label>
-                    <label className="flex items-center gap-2"><input type="checkbox" /> Bedroom (睡房)</label>
-                    <label className="flex items-center gap-2"><input type="checkbox" /> Other (其他): _________________</label>
-                </div>
-
-                <div className="w-1/2">
-                    <div className="h-16 border-b border-black mb-2"></div>
-                     <p className="text-sm">Tenant's Signature 租客簽署</p>
-                </div>
-             </div>
-
             <div className="absolute bottom-4 right-10 text-xs">Page 3 of 4</div>
           </div>
 
@@ -690,6 +690,21 @@ const App: React.FC = () => {
   const updateEduDB = async (newConfig: Record<string, EduConfig>) => {
       setEduDB(newConfig); 
       await setDoc(doc(db, "settings", "education"), newConfig);
+  };
+
+  // --- 4. 輔助組件 (StatCard) ---
+  const StatCard = ({ title, value, subtext, color, iconName }: any) => {
+    const Icon = ICONS[iconName as keyof typeof ICONS] || ICONS.Tag;
+    return (
+      <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 h-full">
+        <div className="flex justify-between items-start mb-2">
+          <div className={`p-2 rounded-lg bg-${color}-50 text-${color}-600`}><Icon /></div>
+          {subtext && <span className={`text-xs px-2 py-1 rounded-full bg-${color}-50 text-${color}-600`}>{subtext}</span>}
+        </div>
+        <p className="text-slate-500 text-sm font-medium">{title}</p>
+        <h3 className="text-2xl font-bold text-slate-800">{value}</h3>
+      </div>
+    );
   };
 
   // --- Views ---
@@ -1205,211 +1220,7 @@ const App: React.FC = () => {
              <div className="absolute bottom-4 right-10 text-xs">Page 4 of 4</div>
           </div>
         </div>
-      );
-    }
-  };
-
-  if (!dataLoaded) {
-       return <div className="h-screen flex items-center justify-center text-slate-500 animate-pulse">正在連接到 Firebase 雲端資料庫...</div>;
-  }
-
-  return (
-      <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 text-slate-900 font-sans">
-          <style>{`
-            @media print {
-                @page { size: A4; margin: 10mm; }
-                body { background-color: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; overflow: visible !important; height: auto !important; }
-                #root { overflow: visible !important; height: auto !important; }
-                .no-print, nav, .sidebar, .modal-overlay { display: none !important; }
-                .doc-print-container { 
-                    display: block !important; position: absolute; top: 0; left: 0; width: 100%; background: white; z-index: 9999; padding: 0;
-                }
-                .report-container { display: block !important; width: 100%; box-shadow: none; }
-                .page-break { page-break-before: always; }
-                body.printing-doc #root > div { visibility: hidden; }
-                body.printing-doc .doc-print-container { visibility: visible; }
-                .bg-slate-50 { background-color: #f8fafc !important; }
-            }
-            ::-webkit-scrollbar { width: 6px; height: 6px; }
-            ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
-            .modal-overlay { background-color: rgba(0, 0, 0, 0.5); }
-            .paper { background: white; box-shadow: 0 0 10px rgba(0,0,0,0.1); padding: 40px; min-height: 800px; font-family: "Times New Roman", "MingLiU", serif; }
-          `}</style>
-
-          {!reportMode && (
-              <div className="w-full md:w-64 bg-slate-900 text-slate-300 flex flex-col sticky top-0 h-screen overflow-y-auto no-print">
-                  <div className="p-6">
-                      <h1 className="text-xl font-bold text-white flex items-center gap-2"><ICONS.Home /> Charles's 導航</h1>
-                  </div>
-                  <nav className="flex-1 px-3 space-y-1">
-                      {[
-                          {id: 'dashboard', icon: 'LayoutDashboard', label: '物業總覽 Overview'},
-                          {id: 'data', icon: 'Data', label: '數據中心 Data Hub'},
-                          {id: 'insurance', icon: 'Shield', label: '保險庫 Insurance'},
-                          {id: 'education', icon: 'GraduationCap', label: '升學 Education'}
-                      ].map(item => (
-                          <button key={item.id} onClick={() => { setActiveTab(item.id); setPropertyViewId(null); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${activeTab===item.id && !propertyViewId ? 'bg-blue-600 text-white' : 'hover:bg-slate-800'}`}>
-                              {item.id === 'dashboard' ? <ICONS.LayoutDashboard /> : item.id === 'data' ? <ICONS.Data /> : item.id === 'insurance' ? <ICONS.Shield /> : <ICONS.GraduationCap />} {item.label}
-                          </button>
-                      ))}
-                  </nav>
-              </div>
-          )}
-
-          <div className="flex-1 p-8 overflow-y-auto print-container">
-              {activeTab === 'dashboard' && (
-                  propertyViewId ? <PropertyDetailView propId={propertyViewId} /> : <PropertyDashboard />
-              )}
-              {activeTab === 'data' && (
-                  <div className="bg-white p-10 rounded-xl shadow animate-in fade-in">
-                      <h2 className="text-2xl font-bold mb-4">數據中心 Data Hub</h2>
-                      <p className="text-slate-500 mb-6">所有交易紀錄一覽 Table of All Transactions</p>
-                      <div className="flex gap-4 mb-4">
-                        <input type="text" placeholder="Search..." className="border rounded px-2 py-1 text-sm" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-                        <select className="border rounded px-2 py-1" value={filterCategory} onChange={e=>setFilterCategory(e.target.value)}><option value="All">All Categories</option>{CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select>
-                        <select className="border rounded px-2 py-1" value={filterMember} onChange={e=>setFilterMember(e.target.value)}><option value="All">All Members</option>{MEMBERS.map(m=><option key={m} value={m}>{m}</option>)}</select>
-                        <select className="border rounded px-2 py-1" value={filterYear} onChange={e=>setFilterYear(e.target.value)}><option value="All">All Years</option>{[2024,2025,2026].map(y=><option key={y} value={y}>{y}</option>)}</select>
-                        <button onClick={handleExportJSON} className="px-3 py-1 bg-slate-600 text-white text-xs rounded hover:bg-slate-700">Export JSON</button>
-                      </div>
-                      <table className="w-full text-sm text-left">
-                          <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0"><tr><th className="p-3">Date</th><th className="p-3">Merchant</th><th className="p-3">Amount</th><th className="p-3">Category</th><th className="p-3">Member</th></tr></thead>
-                          <tbody className="divide-y">
-                              {transactions
-                                .filter(t => (filterCategory==='All'||t.category===filterCategory) && (searchTerm===''||t.merchant.includes(searchTerm)))
-                                .slice(0, 50).map(t => (
-                                  <tr key={t.id} className="hover:bg-slate-50">
-                                      <td className="p-3">{t.date}</td>
-                                      <td className="p-3 font-medium">{t.merchant}</td>
-                                      <td className="p-3 font-mono">{formatCurrency(t.amount)}</td>
-                                      <td className="p-3"><span className="px-2 py-1 bg-gray-100 rounded text-xs">{t.category}</span></td>
-                                      <td className="p-3">{t.member}</td>
-                                  </tr>
-                              ))}
-                          </tbody>
-                      </table>
-                  </div>
-              )}
-              
-              {activeTab === 'insurance' && (
-                  <div className="space-y-6 animate-in fade-in">
-                      <div className="bg-indigo-50 p-6 rounded-xl border border-indigo-100 text-indigo-900 text-sm"><h3 className="font-bold text-lg mb-2 flex items-center gap-2"><ICONS.ShieldCheck /> 保險 AI 深度透視</h3>系統已自動分析您導入的 <code>payment_data.json</code> 中的 CSV 備註欄位。</div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          {Object.entries(stats.insuranceByMember).map(([member, policies]) => (
-                              <div key={member} className="bg-white border rounded-xl overflow-hidden shadow-sm">
-                                  <div className="bg-slate-50 px-4 py-3 border-b font-bold text-slate-700 flex justify-between"><span>{member}</span><span className="text-xs font-normal bg-white px-2 py-1 rounded border">總投入: ${(policies.reduce((a,b)=>a+b.totalPaid,0)/1000000).toFixed(2)}M</span></div>
-                                  <div className="overflow-x-auto">
-                                      <table className="w-full text-xs">
-                                          <thead><tr className="text-slate-400 bg-slate-50/50"><th className="p-2 text-left">計劃名稱</th><th className="p-2 text-right">已繳總額</th><th className="p-2 text-left">備註</th></tr></thead>
-                                          <tbody>{policies.map((p, idx) => (
-                                              <tr key={idx} className="border-t hover:bg-slate-50"><td className="p-2 font-medium text-slate-700">{p.name}</td><td className="p-2 text-right font-mono text-emerald-600">${p.totalPaid.toLocaleString()}</td><td className="p-2 text-slate-500 truncate max-w-xs text-[10px]">{p.note}</td></tr>
-                                          ))}</tbody>
-                                      </table>
-                                  </div>
-                              </div>
-                          ))}
-                      </div>
-                  </div>
-              )}
-              
-              {activeTab === 'education' && (
-                   <div className="space-y-6 animate-in fade-in">
-                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-4 rounded-xl border shadow-sm gap-4">
-                          <div><h2 className="text-xl font-bold text-slate-800">升學與職業導航</h2><p className="text-sm text-slate-500">針對「非學術型」學生的多元出路分析</p></div>
-                          <div className="flex gap-2 items-center bg-slate-100 p-1 rounded-lg">
-                              <button onClick={()=>setChildType('Standard')} className={`px-3 py-1 text-xs rounded-md transition ${childType==='Standard'?'bg-white shadow text-blue-600':'text-slate-500'}`}>傳統學術 (大學)</button>
-                              <button onClick={()=>setChildType('Vocational')} className={`px-3 py-1 text-xs rounded-md transition ${childType==='Vocational'?'bg-white shadow text-purple-600':'text-slate-500'}`}>職業導向 (專科)</button>
-                          </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-6">
-                          <div className="bg-white p-6 rounded-xl shadow-sm border">
-                              <div className="flex justify-between">
-                                <h3 className="font-bold text-lg mb-2">Virginia ({FAMILY_INFO.Virginia.age})</h3>
-                                <select className="text-xs border rounded p-1" value={eduRegionV} onChange={e=>setEduRegionV(e.target.value)}>{Object.keys(eduDB).map(r=><option key={r} value={r}>{eduDB[r].name}</option>)}</select>
-                              </div>
-                              <p>目標: {eduDB[eduRegionV].name}</p>
-                              <p>預算: {formatCurrency(eduDB[eduRegionV].tuition + eduDB[eduRegionV].living)} / year</p>
-                          </div>
-                          <div className="bg-white p-6 rounded-xl shadow-sm border">
-                              <div className="flex justify-between">
-                                <h3 className="font-bold text-lg mb-2">Jason ({FAMILY_INFO.Jason.age})</h3>
-                                <select className="text-xs border rounded p-1" value={eduRegionJ} onChange={e=>setEduRegionJ(e.target.value)}>{Object.keys(eduDB).map(r=><option key={r} value={r}>{eduDB[r].name}</option>)}</select>
-                              </div>
-                              <p>目標: {eduDB[eduRegionJ].name}</p>
-                              <p>預算: {formatCurrency(eduDB[eduRegionJ].tuition + eduDB[eduRegionJ].living)} / year</p>
-                          </div>
-                      </div>
-                      <div className="bg-slate-100 p-4 rounded-xl">
-                          <h4 className="font-bold text-slate-700 mb-2 text-sm flex items-center gap-2"><ICONS.Edit2 /> 調整預算參數 (AI Research 基準)</h4>
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-                              {Object.keys(eduDB).map(region => (
-                                  <div key={region} className="bg-white p-3 rounded border">
-                                      <div className="font-bold mb-1">{eduDB[region].name}</div>
-                                      <div className="flex justify-between items-center mb-1"><span>學費/年:</span><input type="number" value={eduDB[region].tuition} onChange={(e)=>updateEduDB({...eduDB, [region]: {...eduDB[region], tuition: Number(e.target.value)}})} className="w-16 border rounded px-1 text-right"/></div>
-                                      <div className="flex justify-between items-center"><span>生活費/年:</span><input type="number" value={eduDB[region].living} onChange={(e)=>updateEduDB({...eduDB, [region]: {...eduDB[region], living: Number(e.target.value)}})} className="w-16 border rounded px-1 text-right"/></div>
-                                  </div>
-                              ))}
-                          </div>
-                      </div>
-                      <div className="bg-white p-6 rounded-xl border shadow-sm h-80">
-                          <h3 className="font-bold text-slate-700 mb-4">未來 10 年資金需求預測</h3>
-                          <ResponsiveContainer><AreaChart data={eduForecast.data}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="year" /><YAxis tickFormatter={v=>`${v/1000}k`}/><Tooltip formatter={v=>`$${v.toLocaleString()}`} /><Legend /><Area type="monotone" dataKey="vCost" name="Virginia" stackId="1" stroke="#8884d8" fill="#8884d8" /><Area type="monotone" dataKey="jCost" name="Jason" stackId="1" stroke="#82ca9d" fill="#82ca9d" /></AreaChart></ResponsiveContainer>
-                      </div>
-                   </div>
-              )}
-          </div>
-
-          {/* Modals */}
-          {modalMode === 'doc' && <DocModal />}
-          
-          {modalMode === 'transaction' && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
-                  <div className="bg-white rounded-xl shadow-2xl p-6 w-96 animate-in fade-in zoom-in duration-200">
-                        <h3 className="text-lg font-bold mb-4">新增交易 Record</h3>
-                        <div className="space-y-3">
-                            <input type="date" className="w-full border rounded p-2" value={editingTx?.date} onChange={e=>setEditingTx({...editingTx, date: e.target.value} as any)} />
-                            <input type="text" placeholder="Detail/Merchant" className="w-full border rounded p-2" value={editingTx?.merchant} onChange={e=>setEditingTx({...editingTx, merchant: e.target.value} as any)} />
-                            <input type="number" placeholder="Amount" className="w-full border rounded p-2" value={editingTx?.amount} onChange={e=>setEditingTx({...editingTx, amount: Number(e.target.value)} as any)} />
-                            <select className="w-full border rounded p-2" value={editingTx?.category} onChange={e=>setEditingTx({...editingTx, category: e.target.value} as any)}>{CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select>
-                            <select className="w-full border rounded p-2" value={editingTx?.member} onChange={e=>setEditingTx({...editingTx, member: e.target.value} as any)}>{MEMBERS.map(m=><option key={m} value={m}>{m}</option>)}</select>
-                        </div>
-                        <div className="flex gap-2 mt-6">
-                            <button onClick={handleSaveTransaction} className="flex-1 bg-blue-600 text-white py-2 rounded font-bold hover:bg-blue-700">Save</button>
-                            <button onClick={()=>setModalMode('none')} className="flex-1 bg-gray-200 py-2 rounded hover:bg-gray-300">Cancel</button>
-                        </div>
-                    </div>
-              </div>
-          )}
-
-          {modalMode === 'property' && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
-                  <div className="bg-white rounded-xl shadow-2xl p-6 w-[500px] animate-in fade-in zoom-in duration-200">
-                      <h3 className="font-bold mb-4">Edit Property</h3>
-                      <div className="space-y-3">
-                          <input className="border w-full p-2" placeholder="Name" value={editingProp?.name} onChange={e => setEditingProp({...editingProp, name: e.target.value} as any)} />
-                          <input className="border w-full p-2" placeholder="Address" value={editingProp?.address} onChange={e => setEditingProp({...editingProp, address: e.target.value} as any)} />
-                          <select className="border w-full p-2" value={editingProp?.status} onChange={e => setEditingProp({...editingProp, status: e.target.value} as any)}><option value="Occupied">Occupied</option><option value="Vacant">Vacant</option></select>
-                          <div className="grid grid-cols-2 gap-2">
-                               <input className="border p-2" type="number" placeholder="Value" value={editingProp?.currentValue} onChange={e => setEditingProp({...editingProp, currentValue: Number(e.target.value)} as any)} />
-                               <input className="border p-2" type="number" placeholder="Rent Est." value={editingProp?.estRent} onChange={e => setEditingProp({...editingProp, estRent: Number(e.target.value)} as any)} />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-bold text-slate-500">Expenses</label>
-                            <div className="grid grid-cols-3 gap-2">
-                              <input className="border p-1 text-sm" placeholder="Mgt Fee" value={editingProp?.managementFee} onChange={e=>setEditingProp({...editingProp, managementFee: Number(e.target.value)} as any)} />
-                              <input className="border p-1 text-sm" placeholder="Rates" value={editingProp?.govtRates} onChange={e=>setEditingProp({...editingProp, govtRates: Number(e.target.value)} as any)} />
-                              <input className="border p-1 text-sm" placeholder="Govt Rent" value={editingProp?.govtRent} onChange={e=>setEditingProp({...editingProp, govtRent: Number(e.target.value)} as any)} />
-                            </div>
-                          </div>
-                      </div>
-                      <div className="flex gap-2 mt-6">
-                          <button onClick={handleSaveProperty} className="flex-1 bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Save</button>
-                          <button onClick={() => setModalMode('none')} className="flex-1 bg-gray-200 p-2 rounded hover:bg-gray-300">Cancel</button>
-                      </div>
-                  </div>
-              </div>
-          )}
-      </div>
-  );
+    );
 };
 
 export default App;

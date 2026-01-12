@@ -1,12 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
-  Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell 
-} from 'recharts';
 import { initializeApp } from "firebase/app";
 import { 
-  getFirestore, collection, doc, addDoc, setDoc, deleteDoc, 
-  onSnapshot, query, orderBy, writeBatch, where
+  getFirestore, collection, doc, addDoc, setDoc, deleteDoc, updateDoc, 
+  onSnapshot, query, orderBy, writeBatch,
+  QuerySnapshot, DocumentData, DocumentSnapshot
 } from "firebase/firestore";
 
 // --- 1. Firebase 設定 ---
@@ -107,15 +104,6 @@ interface DocConfig {
   paymentMethod: 'Cash' | 'Cheque' | 'Bank Transfer';
   statementDateStart?: string;
   statementDateEnd?: string;
-}
-
-interface InsurancePolicy {
-    name: string;
-    totalPaid: number;
-    note: string;
-    lastPaid: string;
-    endYear: number | null;
-    rawMerchant: string;
 }
 
 // --- 3. 常數與圖示 ---
@@ -227,7 +215,7 @@ const App: React.FC = () => {
     const unsubLease = onSnapshot(collection(db, "leases"), s => 
         setLeases(s.docs.map(d => ({id: d.id, ...d.data()} as Lease))));
     
-    const unsubEdu = onSnapshot(doc(db, "settings", "education"), (docSnap) => {
+    const unsubEdu = onSnapshot(doc(db, "settings", "education"), (docSnap: DocumentSnapshot<DocumentData>) => {
       if (docSnap.exists()) {
         setEduDB(docSnap.data() as Record<string, EduConfig>);
       } else {
@@ -263,7 +251,6 @@ const App: React.FC = () => {
 
   const totalValuation = properties.reduce((sum, p) => sum + (p.currentValue || 0), 0);
   const totalMonthlyRent = leases.filter(l => l.status === 'Active').reduce((sum, l) => sum + (l.monthlyRent || 0), 0);
-  const insuranceByMember: Record<string, InsurancePolicy[]> = {}; // 保險統計 Placeholder
 
   // --- 操作函數 (Actions) ---
   const initializeDefaults = async () => {
@@ -324,6 +311,15 @@ const App: React.FC = () => {
       link.download = `Charles_Finance_Data.json`;
       document.body.appendChild(link);
       link.click();
+  };
+
+  const handleUpdateCategory = async (id: string, newCat: string) => {
+      try {
+          const txRef = doc(db, "transactions", id);
+          await updateDoc(txRef, { category: newCat });
+      } catch (e) {
+          console.error("Update failed", e);
+      }
   };
 
   // --- 視圖組件 (Views) ---
@@ -426,7 +422,7 @@ const App: React.FC = () => {
                                 {pTransactions.filter(t => JSON.stringify(t).toLowerCase().includes(ledgerFilter.toLowerCase())).map(t => (
                                     <tr key={t.id} className="hover:bg-blue-50">
                                         <td className="p-3">{t.date}</td>
-                                        <td className="p-3"><span className="px-2 py-1 bg-slate-100 rounded text-xs">{t.category}</span></td>
+                                        <td className="p-3"><select className="bg-transparent border-none" value={t.category} onChange={e => handleUpdateCategory(t.id, e.target.value)}>{CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select></td>
                                         <td className="p-3 font-medium">{t.merchant} <span className="text-slate-400 text-xs">{t.note}</span></td>
                                         <td className={`p-3 font-mono font-bold ${t.category.includes('Income') ? 'text-emerald-600' : 'text-red-500'}`}>{t.category.includes('Income') ? '+' : '-'}{formatCurrency(t.amount)}</td>
                                         <td className="p-3 flex gap-1">{t.tags?.map(tag => <span key={tag} className="text-xs bg-yellow-100 text-yellow-800 px-1 rounded">#{tag}</span>)}</td>

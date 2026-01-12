@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
-  Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell 
+  Tooltip, Legend, ResponsiveContainer 
 } from 'recharts';
 import { initializeApp } from "firebase/app";
 import { 
@@ -109,9 +109,6 @@ interface InsurancePolicy {
     name: string;
     totalPaid: number;
     note: string;
-    lastPaid?: string;
-    endYear?: number | null;
-    rawMerchant?: string;
 }
 
 // --- 3. 常數與圖示 ---
@@ -203,7 +200,6 @@ const App: React.FC = () => {
   
   const [reportMode, setReportMode] = useState(false);
 
-  // Filters & Parameters
   const [ledgerFilter, setLedgerFilter] = useState('');
   const [filterYear, setFilterYear] = useState('All');
   const [filterMember, setFilterMember] = useState('All');
@@ -291,10 +287,7 @@ const App: React.FC = () => {
                  insuranceByMember[memberKey].push({ 
                      name: d.merchant, 
                      totalPaid: d.amount, 
-                     note: d.note || '',
-                     lastPaid: d.date,
-                     endYear: null,
-                     rawMerchant: d.merchant
+                     note: d.note || ''
                  });
             }
         }

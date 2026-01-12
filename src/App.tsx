@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
-  Tooltip, Legend, ResponsiveContainer 
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, 
+  Tooltip, Legend, ResponsiveContainer, BarChart, Bar 
 } from 'recharts';
 import { initializeApp } from "firebase/app";
 import { 
@@ -311,7 +311,7 @@ const App: React.FC = () => {
 
   const eduForecast = useMemo(() => {
     const db = eduDB || INITIAL_EDUCATION_DB;
-    // 使用參數避免 TS6133 錯誤
+    // 使用參數
     const regV = db[eduRegionV] || INITIAL_EDUCATION_DB.UK; 
     const regJ = db[eduRegionJ] || INITIAL_EDUCATION_DB.AUS;
     const currentYear = new Date().getFullYear(); const forecast = []; let totalNeeded = 0;

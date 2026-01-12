@@ -57,27 +57,19 @@ interface Property {
   address: string;
   type: 'Investment' | 'Self-use';
   status: 'Occupied' | 'Vacant' | 'Renovation';
-  
-  // 財務數據
   currentValue: number; 
-  
-  // 買入流程
-  purchasePrice: number; // 總價
-  initialDeposit: number; // 細訂
-  furtherDeposit: number; // 大訂
-  balancePayment: number; // 尾數
-  mortgageLoan: number; // 按揭貸款額
-
-  mortgageAmount: number; // 月供
-  outstandingLoan: number; // 尚餘欠款
-  
+  purchasePrice: number; 
+  mortgageAmount: number; 
+  outstandingLoan: number; 
   estRent: number; 
   tenure: number;  
-  
-  // 支出設定
   managementFee: number;
   govtRates: number;
   govtRent: number;
+  initialDeposit?: number;
+  furtherDeposit?: number;
+  balancePayment?: number;
+  mortgageLoan?: number;
 }
 
 interface PropertyWithStats extends Property {
@@ -178,7 +170,6 @@ const FAMILY_INFO = {
 };
 
 const convertNumberToEnglish = (n: any) => (Number(n) || 0).toString(); 
-// 安全的格式化函數，防止白屏
 const formatCurrency = (val: any) => {
     const num = Number(val);
     if (isNaN(num)) return '$0';

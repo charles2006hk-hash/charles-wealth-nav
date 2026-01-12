@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, 
-  Tooltip, Legend, ResponsiveContainer 
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
+  Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell 
 } from 'recharts';
 import { initializeApp } from "firebase/app";
 import { 
@@ -203,6 +203,7 @@ const App: React.FC = () => {
   
   const [reportMode, setReportMode] = useState(false);
 
+  // Filters & Parameters
   const [ledgerFilter, setLedgerFilter] = useState('');
   const [filterYear, setFilterYear] = useState('All');
   const [filterMember, setFilterMember] = useState('All');

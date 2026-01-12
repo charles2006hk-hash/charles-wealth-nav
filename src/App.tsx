@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, 
   Tooltip, Legend, ResponsiveContainer 
 } from 'recharts';
 import { initializeApp } from "firebase/app";
@@ -58,23 +58,26 @@ interface Property {
   type: 'Investment' | 'Self-use';
   status: 'Occupied' | 'Vacant' | 'Renovation';
   
-  // 財務數據
+  // 財務數據 (估值)
   currentValue: number; 
   
   // 買入流程詳情
-  purchasePrice: number; // 總價
+  purchasePrice: number; // 總價 (自動計算)
   initialDeposit: number; // 細訂
   furtherDeposit: number; // 大訂
-  balancePayment: number; // 尾數
-  mortgageLoan: number; // 按揭貸款
+  balancePayment: number; // 尾數 (Cash Balance)
+  mortgageLoan: number; // 按揭貸款額
   
+  // 按揭詳情
+  bank: string;
   interestRate: number; // 利率
   mortgageAmount: number; // 月供
   outstandingLoan: number; // 尚餘欠款
-  
-  estRent: number; 
   tenure: number;  
   
+  // 租務
+  estRent: number; 
+
   // 支出設定
   managementFee: number;
   govtRates: number;
@@ -159,9 +162,7 @@ const CATEGORIES = [
 const MEMBERS = ['Charles', 'Carmen', 'Virginia', 'Jason', 'Family'];
 
 const INITIAL_PROPERTIES_DATA: Property[] = [
-    { id: 'p1', name: '京瑞二期 16E', address: '沙田安群街1號京瑞廣場二期16樓E室', type: 'Investment', status: 'Occupied', currentValue: 8000000, purchasePrice: 6000000, initialDeposit: 300000, furtherDeposit: 300000, balancePayment: 5400000, mortgageLoan: 3000000, mortgageAmount: 15000, outstandingLoan: 3000000, managementFee: 1200, govtRates: 1500, govtRent: 900, estRent: 25000, tenure: 15, interestRate: 3.5 },
-    { id: 'p2', name: '京瑞二期 16F', address: '沙田安群街1號京瑞廣場二期16樓F室', type: 'Investment', status: 'Occupied', currentValue: 8000000, purchasePrice: 6000000, initialDeposit: 300000, furtherDeposit: 300000, balancePayment: 5400000, mortgageLoan: 3000000, mortgageAmount: 15000, outstandingLoan: 3000000, managementFee: 1200, govtRates: 1500, govtRent: 900, estRent: 25000, tenure: 15, interestRate: 3.5 },
-    { id: 'p3', name: '帝欣苑 (Parc Versailles)', address: '大埔梅樹坑路8號帝欣苑', type: 'Investment', status: 'Occupied', currentValue: 12000000, purchasePrice: 9000000, initialDeposit: 500000, furtherDeposit: 500000, balancePayment: 8000000, mortgageLoan: 4500000, mortgageAmount: 0, outstandingLoan: 0, managementFee: 2500, govtRates: 3000, govtRent: 1800, estRent: 38000, tenure: 0, interestRate: 2.5 },
+    { id: 'p1', name: '京瑞二期 16E', address: '沙田安群街1號京瑞廣場二期16樓E室', type: 'Investment', status: 'Occupied', currentValue: 8000000, purchasePrice: 6000000, initialDeposit: 300000, furtherDeposit: 300000, balancePayment: 5400000, mortgageLoan: 3000000, mortgageAmount: 15000, outstandingLoan: 3000000, managementFee: 1200, govtRates: 1500, govtRent: 900, estRent: 25000, tenure: 15, interestRate: 3.5, bank: 'BOC' },
 ];
 
 const INITIAL_EDUCATION_DB: Record<string, EduConfig> = {
@@ -200,7 +201,7 @@ const StatCard = ({ title, value, subtext, color, iconName }: any) => {
 };
 
 // --- 5. 獨立組件: 文書預覽內容 ---
-const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig: DocConfig, properties: Property[], transactions: Transaction[] }) => {
+const DocPreviewContent = ({ docConfig, properties }: { docConfig: DocConfig, properties: Property[] }) => {
     const prop = properties.find(p => p.id === docConfig.propId) || { name: 'Unknown Property', address: '' } as Property;
 
     if (docConfig.type === 'receipt') {
@@ -218,36 +219,6 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
             </div>
         );
     } 
-    
-    if (docConfig.type === 'statement') {
-        const filteredTxs = transactions
-            .filter(t => t.propertyId === docConfig.propId && (!docConfig.statementDateStart || t.date >= docConfig.statementDateStart) && (!docConfig.statementDateEnd || t.date <= docConfig.statementDateEnd))
-            .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-        
-        return (
-            <div className="bg-white p-10 w-[210mm] min-h-[297mm] text-black font-serif">
-                <h1 className="text-2xl font-bold text-center underline mb-6">RENTAL STATEMENT 租務對數單</h1>
-                <div className="flex justify-between mb-8">
-                    <div><p><strong>Property:</strong> {prop.name}</p><p><strong>Address:</strong> {prop.address}</p></div>
-                    <div className="text-right"><p><strong>Tenant:</strong> {docConfig.tenant}</p><p><strong>Period:</strong> {docConfig.statementDateStart || 'Start'} to {docConfig.statementDateEnd || 'Now'}</p></div>
-                </div>
-                <table className="w-full border-collapse border border-black text-sm">
-                    <thead><tr className="bg-gray-100"><th className="border border-black p-2">Date</th><th className="border border-black p-2">Description / Note</th><th className="border border-black p-2 text-right">Debit (Due)</th><th className="border border-black p-2 text-right">Credit (Paid)</th></tr></thead>
-                    <tbody>
-                        {filteredTxs.length === 0 && <tr><td colSpan={4} className="p-4 text-center">No records found for this period.</td></tr>}
-                        {filteredTxs.map(t => (
-                            <tr key={t.id}>
-                                <td className="border border-black p-2">{t.date}</td>
-                                <td className="border border-black p-2">{t.category} - {t.note}</td>
-                                <td className="border border-black p-2 text-right">{t.category.includes('Income') ? '' : formatCurrency(t.amount)}</td>
-                                <td className="border border-black p-2 text-right">{t.category.includes('Income') ? formatCurrency(t.amount) : ''}</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-        );
-    }
 
     return (
         <div className="doc-print-container text-black font-serif text-sm leading-relaxed">
@@ -591,7 +562,7 @@ const App: React.FC = () => {
     if(filterYear !== 'All') filtered = filtered.filter(d => d.year === parseInt(filterYear));
     if(filterMember !== 'All') filtered = filtered.filter(d => d.member === filterMember);
     if(filterCategory !== 'All') filtered = filtered.filter(d => d.category === filterCategory);
-    if(searchTerm) filtered = filtered.filter(d => d.merchant?.toLowerCase().includes(searchTerm.toLowerCase())); // 安全檢查
+    if(searchTerm) filtered = filtered.filter(d => d.merchant?.toLowerCase().includes(searchTerm.toLowerCase()));
     
     const total = filtered.reduce((a,b) => a + b.amount, 0);
     const byYear: Record<string, number> = {}; 
@@ -685,6 +656,8 @@ const App: React.FC = () => {
             furtherDeposit: Number(editingProp.furtherDeposit || 0),
             balancePayment: Number(editingProp.balancePayment || 0),
             mortgageLoan: Number(editingProp.mortgageLoan || 0),
+            interestRate: Number(editingProp.interestRate || 0),
+            outstandingLoan: Number(editingProp.outstandingLoan || 0)
         };
         // Auto-calculate Purchase Price if components are filled
         if (pData.initialDeposit || pData.furtherDeposit || pData.balancePayment) {
@@ -1167,17 +1140,50 @@ const App: React.FC = () => {
                           </div>
                           
                           <div className="space-y-2">
-                              <label className="text-xs font-bold text-slate-500 uppercase">Purchase & Mortgage</label>
+                              <label className="text-xs font-bold text-slate-500 uppercase">Purchase Detail 買入詳情</label>
+                              <div className="p-4 bg-blue-50 rounded-lg border border-blue-100 grid grid-cols-2 gap-4">
+                                  <div>
+                                      <label className="text-xs text-slate-500 block mb-1">Initial Deposit (細訂)</label>
+                                      <div className="flex items-center gap-2">
+                                          <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.initialDeposit || 0} onChange={e => setEditingProp({...editingProp, initialDeposit: Number(e.target.value)} as any)} />
+                                      </div>
+                                      <span className="text-xs text-blue-600 font-mono">{formatCurrency(editingProp?.initialDeposit)}</span>
+                                  </div>
+                                  <div>
+                                      <label className="text-xs text-slate-500 block mb-1">Further Deposit (大訂)</label>
+                                      <div className="flex items-center gap-2">
+                                          <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.furtherDeposit || 0} onChange={e => setEditingProp({...editingProp, furtherDeposit: Number(e.target.value)} as any)} />
+                                      </div>
+                                      <span className="text-xs text-blue-600 font-mono">{formatCurrency(editingProp?.furtherDeposit)}</span>
+                                  </div>
+                                  <div>
+                                      <label className="text-xs text-slate-500 block mb-1">Balance (尾數)</label>
+                                      <div className="flex items-center gap-2">
+                                          <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.balancePayment || 0} onChange={e => setEditingProp({...editingProp, balancePayment: Number(e.target.value)} as any)} />
+                                      </div>
+                                      <span className="text-xs text-blue-600 font-mono">{formatCurrency(editingProp?.balancePayment)}</span>
+                                  </div>
+                                  <div>
+                                      <label className="text-xs text-slate-500 block mb-1">Mortgage Loan (按揭)</label>
+                                      <div className="flex items-center gap-2">
+                                          <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.mortgageLoan || 0} onChange={e => setEditingProp({...editingProp, mortgageLoan: Number(e.target.value)} as any)} />
+                                      </div>
+                                      <span className="text-xs text-blue-600 font-mono">{formatCurrency(editingProp?.mortgageLoan)}</span>
+                                  </div>
+                                  <div className="col-span-2 border-t pt-2 mt-2 flex justify-between items-center">
+                                      <span className="font-bold text-sm text-slate-700">Total Purchase Price 買入價:</span>
+                                      <span className="font-bold text-lg text-blue-800 font-mono">
+                                          {formatCurrency((editingProp?.initialDeposit||0) + (editingProp?.furtherDeposit||0) + (editingProp?.balancePayment||0) + (editingProp?.mortgageLoan||0))}
+                                      </span>
+                                  </div>
+                              </div>
+                          </div>
+
+                          <div className="space-y-2">
+                              <label className="text-xs font-bold text-slate-500 uppercase">Valuation & Rent</label>
                               <div className="grid grid-cols-2 gap-3">
                                    <div><label className="text-xs">Current Value</label><input className="border w-full p-2 rounded" type="number" value={editingProp?.currentValue} onChange={e => setEditingProp({...editingProp, currentValue: Number(e.target.value)} as any)} /></div>
                                    <div><label className="text-xs">Est. Rent</label><input className="border w-full p-2 rounded" type="number" value={editingProp?.estRent} onChange={e => setEditingProp({...editingProp, estRent: Number(e.target.value)} as any)} /></div>
-                              </div>
-                              <div className="p-3 bg-blue-50 rounded border border-blue-100 grid grid-cols-2 gap-3">
-                                  <div><label className="text-xs">Initial Deposit (細訂)</label><input className="border w-full p-1 rounded" type="number" value={editingProp?.initialDeposit || 0} onChange={e => setEditingProp({...editingProp, initialDeposit: Number(e.target.value)} as any)} /></div>
-                                  <div><label className="text-xs">Further Deposit (大訂)</label><input className="border w-full p-1 rounded" type="number" value={editingProp?.furtherDeposit || 0} onChange={e => setEditingProp({...editingProp, furtherDeposit: Number(e.target.value)} as any)} /></div>
-                                  <div><label className="text-xs">Balance (尾數)</label><input className="border w-full p-1 rounded" type="number" value={editingProp?.balancePayment || 0} onChange={e => setEditingProp({...editingProp, balancePayment: Number(e.target.value)} as any)} /></div>
-                                  <div><label className="text-xs">Mortgage Loan (按揭)</label><input className="border w-full p-1 rounded" type="number" value={editingProp?.mortgageLoan || 0} onChange={e => setEditingProp({...editingProp, mortgageLoan: Number(e.target.value)} as any)} /></div>
-                                  <div className="col-span-2 text-right text-sm font-bold text-blue-800">Total Purchase Price: {formatCurrency((editingProp?.initialDeposit||0) + (editingProp?.furtherDeposit||0) + (editingProp?.balancePayment||0) + (editingProp?.mortgageLoan||0))}</div>
                               </div>
                           </div>
 

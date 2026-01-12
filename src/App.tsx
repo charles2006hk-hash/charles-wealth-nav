@@ -9,7 +9,6 @@ import { initializeApp } from "firebase/app";
 import { 
   getFirestore, collection, doc, addDoc, setDoc, deleteDoc, updateDoc, 
   onSnapshot, query, orderBy, writeBatch,
-  // 引入類型定義以解決 TypeScript 報錯
   QuerySnapshot, DocumentData, DocumentSnapshot
 } from "firebase/firestore";
 
@@ -72,13 +71,15 @@ interface DocConfig {
   type: 'receipt' | 'lease';
   propId: string;
   tenant: string;
+  tenantID?: string; // HKID
   period: string;
   amount: number;
   deposit: number;
   startDate: string;
   endDate: string;
   landlord: string;
-  tenantID?: string;
+  landlordID?: string; // HKID
+  paymentMethod: 'Cash' | 'Cheque' | 'Bank Transfer';
 }
 
 interface InsurancePolicy {
@@ -146,7 +147,6 @@ const INITIAL_EDUCATION_DB: Record<string, EduConfig> = {
   }
 };
 
-// 新增預設物業資料
 const INITIAL_PROPERTIES: Property[] = [
     { id: 'p1', name: '京瑞二期 16E', type: 'Investment', estRent: 25000, value: 8000000, mortgage: 15000, tenure: 15 },
     { id: 'p2', name: '京瑞二期 16F', type: 'Investment', estRent: 25000, value: 8000000, mortgage: 15000, tenure: 15 },
@@ -165,7 +165,12 @@ const FAMILY_INFO = {
   Jason: { age: 13, role: '兒子', educationStart: 2029 }
 };
 
-// --- Helper Components ---
+// --- Helper Functions ---
+const convertNumberToEnglish = (n: number) => {
+    // 簡易轉換，正式環境建議使用 number-to-words 庫
+    return n.toString(); 
+}
+
 const StatCard = ({ title, value, subtext, color, iconName }: { title: string, value: string, subtext?: string, color: string, iconName: keyof typeof Icons }) => {
   const IconComp = Icons[iconName] || Icons.Tag;
   return (
@@ -186,8 +191,6 @@ const StatCard = ({ title, value, subtext, color, iconName }: { title: string, v
 
 // --- Main App Component ---
 const App: React.FC = () => {
-  // --- Firestore States ---
-  // Fix 1: Add type parameters to useState
   const [data, setData] = useState<Transaction[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [eduDB, setEduDB] = useState<Record<string, EduConfig>>(INITIAL_EDUCATION_DB);
@@ -198,49 +201,52 @@ const App: React.FC = () => {
   const [reportMode, setReportMode] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Property Modal State
   const [isPropModalOpen, setPropModalOpen] = useState(false);
   const [editingProp, setEditingProp] = useState<Property>({ id: '', name: '', type: 'Investment', estRent: 0, value: 0, mortgage: 0, tenure: 0 });
   
-  // Transaction Modal State
   const [isEntryModalOpen, setEntryModalOpen] = useState(false);
   const [newTx, setNewTx] = useState({ date: new Date().toISOString().split('T')[0], merchant: '', amount: '', category: 'General (其他)', member: 'Family (公用)', note: '' });
 
-  // Document Modal State
   const [isDocModalOpen, setDocModalOpen] = useState(false);
-  const [docConfig, setDocConfig] = useState<DocConfig>({ type: 'receipt', propId: '', tenant: '', period: '', amount: 0, deposit: 0, startDate: '', endDate: '', landlord: 'Charles Lam' });
+  const [docConfig, setDocConfig] = useState<DocConfig>({ 
+      type: 'receipt', 
+      propId: '', 
+      tenant: '', 
+      tenantID: '',
+      period: '', 
+      amount: 0, 
+      deposit: 0, 
+      startDate: '', 
+      endDate: '', 
+      landlord: 'Charles Lam',
+      landlordID: '',
+      paymentMethod: 'Cash'
+  });
 
-  // Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [filterYear, setFilterYear] = useState('All');
   const [filterCategory, setFilterCategory] = useState('All');
   const [filterMember, setFilterMember] = useState('All');
 
-  // Analysis Parameters
   const [eduRegionV, setEduRegionV] = useState('UK');
   const [eduRegionJ, setEduRegionJ] = useState('AUS');
   const [childType, setChildType] = useState('Vocational');
   const [stressRate, setStressRate] = useState(0);
   const [rentDrop, setRentDrop] = useState(0);
 
-  // --- Firestore Subscriptions ---
   useEffect(() => {
-    // 1. Transactions
     const q = query(collection(db, "transactions"), orderBy("date", "desc"));
     const unsubTx = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
-      // Fix 4: Cast Firestore data to Transaction type
       const txs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
       setData(txs);
       setDataLoaded(true);
     });
 
-    // 2. Properties
     const unsubProp = onSnapshot(collection(db, "properties"), (snapshot: QuerySnapshot<DocumentData>) => {
       const props = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Property));
       setProperties(props);
     });
 
-    // 3. Education Config
     const unsubEdu = onSnapshot(doc(db, "settings", "education"), (docSnap: DocumentSnapshot<DocumentData>) => {
       if (docSnap.exists()) {
         setEduDB(docSnap.data() as Record<string, EduConfig>);
@@ -255,8 +261,6 @@ const App: React.FC = () => {
       unsubEdu();
     };
   }, []);
-
-  // --- Handlers (Modified for Firestore) ---
 
   const initializeDefaults = async () => {
       if(!window.confirm("確定初始化預設物業資料？")) return;
@@ -421,7 +425,6 @@ const App: React.FC = () => {
       setTimeout(() => document.body.classList.remove('printing-doc'), 1000);
   };
 
-  // Calculations
   const stats = useMemo(() => {
       let filtered = data;
       if(filterYear !== 'All') filtered = filtered.filter(d => d.year === parseInt(filterYear));
@@ -432,7 +435,6 @@ const App: React.FC = () => {
       const total = filtered.reduce((a,b) => a + b.amount, 0);
       const byYear: Record<string, number> = {}; 
       const byCat: Record<string, number> = {}; 
-      // Fix 2: Type insuranceByMember accumulator
       const insuranceByMember: Record<string, InsurancePolicy[]> = {};
 
       filtered.forEach(d => {
@@ -477,7 +479,6 @@ const App: React.FC = () => {
       return { 
         total, 
         count: filtered.length, 
-        // Fix 3: Explicitly type sort parameters
         byYear: Object.entries(byYear).map(([k,v])=>({year:k, amount:v})).sort((a,b)=>Number(a.year)-Number(b.year)), 
         byCat: Object.entries(byCat).map(([k,v])=>({name:k, value:v})).sort((a,b)=>b.value-a.value), 
         insuranceByMember, 
@@ -488,7 +489,6 @@ const App: React.FC = () => {
 
   const eduForecast = useMemo(() => {
       const db = eduDB || INITIAL_EDUCATION_DB;
-      // Fix 3: Add fallback or type assertion if key is missing (though Record<string, ...> handles it)
       const regV = db[eduRegionV] || INITIAL_EDUCATION_DB.UK; 
       const regJ = db[eduRegionJ] || INITIAL_EDUCATION_DB.AUS;
       const currentYear = new Date().getFullYear(); const forecast = []; let totalNeeded = 0;
@@ -505,45 +505,320 @@ const App: React.FC = () => {
   }, [eduRegionV, eduRegionJ, childType, eduDB]);
 
   const DocPreview = () => {
-      const prop = properties.find(p => p.id === docConfig.propId) || { name: '未知物業' };
-      if (docConfig.type === 'receipt') {
-          return (
-              <div className="doc-print-container">
-                  <div className="border-4 border-black p-10 max-w-[800px] mx-auto text-black">
-                      <h1 className="text-3xl font-bold text-center mb-8 underline">RENTAL RECEIPT 租金收據</h1>
-                      <div className="space-y-6 text-lg font-serif">
-                          <div className="flex justify-between"><span><strong>Receipt No (編號):</strong> {new Date().getFullYear()}-{Math.floor(Math.random()*1000)}</span><span><strong>Date (日期):</strong> {new Date().toLocaleDateString()}</span></div>
-                          <div className="border-b border-black pb-2"><strong>Received From (租客):</strong> {docConfig.tenant}</div>
-                          <div className="border-b border-black pb-2"><strong>The Sum of (金額):</strong> HK${Number(docConfig.amount).toLocaleString()}</div>
-                          <div className="border-b border-black pb-2"><strong>For Rent of Premises (物業地址):</strong><br/>{prop.name}</div>
-                          <div className="border-b border-black pb-2"><strong>For the Period (租期):</strong> {docConfig.period}</div>
-                          <div className="flex justify-between items-end mt-12 pt-12"><div className="border-t border-black w-64 text-center pt-2">Signature of Landlord / Agent<br/>(業主 / 代理人簽署)<br/>{docConfig.landlord}</div></div>
-                      </div>
-                  </div>
+    const prop = properties.find(p => p.id === docConfig.propId) || { name: '未知物業', estRent: 0, value: 0, mortgage: 0, tenure: 0, type: 'Investment', id: '' };
+
+    if (docConfig.type === 'receipt') {
+      return (
+        <div className="doc-print-container">
+          <div className="border border-black p-8 w-[210mm] h-[148mm] mx-auto bg-white text-black font-serif relative">
+            <h1 className="text-2xl font-bold text-center underline mb-2">OFFICIAL RECEIPT 正式收據</h1>
+            
+            <div className="absolute top-8 right-8 text-sm">
+              <div>Receipt No. 編號: <span className="font-mono font-bold">{new Date().getFullYear()}-{Math.floor(Math.random()*10000)}</span></div>
+              <div>Date 日期: <span className="underline">{new Date().toLocaleDateString()}</span></div>
+            </div>
+
+            <div className="mt-8 space-y-4 text-sm leading-loose">
+              <div className="flex">
+                <span className="w-32 font-bold">Received from:</span>
+                <span className="border-b border-black flex-1 px-2">{docConfig.tenant}</span>
               </div>
-          );
-      } else {
-          return (
-              <div className="doc-print-container text-black">
-                <div className="max-w-[800px] mx-auto font-serif leading-relaxed">
-                  <h1 className="text-2xl font-bold text-center mb-6">TENANCY AGREEMENT<br/>租賃協議</h1>
-                  <p className="mb-4"><strong>THIS AGREEMENT</strong> is made on {new Date().toLocaleDateString()}</p>
-                  <p className="mb-4"><strong>BETWEEN:</strong></p>
-                  <ol className="list-decimal pl-6 mb-6 space-y-2">
-                    <li><strong>The Landlord (業主):</strong> {docConfig.landlord}</li>
-                    <li><strong>The Tenant (租客):</strong> {docConfig.tenant} (ID: {docConfig.tenantID || '_______'})</li>
-                  </ol>
-                  <p className="mb-4"><strong>Premises:</strong> {prop.name}</p>
-                  <p className="mb-4"><strong>Term:</strong> From {docConfig.startDate} To {docConfig.endDate}</p>
-                  <p className="mb-4"><strong>Rent:</strong> HK${Number(docConfig.amount).toLocaleString()} / month</p>
-                  <div className="flex justify-between mt-12">
-                    <div className="w-5/12 border-t border-black pt-2">Signed by Landlord / Agent (業主 / 代理人簽署)<br/>{docConfig.landlord}</div>
-                    <div className="w-5/12 border-t border-black pt-2">Signed by Tenant (租客簽署)</div>
-                  </div>
+              <div className="flex">
+                <span className="w-32 font-bold">茲收到租客:</span>
+                <span className="flex-1"></span>
+              </div>
+
+              <div className="flex">
+                <span className="w-32 font-bold">The Sum of:</span>
+                <span className="border-b border-black flex-1 px-2 flex justify-between">
+                  <span>HK$ {docConfig.amount.toLocaleString()}</span>
+                  <span className="text-xs text-gray-500">(Please write amount in words above)</span>
+                </span>
+              </div>
+               <div className="flex">
+                <span className="w-32 font-bold">港幣金額:</span>
+                <span className="flex-1"></span>
+              </div>
+
+
+              <div className="flex">
+                <span className="w-32 font-bold">Being Rent for:</span>
+                <span className="border-b border-black flex-1 px-2">{prop.name}</span>
+              </div>
+               <div className="flex">
+                <span className="w-32 font-bold">物業地址:</span>
+                <span className="flex-1"></span>
+              </div>
+
+              <div className="flex">
+                <span className="w-32 font-bold">For Period:</span>
+                <span className="border-b border-black flex-1 px-2">{docConfig.period}</span>
+              </div>
+               <div className="flex">
+                <span className="w-32 font-bold">租用期:</span>
+                <span className="flex-1"></span>
+              </div>
+
+              <div className="flex gap-8 mt-4">
+                 <div className="border p-2 w-1/3 text-center">
+                    <div className="font-bold border-b mb-1">Payment Method</div>
+                    <div className="text-lg">{docConfig.paymentMethod}</div>
+                 </div>
+                 <div className="flex-1 flex flex-col justify-end">
+                    <div className="border-t border-black pt-2 text-center">
+                        <div>Signature of Landlord 業主簽署</div>
+                        <div className="font-script text-xl mt-2">{docConfig.landlord}</div>
+                    </div>
+                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    } else {
+      // LEASE AGREEMENT (4 Pages)
+      return (
+        <div className="doc-print-container text-black font-serif text-sm leading-relaxed">
+          {/* Page 1: Main Agreement */}
+          <div className="w-[210mm] min-h-[297mm] p-10 bg-white mx-auto relative page-break">
+            <h1 className="text-2xl font-bold text-center mb-6 underline">TENANCY AGREEMENT 租約</h1>
+            
+            <div className="mb-4">
+                <p><strong>An Agreement</strong> made the <span className="underline decoration-dotted">{new Date().getDate()}</span> day of <span className="underline decoration-dotted">{new Date().toLocaleString('default', { month: 'long' })}</span> <span className="underline decoration-dotted">{new Date().getFullYear()}</span> between the Landlord and the Tenant as more particularly described in Schedule I.</p>
+                <p className="mt-1 text-xs text-gray-600">此合約由業主及租客（雙方資料詳列於附表一）於上述日期訂立。</p>
+            </div>
+
+            <div className="mb-4">
+               <p>The Landlord shall let and the Tenant shall take the Premises for the Term and at the Rent as more particularly described in Schedule I and both parties agree to observe and perform the terms and conditions as follows:-</p>
+               <p className="mt-1 text-xs text-gray-600">業主及租客雙方以詳列於附表一的租期及租金分別租出及租入詳列於附表一的物業，並同意遵守及履行下列條款：</p>
+            </div>
+
+            <ol className="list-decimal pl-6 space-y-4">
+                <li>
+                    <p>The Tenant shall pay to the Landlord the Rent in advance on the 1st day of each and every calendar month during the Term. If the Tenant shall fail to pay the Rent within 7 days from the due date, the Landlord shall have the right to institute appropriate action to recover the Rent and all costs.</p>
+                    <p className="text-xs text-gray-600">租客須在租期內每個月份第一天預繳付指定的租金予業主。倘租客於應繳租金之日的七天內仍未付該租金，則業主有權採取適當行動追討。</p>
+                </li>
+                <li>
+                    <p>The Tenant shall not make any alteration and/or additions to the Premises without the prior written consent of the Landlord.</p>
+                    <p className="text-xs text-gray-600">租客在沒有業主書面同意前，不得對該物業作任何改動及/或加建。</p>
+                </li>
+                <li>
+                    <p>The Tenant shall not assign, transfer, sublet or part with the possession of the Premises or any part thereof to any other person.</p>
+                    <p className="text-xs text-gray-600">租客不得轉讓、轉租或分租該物業或其任何部分。</p>
+                </li>
+                <li>
+                    <p>The Tenant shall comply with all ordinances, regulations and rules of Hong Kong and Deed of Mutual Covenant.</p>
+                    <p className="text-xs text-gray-600">租客須遵守香港一切法律條例及大廈公契。</p>
+                </li>
+                <li>
+                    <p>The Tenant shall during the Term pay and discharge all charges in respect of water, electricity, gas and telephone.</p>
+                    <p className="text-xs text-gray-600">租客須在租約期內清繳一切有關該物業的水費、電費、煤氣費、電話費等。</p>
+                </li>
+                <li>
+                    <p>The Tenant shall during the Term keep the interior of the Premises in good and tenantable repair and condition.</p>
+                    <p className="text-xs text-gray-600">租客須在租約期內保持物業內部的維修狀態良好。</p>
+                </li>
+                 <li>
+                    <p>The Tenant shall pay to the Landlord the Security Deposit set out in Schedule I.</p>
+                    <p className="text-xs text-gray-600">租客須交予業主保証金（金額如附表一所列）。</p>
+                </li>
+                 <li>
+                    <p>The Landlord shall refund the Security Deposit to the Tenant without interest within 7 days from the date of delivery of vacant possession. The Landlord may deduct any loss or damage from the deposit.</p>
+                    <p className="text-xs text-gray-600">若租客無違約，業主須於收回物業後七天內無息退還保証金。業主可從保証金內扣除因租客違約之損失。</p>
+                </li>
+                 <li>
+                    <p>The Landlord shall keep and maintain the structural parts of the Premises including main drains, pipes and cables.</p>
+                    <p className="text-xs text-gray-600">業主須保養及適當維修該物業內各主要結構部分。</p>
+                </li>
+                <li>
+                    <p>The Tenant shall cover insurance for his/her own belongings. The Landlord shall not be responsible for any damage or loss.</p>
+                    <p className="text-xs text-gray-600">租客須自投買財物保險，業主不負任何責任。</p>
+                </li>
+                 <li>
+                    <p>The Landlord shall pay the Property Tax.</p>
+                    <p className="text-xs text-gray-600">業主負責繳付物業稅。</p>
+                </li>
+                 <li>
+                    <p>Stamp Duty shall be borne by the Landlord and the Tenant in equal shares.</p>
+                    <p className="text-xs text-gray-600">業主及租客各負責印花稅一半費用。</p>
+                </li>
+                <li>
+                    <p>Both parties agree to be bound by the additional terms in Schedule II (if any).</p>
+                    <p className="text-xs text-gray-600">雙方同意遵守附表二內的附加條款。</p>
+                </li>
+                <li>
+                    <p>If there is conflict between English and Chinese version, English version prevails.</p>
+                    <p className="text-xs text-gray-600">中英文本有差異時，以英文本為準。</p>
+                </li>
+                 <li>
+                    <p>Tenant has to move out all belongings upon delivery of vacant possession.</p>
+                    <p className="text-xs text-gray-600">租客遷出時，須搬走所有物品。</p>
+                </li>
+                 <li>
+                    <p>Security Deposit cannot be utilised as rent payment.</p>
+                    <p className="text-xs text-gray-600">按金不能用作支付租金。</p>
+                </li>
+            </ol>
+             <div className="absolute bottom-4 right-10 text-xs">Page 1 of 4</div>
+          </div>
+
+          {/* Page 2: Signatures & Key Receipt */}
+          <div className="w-[210mm] min-h-[297mm] p-10 bg-white mx-auto relative page-break">
+             <div className="mb-12">
+                <h2 className="font-bold text-lg mb-4 border-b pb-2">SECURITY DEPOSIT RECEIPT 按金收據</h2>
+                <div className="flex justify-between items-end mb-4">
+                    <span>Received the Security Deposit of HK$: <span className="font-bold underline text-xl">{docConfig.deposit.toLocaleString()}</span></span>
                 </div>
-              </div>
-          );
-      }
+                <div className="flex justify-between items-end">
+                    <span>by the Landlord 業主收到租客所交的保證金: <span className="font-bold underline text-xl">{convertNumberToEnglish(docConfig.deposit)}</span> (HK Dollars)</span>
+                </div>
+             </div>
+
+             <div className="grid grid-cols-2 gap-16 mb-16">
+                 <div>
+                     <p className="mb-8">Confirmed and Accepted all the terms and conditions contained herein by the <strong>Landlord</strong>:</p>
+                     <p className="text-xs text-gray-600 mb-8">業主確認及接受本合約內所有條款的約束：</p>
+                     <div className="h-24 border-b border-black mb-2"></div>
+                     <p>Signature 簽署</p>
+                     <p className="mt-4">Name: {docConfig.landlord}</p>
+                     <p>HKID: {docConfig.landlordID || '__________________'}</p>
+                 </div>
+                 <div>
+                     <p className="mb-8">Confirmed and Accepted all the terms and conditions contained herein by the <strong>Tenant</strong>:</p>
+                     <p className="text-xs text-gray-600 mb-8">租客確認及接受本合約內所有條款的約束：</p>
+                     <div className="h-24 border-b border-black mb-2"></div>
+                     <p>Signature 簽署</p>
+                     <p className="mt-4">Name: {docConfig.tenant}</p>
+                     <p>HKID: {docConfig.tenantID || '__________________'}</p>
+                 </div>
+             </div>
+
+             <div className="border-t-2 border-black pt-8">
+                <h2 className="font-bold text-lg mb-4">KEY RECEIPT 鎖匙收據</h2>
+                <p className="mb-4">Acknowledged the receipt of keys of the premises by the Tenant:</p>
+                <p className="text-xs text-gray-600 mb-6">租客接收業主所交屬該物業之鎖匙：</p>
+                
+                <div className="space-y-2 mb-8">
+                    <label className="flex items-center gap-2"><input type="checkbox" /> Main Door (大門)</label>
+                    <label className="flex items-center gap-2"><input type="checkbox" /> Iron Gate (鐵閘)</label>
+                    <label className="flex items-center gap-2"><input type="checkbox" /> Mail Box (信箱)</label>
+                    <label className="flex items-center gap-2"><input type="checkbox" /> Bedroom (睡房)</label>
+                    <label className="flex items-center gap-2"><input type="checkbox" /> Other (其他): _________________</label>
+                </div>
+
+                <div className="w-1/2">
+                    <div className="h-16 border-b border-black mb-2"></div>
+                     <p>Tenant's Signature 租客簽署</p>
+                </div>
+             </div>
+             <div className="absolute bottom-4 right-10 text-xs">Page 2 of 4</div>
+          </div>
+
+          {/* Page 3: Schedule I */}
+          <div className="w-[210mm] min-h-[297mm] p-10 bg-white mx-auto relative page-break">
+            <h1 className="text-2xl font-bold text-center mb-8 underline">Schedule I 附表一</h1>
+            
+            <table className="w-full border-collapse border border-black">
+                <tbody>
+                    <tr>
+                        <td className="border border-black p-4 w-1/4 font-bold bg-gray-50">The Premises<br/>物業地址</td>
+                        <td className="border border-black p-4">{prop.name}</td>
+                    </tr>
+                    <tr>
+                        <td className="border border-black p-4 w-1/4 font-bold bg-gray-50">The Landlord<br/>業主</td>
+                        <td className="border border-black p-4">
+                            Name: {docConfig.landlord}<br/>
+                            ID: {docConfig.landlordID || '__________________'}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td className="border border-black p-4 w-1/4 font-bold bg-gray-50">The Tenant<br/>租客</td>
+                        <td className="border border-black p-4">
+                            Name: {docConfig.tenant}<br/>
+                            ID: {docConfig.tenantID || '__________________'}
+                        </td>
+                    </tr>
+                     <tr>
+                        <td className="border border-black p-4 w-1/4 font-bold bg-gray-50">Term<br/>租期</td>
+                        <td className="border border-black p-4">
+                            From: {docConfig.startDate}<br/>
+                            To: {docConfig.endDate}<br/>
+                            (Both days inclusive 包括首尾兩天)
+                        </td>
+                    </tr>
+                    <tr>
+                        <td className="border border-black p-4 w-1/4 font-bold bg-gray-50">Rent<br/>租金</td>
+                        <td className="border border-black p-4">
+                            HK$ {docConfig.amount.toLocaleString()} per month<br/>
+                            (每月港幣 {convertNumberToEnglish(docConfig.amount)})
+                        </td>
+                    </tr>
+                    <tr>
+                        <td className="border border-black p-4 w-1/4 font-bold bg-gray-50">Security Deposit<br/>保證金</td>
+                        <td className="border border-black p-4">
+                            HK$ {docConfig.deposit.toLocaleString()}<br/>
+                            (港幣 {convertNumberToEnglish(docConfig.deposit)})
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            <div className="absolute bottom-4 right-10 text-xs">Page 3 of 4</div>
+          </div>
+
+          {/* Page 4: Schedule II & Furniture */}
+          <div className="w-[210mm] min-h-[297mm] p-10 bg-white mx-auto relative page-break">
+             <h1 className="text-2xl font-bold text-center mb-8 underline">Schedule II 附表二</h1>
+             
+             <div className="space-y-6">
+                 <div>
+                     <h3 className="font-bold border-b border-black inline-block mb-2">1. User 用途</h3>
+                     <p>The Tenant shall not use the Premises for any purpose other than for <strong>Residential (住宅)</strong> purpose only.</p>
+                     <p className="text-xs text-gray-600">租客除將該物業作住宅用途外，不可將該物業作其他用途。</p>
+                 </div>
+
+                 <div>
+                     <h3 className="font-bold border-b border-black inline-block mb-2">2. Miscellaneous Payments 雜項費用</h3>
+                     <p>(a) Management fee paid by <strong>Landlord (業主)</strong>.</p>
+                     <p className="text-xs text-gray-600">管理費由業主支付。</p>
+                     <p>(b) Government Rates paid by <strong>Landlord (業主)</strong>.</p>
+                     <p className="text-xs text-gray-600">差餉由業主支付。</p>
+                     <p>(c) Government Rent paid by <strong>Landlord (業主)</strong>.</p>
+                     <p className="text-xs text-gray-600">地租由業主支付。</p>
+                 </div>
+
+                 <div>
+                     <h3 className="font-bold border-b border-black inline-block mb-2">3. Rent Free Period 免租期</h3>
+                     <p>The Tenant shall be entitled to a rent free period from ___________ to ___________.</p>
+                     <p className="text-xs text-gray-600">租客可享有免租期（如有）。租客仍需負責水電煤等雜費。</p>
+                 </div>
+
+                 <div>
+                     <h3 className="font-bold border-b border-black inline-block mb-2">4. Break Clause 退租權</h3>
+                     <p>Either party shall be entitled to terminate this Agreement earlier by serving not less than <strong>2 months</strong> written notice after <strong>12 months</strong> of the Term (Fixed Term).</p>
+                     <p className="text-xs text-gray-600">死約一年，生約一年。任何一方可於首 12 個月後給予對方不少於 2 個月通知期解除合約。</p>
+                 </div>
+
+                 <div className="pt-8 border-t-2 border-dashed border-gray-300">
+                     <h3 className="font-bold mb-4">Furniture & Fixture List 傢俬及設備清單</h3>
+                     <div className="grid grid-cols-2 gap-4 text-sm">
+                         <label><input type="checkbox" /> Air-conditioner 冷氣機 (Qty: __)</label>
+                         <label><input type="checkbox" /> Water Heater 熱水爐</label>
+                         <label><input type="checkbox" /> Range Hood 抽油煙機</label>
+                         <label><input type="checkbox" /> Cooker 煮食爐</label>
+                         <label><input type="checkbox" /> Refrigerator雪櫃</label>
+                         <label><input type="checkbox" /> Washing Machine 洗衣機</label>
+                         <label><input type="checkbox" /> Wardrobe 衣櫃</label>
+                         <label><input type="checkbox" /> Bed 床</label>
+                         <label><input type="checkbox" /> Sofa 梳化</label>
+                         <label><input type="checkbox" /> Television 電視</label>
+                     </div>
+                 </div>
+             </div>
+             <div className="absolute bottom-4 right-10 text-xs">Page 4 of 4</div>
+          </div>
+        </div>
+      );
+    }
   };
 
   const ReportHeader = () => (<div className="border-b-2 border-slate-800 pb-4 mb-8"><h1 className="text-3xl font-bold text-slate-900">Charles's 家庭導航 - 綜合分析報告</h1><div className="flex justify-between mt-2 text-slate-500"><span>生成日期: {new Date().toLocaleDateString()}</span><span>數據來源: {data.length} 筆記錄</span></div></div>);
@@ -842,36 +1117,55 @@ const App: React.FC = () => {
           {/* Document Modal */}
           {isDocModalOpen && (
               <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
-                  <div className="bg-white rounded-xl shadow-2xl p-6 w-[800px] h-[90vh] flex flex-col">
+                  <div className="bg-white rounded-xl shadow-2xl p-6 w-[1200px] h-[95vh] flex flex-col">
                       <div className="flex justify-between items-center mb-4 border-b pb-2">
                           <h3 className="text-xl font-bold flex items-center gap-2"><Icons.FileText /> 文書生成器</h3>
                           <button onClick={()=>setDocModalOpen(false)} className="text-slate-400 hover:text-slate-600">✕</button>
                       </div>
                       <div className="flex gap-6 flex-1 overflow-hidden">
                           {/* Left: Controls */}
-                          <div className="w-1/3 space-y-4 overflow-y-auto pr-2">
+                          <div className="w-1/4 space-y-4 overflow-y-auto pr-2 border-r">
                               <div><label className="block text-xs font-bold text-slate-500 mb-1">文件類型</label><div className="flex rounded bg-slate-100 p-1"><button onClick={()=>setDocConfig({...docConfig, type:'receipt'})} className={`flex-1 text-xs py-1 rounded ${docConfig.type==='receipt'?'bg-white shadow text-blue-600':'text-slate-500'}`}>收據</button><button onClick={()=>setDocConfig({...docConfig, type:'lease'})} className={`flex-1 text-xs py-1 rounded ${docConfig.type==='lease'?'bg-white shadow text-blue-600':'text-slate-500'}`}>租約</button></div></div>
+                              
                               <div><label className="block text-xs font-bold text-slate-500 mb-1">選擇物業</label><select className="w-full border rounded p-2 text-sm" value={docConfig.propId} onChange={e=>{ const p = properties.find(x=>x.id===e.target.value); setDocConfig({...docConfig, propId:e.target.value, amount: p?p.estRent:0}); }}>{properties.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
-                              <div><label className="block text-xs font-bold text-slate-500 mb-1">租客姓名</label><input type="text" className="w-full border rounded p-2 text-sm" value={docConfig.tenant} onChange={e=>setDocConfig({...docConfig, tenant:e.target.value})} /></div>
+                              
+                              <div className="p-3 bg-blue-50 rounded-lg space-y-3">
+                                <p className="text-xs font-bold text-blue-700 border-b border-blue-200 pb-1">租客資料</p>
+                                <div><label className="block text-xs font-bold text-slate-500">姓名 Name</label><input type="text" className="w-full border rounded p-1 text-sm" value={docConfig.tenant} onChange={e=>setDocConfig({...docConfig, tenant:e.target.value})} /></div>
+                                <div><label className="block text-xs font-bold text-slate-500">身分證 HKID</label><input type="text" className="w-full border rounded p-1 text-sm" value={docConfig.tenantID} onChange={e=>setDocConfig({...docConfig, tenantID:e.target.value})} /></div>
+                              </div>
+
+                              <div className="p-3 bg-green-50 rounded-lg space-y-3">
+                                <p className="text-xs font-bold text-green-700 border-b border-green-200 pb-1">業主資料</p>
+                                <div><label className="block text-xs font-bold text-slate-500">姓名 Name</label><input type="text" className="w-full border rounded p-1 text-sm" value={docConfig.landlord} onChange={e=>setDocConfig({...docConfig, landlord:e.target.value})} /></div>
+                                <div><label className="block text-xs font-bold text-slate-500">身分證 HKID</label><input type="text" className="w-full border rounded p-1 text-sm" value={docConfig.landlordID} onChange={e=>setDocConfig({...docConfig, landlordID:e.target.value})} /></div>
+                              </div>
+
                               {docConfig.type === 'receipt' ? (
-                                  <div><label className="block text-xs font-bold text-slate-500 mb-1">租期 (Period)</label><input type="text" className="w-full border rounded p-2 text-sm" value={docConfig.period} onChange={e=>setDocConfig({...docConfig, period:e.target.value})} placeholder="e.g. Jan 2025" /></div>
+                                  <>
+                                  <div className="p-3 bg-yellow-50 rounded-lg space-y-3">
+                                    <p className="text-xs font-bold text-yellow-700 border-b border-yellow-200 pb-1">收據詳情</p>
+                                    <div><label className="block text-xs font-bold text-slate-500">租期 (Period)</label><input type="text" className="w-full border rounded p-1 text-sm" value={docConfig.period} onChange={e=>setDocConfig({...docConfig, period:e.target.value})} placeholder="e.g. 1 Jan 2026 - 31 Jan 2026" /></div>
+                                    <div><label className="block text-xs font-bold text-slate-500">金額 Amount ($)</label><input type="number" className="w-full border rounded p-1 text-sm" value={docConfig.amount} onChange={e=>setDocConfig({...docConfig, amount:Number(e.target.value)})} /></div>
+                                    <div><label className="block text-xs font-bold text-slate-500">付款方式</label><select className="w-full border rounded p-1 text-sm" value={docConfig.paymentMethod} onChange={e=>setDocConfig({...docConfig, paymentMethod:e.target.value as any})}><option value="Cash">Cash 現金</option><option value="Cheque">Cheque 支票</option><option value="Bank Transfer">Bank Transfer 銀行轉帳</option></select></div>
+                                  </div>
+                                  </>
                               ) : (
                                   <>
-                                      <div><label className="block text-xs font-bold text-slate-500 mb-1">身份證號 (首4位)</label><input type="text" className="w-full border rounded p-2 text-sm" value={docConfig.tenantID} onChange={e=>setDocConfig({...docConfig, tenantID:e.target.value})} /></div>
-                                      <div className="flex gap-2"><div><label className="block text-xs font-bold text-slate-500">起租日</label><input type="date" className="w-full border rounded p-2 text-sm" value={docConfig.startDate} onChange={e=>setDocConfig({...docConfig, startDate:e.target.value})} /></div><div><label className="block text-xs font-bold text-slate-500">完結日</label><input type="date" className="w-full border rounded p-2 text-sm" value={docConfig.endDate} onChange={e=>setDocConfig({...docConfig, endDate:e.target.value})} /></div></div>
-                                      <div><label className="block text-xs font-bold text-slate-500 mb-1">按金 ($)</label><input type="number" className="w-full border rounded p-2 text-sm" value={docConfig.deposit} onChange={e=>setDocConfig({...docConfig, deposit:Number(e.target.value)})} /></div>
+                                    <div className="p-3 bg-purple-50 rounded-lg space-y-3">
+                                      <p className="text-xs font-bold text-purple-700 border-b border-purple-200 pb-1">租約條款</p>
+                                      <div className="flex gap-2"><div><label className="block text-xs font-bold text-slate-500">起租日</label><input type="date" className="w-full border rounded p-1 text-sm" value={docConfig.startDate} onChange={e=>setDocConfig({...docConfig, startDate:e.target.value})} /></div><div><label className="block text-xs font-bold text-slate-500">完結日</label><input type="date" className="w-full border rounded p-1 text-sm" value={docConfig.endDate} onChange={e=>setDocConfig({...docConfig, endDate:e.target.value})} /></div></div>
+                                      <div><label className="block text-xs font-bold text-slate-500">每月租金 ($)</label><input type="number" className="w-full border rounded p-1 text-sm" value={docConfig.amount} onChange={e=>setDocConfig({...docConfig, amount:Number(e.target.value)})} /></div>
+                                      <div><label className="block text-xs font-bold text-slate-500">按金 Deposit ($)</label><input type="number" className="w-full border rounded p-1 text-sm" value={docConfig.deposit} onChange={e=>setDocConfig({...docConfig, deposit:Number(e.target.value)})} /></div>
+                                    </div>
                                   </>
                               )}
-                              <div><label className="block text-xs font-bold text-slate-500 mb-1">租金金額 ($)</label><input type="number" className="w-full border rounded p-2 text-sm" value={docConfig.amount} onChange={e=>setDocConfig({...docConfig, amount:Number(e.target.value)})} /></div>
-                              <div><label className="block text-xs font-bold text-slate-500 mb-1">簽署人 (業主/代理人)</label><input type="text" className="w-full border rounded p-2 text-sm" value={docConfig.landlord} onChange={e=>setDocConfig({...docConfig, landlord:e.target.value})} /></div>
                               
-                              <button onClick={()=>handlePrintDoc()} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold shadow hover:bg-blue-700 mt-4"><Icons.Printer /> 列印文件</button>
+                              <button onClick={()=>handlePrintDoc()} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold shadow hover:bg-blue-700 mt-4 flex justify-center items-center gap-2"><Icons.Printer /> 列印文件 (Print)</button>
                           </div>
                           {/* Right: Preview */}
-                          <div className="w-2/3 bg-slate-200 rounded-lg p-8 overflow-y-auto flex justify-center">
-                              <div className="paper w-full max-w-[600px] text-black">
-                                  <DocPreview />
-                              </div>
+                          <div className="w-3/4 bg-slate-200 rounded-lg p-8 overflow-y-auto flex justify-center shadow-inner">
+                                <DocPreview />
                           </div>
                       </div>
                   </div>

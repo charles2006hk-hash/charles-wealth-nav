@@ -239,9 +239,9 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
                         {filteredTxs.map(t => (
                             <tr key={t.id}>
                                 <td className="border border-black p-2">{t.date}</td>
-                                <td className="border border-black p-2">{t.category} - {t.note}</td>
-                                <td className="border border-black p-2 text-right">{t.category.includes('Income') ? '' : formatCurrency(t.amount)}</td>
-                                <td className="border border-black p-2 text-right">{t.category.includes('Income') ? formatCurrency(t.amount) : ''}</td>
+                                <td className="border border-black p-2">{(t.category || '')} - {t.note}</td>
+                                <td className="border border-black p-2 text-right">{(t.category || '').includes('Income') ? '' : formatCurrency(t.amount)}</td>
+                                <td className="border border-black p-2 text-right">{(t.category || '').includes('Income') ? formatCurrency(t.amount) : ''}</td>
                             </tr>
                         ))}
                     </tbody>
@@ -563,8 +563,8 @@ const App: React.FC = () => {
   const propStats = useMemo(() => {
     return properties.map(p => {
         const pTxs = transactions.filter(t => t.propertyId === p.id);
-        const income = pTxs.filter(t => t.category.includes('Income')).reduce((sum, t) => sum + t.amount, 0);
-        const expense = pTxs.filter(t => !t.category.includes('Income')).reduce((sum, t) => sum + t.amount, 0);
+        const income = pTxs.filter(t => (t.category || '').includes('Income')).reduce((sum, t) => sum + (t.amount || 0), 0);
+        const expense = pTxs.filter(t => !(t.category || '').includes('Income')).reduce((sum, t) => sum + (t.amount || 0), 0);
         const activeLease = leases.find(l => l.propertyId === p.id && l.status === 'Active');
         
         let isLate = false;
@@ -594,14 +594,14 @@ const App: React.FC = () => {
     if(filterCategory !== 'All') filtered = filtered.filter(d => d.category === filterCategory);
     if(searchTerm) filtered = filtered.filter(d => (d.merchant || '').toLowerCase().includes(searchTerm.toLowerCase()));
     
-    const total = filtered.reduce((a,b) => a + b.amount, 0);
+    const total = filtered.reduce((a,b) => a + (b.amount || 0), 0);
     const byYear: Record<string, number> = {}; 
     const byCat: Record<string, number> = {}; 
     const insuranceByMember: Record<string, InsurancePolicy[]> = {};
 
     filtered.forEach(d => {
-        if(!byYear[d.year]) byYear[d.year] = 0; byYear[d.year] += d.amount;
-        const cat = d.category || 'Other'; if(!byCat[cat]) byCat[cat] = 0; byCat[cat] += d.amount;
+        if(!byYear[d.year]) byYear[d.year] = 0; byYear[d.year] += (d.amount || 0);
+        const cat = d.category || 'Other'; if(!byCat[cat]) byCat[cat] = 0; byCat[cat] += (d.amount || 0);
         
         if (cat.includes('Insurance')) {
             let memberKey = d.member === 'Family (公用)' ? 'Charles' : d.member;

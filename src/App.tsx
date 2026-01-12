@@ -62,17 +62,17 @@ interface Property {
   currentValue: number; 
   
   // 買入流程詳情
-  purchasePrice: number; // 總價 (自動計算)
-  initialDeposit: number; // 細訂
-  furtherDeposit: number; // 大訂
-  balancePayment: number; // 尾數 (Cash Balance)
-  mortgageLoan: number; // 按揭貸款額
+  purchasePrice: number; 
+  initialDeposit: number; 
+  furtherDeposit: number; 
+  balancePayment: number; 
+  mortgageLoan: number; 
   
   // 按揭詳情
   bank: string;
-  interestRate: number; // 利率
-  mortgageAmount: number; // 月供
-  outstandingLoan: number; // 尚餘欠款
+  interestRate: number; 
+  mortgageAmount: number; 
+  outstandingLoan: number; 
   tenure: number;  
   
   // 租務
@@ -570,7 +570,7 @@ const App: React.FC = () => {
         let isLate = false;
         if (activeLease && p.status === 'Occupied') {
             const lastRentTx = pTxs
-                .filter(t => t.category?.includes('Rental Income'))
+                .filter(t => (t.category || '').includes('Rental Income'))
                 .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
             if (lastRentTx) {
                 const daysSince = (new Date().getTime() - new Date(lastRentTx.date).getTime()) / (1000 * 3600 * 24);
@@ -592,7 +592,7 @@ const App: React.FC = () => {
     if(filterYear !== 'All') filtered = filtered.filter(d => d.year === parseInt(filterYear));
     if(filterMember !== 'All') filtered = filtered.filter(d => d.member === filterMember);
     if(filterCategory !== 'All') filtered = filtered.filter(d => d.category === filterCategory);
-    if(searchTerm) filtered = filtered.filter(d => d.merchant?.toLowerCase().includes(searchTerm.toLowerCase()));
+    if(searchTerm) filtered = filtered.filter(d => (d.merchant || '').toLowerCase().includes(searchTerm.toLowerCase()));
     
     const total = filtered.reduce((a,b) => a + b.amount, 0);
     const byYear: Record<string, number> = {}; 
@@ -886,7 +886,7 @@ const App: React.FC = () => {
                                         <td className="p-3">{t.date}</td>
                                         <td className="p-3"><select className="bg-transparent border-none" value={t.category} onChange={e => handleUpdateCategory(t.id, e.target.value)}>{CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select></td>
                                         <td className="p-3 font-medium">{t.merchant} <span className="text-slate-400 text-xs">{t.note}</span></td>
-                                        <td className={`p-3 font-mono font-bold ${t.category.includes('Income') ? 'text-emerald-600' : 'text-red-500'}`}>{t.category.includes('Income') ? '+' : '-'}{formatCurrency(t.amount)}</td>
+                                        <td className={`p-3 font-mono font-bold ${t.category?.includes('Income') ? 'text-emerald-600' : 'text-red-500'}`}>{t.category?.includes('Income') ? '+' : '-'}{formatCurrency(t.amount)}</td>
                                         <td className="p-3 flex gap-1">{t.tags?.map(tag => <span key={tag} className="text-xs bg-yellow-100 text-yellow-800 px-1 rounded">#{tag}</span>)}</td>
                                         <td className="p-3"><button onClick={() => deleteItem('transactions', t.id)} className="text-red-400 hover:text-red-600"><ICONS.Trash /></button></td>
                                     </tr>
@@ -1035,11 +1035,11 @@ const App: React.FC = () => {
                         <p className="text-slate-500">所有交易紀錄一覽 Table of All Transactions</p>
                         <div className="flex gap-2">
                             <label className="flex items-center gap-2 px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 cursor-pointer">
-                                <ICONS.Plus /> 匯入 Import JSON
+                                <ICONS.Upload /> 匯入 Import JSON
                                 <input type="file" className="hidden" onChange={handleFileUpload} accept=".json" />
                             </label>
                             <button onClick={handleExportJSON} className="px-3 py-1 bg-slate-600 text-white text-xs rounded hover:bg-slate-700 flex items-center gap-2">
-                                <ICONS.FileText /> 導出 Export JSON
+                                <ICONS.Download /> 導出 Export JSON
                             </button>
                         </div>
                       </div>
@@ -1053,7 +1053,7 @@ const App: React.FC = () => {
                           <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0"><tr><th className="p-3">Date</th><th className="p-3">Merchant</th><th className="p-3">Amount</th><th className="p-3">Category</th><th className="p-3">Member</th></tr></thead>
                           <tbody className="divide-y">
                               {transactions
-                                .filter(t => (filterCategory==='All'||t.category===filterCategory) && (searchTerm===''||t.merchant?.includes(searchTerm)))
+                                .filter(t => (filterCategory==='All'||t.category===filterCategory) && (searchTerm===''||(t.merchant || '').toLowerCase().includes(searchTerm.toLowerCase())))
                                 .slice(0, 50).map(t => (
                                   <tr key={t.id} className="hover:bg-slate-50">
                                       <td className="p-3">{t.date}</td>

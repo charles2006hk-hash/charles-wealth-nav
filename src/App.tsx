@@ -1,4 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
+  Tooltip, Legend, ResponsiveContainer 
+} from 'recharts';
 import { initializeApp } from "firebase/app";
 import { 
   getFirestore, collection, doc, addDoc, setDoc, deleteDoc, updateDoc, 
@@ -199,6 +203,7 @@ const App: React.FC = () => {
   
   const [reportMode, setReportMode] = useState(false);
 
+  // Filters & Parameters
   const [ledgerFilter, setLedgerFilter] = useState('');
   const [filterYear, setFilterYear] = useState('All');
   const [filterMember, setFilterMember] = useState('All');

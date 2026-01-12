@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, 
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
   Tooltip, Legend, ResponsiveContainer 
 } from 'recharts';
 import { initializeApp } from "firebase/app";
@@ -57,19 +57,28 @@ interface Property {
   address: string;
   type: 'Investment' | 'Self-use';
   status: 'Occupied' | 'Vacant' | 'Renovation';
+  
+  // 財務數據
   currentValue: number; 
-  purchasePrice: number; 
-  mortgageAmount: number; 
-  outstandingLoan: number; 
+  
+  // 買入流程詳情
+  purchasePrice: number; // 總價
+  initialDeposit: number; // 細訂
+  furtherDeposit: number; // 大訂
+  balancePayment: number; // 尾數
+  mortgageLoan: number; // 按揭貸款
+  
+  interestRate: number; // 利率
+  mortgageAmount: number; // 月供
+  outstandingLoan: number; // 尚餘欠款
+  
   estRent: number; 
   tenure: number;  
+  
+  // 支出設定
   managementFee: number;
   govtRates: number;
   govtRent: number;
-  initialDeposit?: number;
-  furtherDeposit?: number;
-  balancePayment?: number;
-  mortgageLoan?: number;
 }
 
 interface PropertyWithStats extends Property {
@@ -150,11 +159,9 @@ const CATEGORIES = [
 const MEMBERS = ['Charles', 'Carmen', 'Virginia', 'Jason', 'Family'];
 
 const INITIAL_PROPERTIES_DATA: Property[] = [
-    { id: 'p1', name: '京瑞二期 16E', address: '沙田安群街1號京瑞廣場二期16樓E室', type: 'Investment', status: 'Occupied', currentValue: 8000000, purchasePrice: 6000000, initialDeposit: 300000, furtherDeposit: 300000, balancePayment: 5400000, mortgageLoan: 3000000, mortgageAmount: 15000, outstandingLoan: 3000000, managementFee: 1200, govtRates: 1500, govtRent: 900, estRent: 25000, tenure: 15 },
-    { id: 'p2', name: '京瑞二期 16F', address: '沙田安群街1號京瑞廣場二期16樓F室', type: 'Investment', status: 'Occupied', currentValue: 8000000, purchasePrice: 6000000, initialDeposit: 300000, furtherDeposit: 300000, balancePayment: 5400000, mortgageLoan: 3000000, mortgageAmount: 15000, outstandingLoan: 3000000, managementFee: 1200, govtRates: 1500, govtRent: 900, estRent: 25000, tenure: 15 },
-    { id: 'p3', name: '帝欣苑 (Parc Versailles)', address: '大埔梅樹坑路8號帝欣苑', type: 'Investment', status: 'Occupied', currentValue: 12000000, purchasePrice: 9000000, initialDeposit: 500000, furtherDeposit: 500000, balancePayment: 8000000, mortgageLoan: 4500000, mortgageAmount: 0, outstandingLoan: 0, managementFee: 2500, govtRates: 3000, govtRent: 1800, estRent: 38000, tenure: 0 },
-    { id: 'p4', name: '太湖花園 (Serenity Park)', address: '大埔大逸街太湖花園', type: 'Investment', status: 'Occupied', currentValue: 6500000, purchasePrice: 4000000, initialDeposit: 200000, furtherDeposit: 200000, balancePayment: 3600000, mortgageLoan: 2000000, mortgageAmount: 0, outstandingLoan: 0, managementFee: 1500, govtRates: 1200, govtRent: 700, estRent: 18000, tenure: 0 },
-    { id: 'p5', name: '農圃道18號 (18 Farm Road)', address: '土瓜灣農圃道18號', type: 'Self-use', status: 'Occupied', currentValue: 15000000, purchasePrice: 13000000, initialDeposit: 600000, furtherDeposit: 700000, balancePayment: 11700000, mortgageLoan: 6500000, mortgageAmount: 25000, outstandingLoan: 6000000, managementFee: 3000, govtRates: 4000, govtRent: 2400, estRent: 0, tenure: 10 },
+    { id: 'p1', name: '京瑞二期 16E', address: '沙田安群街1號京瑞廣場二期16樓E室', type: 'Investment', status: 'Occupied', currentValue: 8000000, purchasePrice: 6000000, initialDeposit: 300000, furtherDeposit: 300000, balancePayment: 5400000, mortgageLoan: 3000000, mortgageAmount: 15000, outstandingLoan: 3000000, managementFee: 1200, govtRates: 1500, govtRent: 900, estRent: 25000, tenure: 15, interestRate: 3.5 },
+    { id: 'p2', name: '京瑞二期 16F', address: '沙田安群街1號京瑞廣場二期16樓F室', type: 'Investment', status: 'Occupied', currentValue: 8000000, purchasePrice: 6000000, initialDeposit: 300000, furtherDeposit: 300000, balancePayment: 5400000, mortgageLoan: 3000000, mortgageAmount: 15000, outstandingLoan: 3000000, managementFee: 1200, govtRates: 1500, govtRent: 900, estRent: 25000, tenure: 15, interestRate: 3.5 },
+    { id: 'p3', name: '帝欣苑 (Parc Versailles)', address: '大埔梅樹坑路8號帝欣苑', type: 'Investment', status: 'Occupied', currentValue: 12000000, purchasePrice: 9000000, initialDeposit: 500000, furtherDeposit: 500000, balancePayment: 8000000, mortgageLoan: 4500000, mortgageAmount: 0, outstandingLoan: 0, managementFee: 2500, govtRates: 3000, govtRent: 1800, estRent: 38000, tenure: 0, interestRate: 2.5 },
 ];
 
 const INITIAL_EDUCATION_DB: Record<string, EduConfig> = {
@@ -170,6 +177,7 @@ const FAMILY_INFO = {
 };
 
 const convertNumberToEnglish = (n: any) => (Number(n) || 0).toString(); 
+// 安全的格式化函數，防止白屏
 const formatCurrency = (val: any) => {
     const num = Number(val);
     if (isNaN(num)) return '$0';
@@ -583,7 +591,7 @@ const App: React.FC = () => {
     if(filterYear !== 'All') filtered = filtered.filter(d => d.year === parseInt(filterYear));
     if(filterMember !== 'All') filtered = filtered.filter(d => d.member === filterMember);
     if(filterCategory !== 'All') filtered = filtered.filter(d => d.category === filterCategory);
-    if(searchTerm) filtered = filtered.filter(d => d.merchant.toLowerCase().includes(searchTerm.toLowerCase()));
+    if(searchTerm) filtered = filtered.filter(d => d.merchant?.toLowerCase().includes(searchTerm.toLowerCase())); // 安全檢查
     
     const total = filtered.reduce((a,b) => a + b.amount, 0);
     const byYear: Record<string, number> = {}; 
@@ -796,7 +804,7 @@ const App: React.FC = () => {
                   </div>
               ))}
               
-               <button onClick={() => { setEditingProp({ id: '', name: '', address: '', type: 'Investment', status: 'Vacant', currentValue: 0, purchasePrice: 0, initialDeposit: 0, furtherDeposit: 0, balancePayment: 0, mortgageLoan: 0, mortgageAmount: 0, outstandingLoan: 0, managementFee: 0, govtRates: 0, govtRent: 0, estRent: 0, tenure: 0 }); setModalMode('property'); }} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-xl hover:bg-slate-50 transition text-slate-400 hover:text-slate-600"><ICONS.Plus /><span className="mt-2 font-bold">新增物業 Add Property</span></button>
+               <button onClick={() => { setEditingProp({ id: '', name: '', address: '', type: 'Investment', status: 'Vacant', currentValue: 0, purchasePrice: 0, initialDeposit: 0, furtherDeposit: 0, balancePayment: 0, mortgageLoan: 0, mortgageAmount: 0, outstandingLoan: 0, managementFee: 0, govtRates: 0, govtRent: 0, estRent: 0, tenure: 0, interestRate: 0 }); setModalMode('property'); }} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-xl hover:bg-slate-50 transition text-slate-400 hover:text-slate-600"><ICONS.Plus /><span className="mt-2 font-bold">新增物業 Add Property</span></button>
                {properties.length === 0 && (
                   <button onClick={initializeDefaults} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-blue-300 bg-blue-50 rounded-xl hover:bg-blue-100 transition text-blue-500"><ICONS.Plus /><span className="mt-2 font-bold">初始化預設物業</span></button>
               )}
@@ -1041,7 +1049,7 @@ const App: React.FC = () => {
                           <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0"><tr><th className="p-3">Date</th><th className="p-3">Merchant</th><th className="p-3">Amount</th><th className="p-3">Category</th><th className="p-3">Member</th></tr></thead>
                           <tbody className="divide-y">
                               {transactions
-                                .filter(t => (filterCategory==='All'||t.category===filterCategory) && (searchTerm===''||t.merchant.includes(searchTerm)))
+                                .filter(t => (filterCategory==='All'||t.category===filterCategory) && (searchTerm===''||t.merchant?.includes(searchTerm)))
                                 .slice(0, 50).map(t => (
                                   <tr key={t.id} className="hover:bg-slate-50">
                                       <td className="p-3">{t.date}</td>

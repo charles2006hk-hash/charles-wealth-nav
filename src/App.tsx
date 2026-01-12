@@ -58,14 +58,14 @@ interface Property {
   type: 'Investment' | 'Self-use';
   status: 'Occupied' | 'Vacant' | 'Renovation';
   
-  // 財務數據 (估值)
+  // 財務數據
   currentValue: number; 
   
   // 買入流程詳情
-  purchasePrice: number; // 總價 (自動計算)
+  purchasePrice: number; // 總價
   initialDeposit: number; // 細訂
   furtherDeposit: number; // 大訂
-  balancePayment: number; // 尾數 (Cash Balance)
+  balancePayment: number; // 尾數
   mortgageLoan: number; // 按揭貸款額
   
   // 按揭詳情
@@ -201,6 +201,7 @@ const StatCard = ({ title, value, subtext, color, iconName }: any) => {
 };
 
 // --- 5. 獨立組件: 文書預覽內容 ---
+// 注意：這裡新增了 transactions 參數的類型定義
 const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig: DocConfig, properties: Property[], transactions: Transaction[] }) => {
     const prop = properties.find(p => p.id === docConfig.propId) || { name: 'Unknown Property', address: '' } as Property;
 
@@ -687,7 +688,8 @@ const App: React.FC = () => {
             balancePayment: Number(editingProp.balancePayment || 0),
             mortgageLoan: Number(editingProp.mortgageLoan || 0),
             interestRate: Number(editingProp.interestRate || 0),
-            outstandingLoan: Number(editingProp.outstandingLoan || 0)
+            outstandingLoan: Number(editingProp.outstandingLoan || 0),
+            bank: editingProp.bank || 'Standard Bank' // Add default bank to fix TS2345
         };
         // Auto-calculate Purchase Price if components are filled
         if (pData.initialDeposit || pData.furtherDeposit || pData.balancePayment) {
@@ -807,7 +809,7 @@ const App: React.FC = () => {
                   </div>
               ))}
               
-               <button onClick={() => { setEditingProp({ id: '', name: '', address: '', type: 'Investment', status: 'Vacant', currentValue: 0, purchasePrice: 0, initialDeposit: 0, furtherDeposit: 0, balancePayment: 0, mortgageLoan: 0, mortgageAmount: 0, outstandingLoan: 0, managementFee: 0, govtRates: 0, govtRent: 0, estRent: 0, tenure: 0, interestRate: 0 }); setModalMode('property'); }} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-xl hover:bg-slate-50 transition text-slate-400 hover:text-slate-600"><ICONS.Plus /><span className="mt-2 font-bold">新增物業 Add Property</span></button>
+               <button onClick={() => { setEditingProp({ id: '', name: '', address: '', type: 'Investment', status: 'Vacant', currentValue: 0, purchasePrice: 0, initialDeposit: 0, furtherDeposit: 0, balancePayment: 0, mortgageLoan: 0, mortgageAmount: 0, outstandingLoan: 0, managementFee: 0, govtRates: 0, govtRent: 0, estRent: 0, tenure: 0, interestRate: 0, bank: '' }); setModalMode('property'); }} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-xl hover:bg-slate-50 transition text-slate-400 hover:text-slate-600"><ICONS.Plus /><span className="mt-2 font-bold">新增物業 Add Property</span></button>
                {properties.length === 0 && (
                   <button onClick={initializeDefaults} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-blue-300 bg-blue-50 rounded-xl hover:bg-blue-100 transition text-blue-500"><ICONS.Plus /><span className="mt-2 font-bold">初始化預設物業</span></button>
               )}
@@ -885,7 +887,7 @@ const App: React.FC = () => {
                                         <td className="p-3">{t.date}</td>
                                         <td className="p-3"><select className="bg-transparent border-none" value={t.category} onChange={e => handleUpdateCategory(t.id, e.target.value)}>{CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select></td>
                                         <td className="p-3 font-medium">{t.merchant} <span className="text-slate-400 text-xs">{t.note}</span></td>
-                                        <td className={`p-3 font-mono font-bold ${t.category?.includes('Income') ? 'text-emerald-600' : 'text-red-500'}`}>{t.category?.includes('Income') ? '+' : '-'}{formatCurrency(t.amount)}</td>
+                                        <td className={`p-3 font-mono font-bold ${t.category.includes('Income') ? 'text-emerald-600' : 'text-red-500'}`}>{t.category.includes('Income') ? '+' : '-'}{formatCurrency(t.amount)}</td>
                                         <td className="p-3 flex gap-1">{t.tags?.map(tag => <span key={tag} className="text-xs bg-yellow-100 text-yellow-800 px-1 rounded">#{tag}</span>)}</td>
                                         <td className="p-3"><button onClick={() => deleteItem('transactions', t.id)} className="text-red-400 hover:text-red-600"><ICONS.Trash /></button></td>
                                     </tr>
@@ -1034,11 +1036,11 @@ const App: React.FC = () => {
                         <p className="text-slate-500">所有交易紀錄一覽 Table of All Transactions</p>
                         <div className="flex gap-2">
                             <label className="flex items-center gap-2 px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 cursor-pointer">
-                                <ICONS.Plus /> 匯入 Import JSON
+                                <ICONS.Upload /> 匯入 Import JSON
                                 <input type="file" className="hidden" onChange={handleFileUpload} accept=".json" />
                             </label>
                             <button onClick={handleExportJSON} className="px-3 py-1 bg-slate-600 text-white text-xs rounded hover:bg-slate-700 flex items-center gap-2">
-                                <ICONS.FileText /> 導出 Export JSON
+                                <ICONS.Download /> 導出 Export JSON
                             </button>
                         </div>
                       </div>

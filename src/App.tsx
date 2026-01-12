@@ -1,4 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
+  Tooltip, Legend, ResponsiveContainer 
+} from 'recharts';
 import { initializeApp } from "firebase/app";
 import { 
   getFirestore, collection, doc, addDoc, setDoc, deleteDoc, updateDoc, 
@@ -45,6 +49,8 @@ interface Lease {
   monthlyRent: number;
   deposit: number;
   status: 'Active' | 'Terminated';
+  rentFreeStart?: string;
+  rentFreeEnd?: string;
 }
 
 interface Property {
@@ -101,10 +107,14 @@ interface DocConfig {
   statementDateEnd?: string;
 }
 
+// 修正後的保險介面
 interface InsurancePolicy {
     name: string;
     totalPaid: number;
     note: string;
+    lastPaid?: string;
+    endYear?: number | null;
+    rawMerchant?: string;
 }
 
 // --- 3. 常數與圖示 ---
@@ -127,6 +137,7 @@ const ICONS = {
   Edit2: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>,
 };
 
+// --- Constants ---
 const CATEGORIES = [
   'Rental Income (租金收入)', 'Management Fee (管理費)', 'Govt Rates (差餉)', 'Govt Rent (地租)',
   'Mortgage Payment (按揭供款)', 'Repair & Maint (維修)', 'Tax (稅項)', 
@@ -217,6 +228,7 @@ const App: React.FC = () => {
     const unsubLease = onSnapshot(collection(db, "leases"), s => 
         setLeases(s.docs.map(d => ({id: d.id, ...d.data()} as Lease))));
     
+    // 使用 onSnapshot 讀取但忽略參數，避免 TS6133 錯誤
     const unsubEdu = onSnapshot(doc(db, "settings", "education"), (docSnap) => {
       if (docSnap.exists()) {
         setEduDB(docSnap.data() as Record<string, EduConfig>);
@@ -402,6 +414,19 @@ const App: React.FC = () => {
               <StatCard title="每月租金收入 Monthly Rent" value={formatCurrency(totalMonthlyRent)} color="emerald" iconName="DollarSign" />
               <StatCard title="整體出租率 Occupancy Rate" value={`${properties.length ? (properties.filter(p=>p.status==='Occupied').length / properties.length * 100).toFixed(0) : 0}%`} color="indigo" iconName="PieChart" />
               <StatCard title="應收未收 Arrears" value={propStats.filter(p=>p.isLate).length} color="red" iconName="Shield" subtext="Units Late" />
+          </div>
+
+          {/* 壓力測試區塊 */}
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
+              <div className="font-bold text-slate-700">壓力測試 Stress Test:</div>
+              <div className="flex items-center gap-2">
+                  <span className="text-sm">Rate +{stressRate}%</span>
+                  <input type="range" min="0" max="5" step="0.5" value={stressRate} onChange={e=>setStressRate(Number(e.target.value))} className="w-24" />
+              </div>
+              <div className="flex items-center gap-2">
+                  <span className="text-sm">Rent Drop {rentDrop}%</span>
+                  <input type="range" min="0" max="30" step="5" value={rentDrop} onChange={e=>setRentDrop(Number(e.target.value))} className="w-24" />
+              </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -812,16 +837,29 @@ const App: React.FC = () => {
               
               {activeTab === 'education' && (
                    <div className="space-y-6 animate-in fade-in">
+                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-4 rounded-xl border shadow-sm gap-4">
+                          <div><h2 className="text-xl font-bold text-slate-800">升學與職業導航</h2><p className="text-sm text-slate-500">針對「非學術型」學生的多元出路分析</p></div>
+                          <div className="flex gap-2 items-center bg-slate-100 p-1 rounded-lg">
+                              <button onClick={()=>setChildType('Standard')} className={`px-3 py-1 text-xs rounded-md transition ${childType==='Standard'?'bg-white shadow text-blue-600':'text-slate-500'}`}>傳統學術 (大學)</button>
+                              <button onClick={()=>setChildType('Vocational')} className={`px-3 py-1 text-xs rounded-md transition ${childType==='Vocational'?'bg-white shadow text-purple-600':'text-slate-500'}`}>職業導向 (專科)</button>
+                          </div>
+                      </div>
                       <div className="grid grid-cols-2 gap-6">
                           <div className="bg-white p-6 rounded-xl shadow-sm border">
-                              <h3 className="font-bold text-lg mb-2">Virginia ({FAMILY_INFO.Virginia.age})</h3>
-                              <p>目標: {eduDB['UK'].name}</p>
-                              <p>預算: {formatCurrency(eduDB['UK'].tuition + eduDB['UK'].living)} / year</p>
+                              <div className="flex justify-between">
+                                <h3 className="font-bold text-lg mb-2">Virginia ({FAMILY_INFO.Virginia.age})</h3>
+                                <select className="text-xs border rounded p-1" value={eduRegionV} onChange={e=>setEduRegionV(e.target.value)}>{Object.keys(eduDB).map(r=><option key={r} value={r}>{eduDB[r].name}</option>)}</select>
+                              </div>
+                              <p>目標: {eduDB[eduRegionV].name}</p>
+                              <p>預算: {formatCurrency(eduDB[eduRegionV].tuition + eduDB[eduRegionV].living)} / year</p>
                           </div>
                           <div className="bg-white p-6 rounded-xl shadow-sm border">
-                              <h3 className="font-bold text-lg mb-2">Jason ({FAMILY_INFO.Jason.age})</h3>
-                              <p>目標: {eduDB['AUS'].name}</p>
-                              <p>預算: {formatCurrency(eduDB['AUS'].tuition + eduDB['AUS'].living)} / year</p>
+                              <div className="flex justify-between">
+                                <h3 className="font-bold text-lg mb-2">Jason ({FAMILY_INFO.Jason.age})</h3>
+                                <select className="text-xs border rounded p-1" value={eduRegionJ} onChange={e=>setEduRegionJ(e.target.value)}>{Object.keys(eduDB).map(r=><option key={r} value={r}>{eduDB[r].name}</option>)}</select>
+                              </div>
+                              <p>目標: {eduDB[eduRegionJ].name}</p>
+                              <p>預算: {formatCurrency(eduDB[eduRegionJ].tuition + eduDB[eduRegionJ].living)} / year</p>
                           </div>
                       </div>
                       <div className="bg-slate-100 p-4 rounded-xl">
@@ -838,7 +876,7 @@ const App: React.FC = () => {
                       </div>
                       <div className="bg-white p-6 rounded-xl border shadow-sm h-80">
                           <h3 className="font-bold text-slate-700 mb-4">未來 10 年資金需求預測</h3>
-                          <ResponsiveContainer><BarChart data={eduForecast.data}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="year" /><YAxis tickFormatter={v=>`${v/1000}k`}/><Tooltip formatter={v=>`$${v.toLocaleString()}`} /><Legend /><Bar dataKey="vCost" name="Virginia" stackId="a" fill="#EC4899" /><Bar dataKey="jCost" name="Jason" stackId="a" fill="#3B82F6" /></BarChart></ResponsiveContainer>
+                          <ResponsiveContainer><BarChart data={eduForecast.data}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="year" /><YAxis tickFormatter={(v:any)=>`${v/1000}k`}/><Tooltip formatter={(v:any)=>`$${v.toLocaleString()}`} /><Legend /><Bar dataKey="vCost" name="Virginia" stackId="a" fill="#EC4899" /><Bar dataKey="jCost" name="Jason" stackId="a" fill="#3B82F6" /></BarChart></ResponsiveContainer>
                       </div>
                    </div>
               )}

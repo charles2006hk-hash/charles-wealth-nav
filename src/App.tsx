@@ -152,8 +152,9 @@ const FAMILY_INFO = {
   Jason: { age: 13, role: '兒子', educationStart: 2029 }
 };
 
-const convertNumberToEnglish = (n: number) => n.toString(); 
-const formatCurrency = (val: number) => `$${val.toLocaleString()}`;
+// 安全的格式化函數：防止 undefined 導致白屏
+const convertNumberToEnglish = (n: any) => (Number(n) || 0).toString(); 
+const formatCurrency = (val: any) => `$${(Number(val) || 0).toLocaleString()}`;
 
 // --- 4. 輔助組件 (StatCard) ---
 const StatCard = ({ title, value, subtext, color, iconName }: any) => {

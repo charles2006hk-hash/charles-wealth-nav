@@ -58,22 +58,22 @@ interface Property {
   type: 'Investment' | 'Self-use';
   status: 'Occupied' | 'Vacant' | 'Renovation';
   
-  // 財務數據
+  // 財務數據 (估值)
   currentValue: number; 
   
   // 買入流程詳情
-  purchasePrice: number; 
-  initialDeposit: number; 
-  furtherDeposit: number; 
-  balancePayment: number; 
-  mortgageLoan: number; 
+  purchasePrice: number; // 總價 (自動計算)
+  initialDeposit: number; // 細訂
+  furtherDeposit: number; // 大訂
+  balancePayment: number; // 尾數 (Cash Balance)
+  mortgageLoan: number; // 按揭貸款額
   
   // 按揭詳情
   bank: string;
-  interestRate: number; 
-  mortgageAmount: number; 
-  outstandingLoan: number; 
-  tenure: number;  
+  interestRate: number; // 利率 (%)
+  mortgageAmount: number; // 月供
+  outstandingLoan: number; // 尚餘欠款
+  tenure: number;  // 年期
   
   // 租務
   estRent: number; 
@@ -861,7 +861,7 @@ const App: React.FC = () => {
 
             <div className="flex gap-4 border-b border-slate-200">
                 {['overview', 'ledger', 'tenants'].map(t => (
-                    <button key={t} onClick={() => setViewTab(t as any)} className={`pb-2 px-1 text-sm font-bold capitalize ${viewTab === t ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500'}`}>{t}</button>
+                    <button key={t} onClick={() => setViewTab(t as any)} className={`pb-2 px-1 text-sm font-bold capitalize ${viewTab === t ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500'}`}>{t === 'overview' ? '物業總覽 Overview' : t === 'ledger' ? '流水帳 Ledger' : '租客 Tenants'}</button>
                 ))}
             </div>
 
@@ -1059,11 +1059,11 @@ const App: React.FC = () => {
                         <p className="text-slate-500">所有交易紀錄一覽 Table of All Transactions</p>
                         <div className="flex gap-2">
                             <label className="flex items-center gap-2 px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 cursor-pointer">
-                                <ICONS.Upload /> 匯入 Import JSON
+                                <ICONS.Plus /> 匯入 Import JSON
                                 <input type="file" className="hidden" onChange={handleFileUpload} accept=".json" />
                             </label>
                             <button onClick={handleExportJSON} className="px-3 py-1 bg-slate-600 text-white text-xs rounded hover:bg-slate-700 flex items-center gap-2">
-                                <ICONS.Download /> 導出 Export JSON
+                                <ICONS.FileText /> 導出 Export JSON
                             </button>
                         </div>
                       </div>

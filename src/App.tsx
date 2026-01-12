@@ -58,14 +58,14 @@ interface Property {
   type: 'Investment' | 'Self-use';
   status: 'Occupied' | 'Vacant' | 'Renovation';
   
-  // 財務數據
+  // 財務數據 (估值)
   currentValue: number; 
   
   // 買入流程詳情
-  purchasePrice: number; // 總價
+  purchasePrice: number; // 總價 (自動計算)
   initialDeposit: number; // 細訂
   furtherDeposit: number; // 大訂
-  balancePayment: number; // 尾數
+  balancePayment: number; // 尾數 (Cash Balance)
   mortgageLoan: number; // 按揭貸款額
   
   // 按揭詳情
@@ -201,7 +201,6 @@ const StatCard = ({ title, value, subtext, color, iconName }: any) => {
 };
 
 // --- 5. 獨立組件: 文書預覽內容 ---
-// 注意：這裡新增了 transactions 參數的類型定義
 const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig: DocConfig, properties: Property[], transactions: Transaction[] }) => {
     const prop = properties.find(p => p.id === docConfig.propId) || { name: 'Unknown Property', address: '' } as Property;
 

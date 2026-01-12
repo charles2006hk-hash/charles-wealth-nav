@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, 
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
   Tooltip, Legend, ResponsiveContainer 
 } from 'recharts';
 import { initializeApp } from "firebase/app";
@@ -311,6 +311,7 @@ const App: React.FC = () => {
 
   const eduForecast = useMemo(() => {
     const db = eduDB || INITIAL_EDUCATION_DB;
+    // Explicitly use the variables here to avoid TS6133
     const regV = db[eduRegionV] || INITIAL_EDUCATION_DB.UK; 
     const regJ = db[eduRegionJ] || INITIAL_EDUCATION_DB.AUS;
     const currentYear = new Date().getFullYear(); const forecast = []; let totalNeeded = 0;

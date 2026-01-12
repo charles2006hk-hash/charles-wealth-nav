@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
-  Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell 
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, 
+  Tooltip, Legend, ResponsiveContainer 
 } from 'recharts';
 import { initializeApp } from "firebase/app";
 import { 
@@ -166,7 +166,8 @@ const FAMILY_INFO = {
 const convertNumberToEnglish = (n: any) => (Number(n) || 0).toString(); 
 const formatCurrency = (val: any) => `$${(Number(val) || 0).toLocaleString()}`;
 
-// --- 4. 輔助組件 ---
+// --- 4. 獨立組件定義 (避免嵌套) ---
+
 const StatCard = ({ title, value, subtext, color, iconName }: any) => {
   const Icon = ICONS[iconName as keyof typeof ICONS] || ICONS.Tag;
   return (
@@ -181,8 +182,7 @@ const StatCard = ({ title, value, subtext, color, iconName }: any) => {
   );
 };
 
-// --- 5. 獨立組件: 文書預覽內容 ---
-const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig: DocConfig, properties: Property[], transactions: Transaction[] }) => {
+const DocPreviewContent = ({ docConfig, properties }: { docConfig: DocConfig, properties: Property[] }) => {
     const prop = properties.find(p => p.id === docConfig.propId) || { name: 'Unknown Property', address: '' } as Property;
 
     if (docConfig.type === 'receipt') {
@@ -200,36 +200,6 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
             </div>
         );
     } 
-    
-    if (docConfig.type === 'statement') {
-        const filteredTxs = transactions
-            .filter(t => t.propertyId === docConfig.propId && (!docConfig.statementDateStart || t.date >= docConfig.statementDateStart) && (!docConfig.statementDateEnd || t.date <= docConfig.statementDateEnd))
-            .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-        
-        return (
-            <div className="bg-white p-10 w-[210mm] min-h-[297mm] text-black font-serif">
-                <h1 className="text-2xl font-bold text-center underline mb-6">RENTAL STATEMENT 租務對數單</h1>
-                <div className="flex justify-between mb-8">
-                    <div><p><strong>Property:</strong> {prop.name}</p><p><strong>Address:</strong> {prop.address}</p></div>
-                    <div className="text-right"><p><strong>Tenant:</strong> {docConfig.tenant}</p><p><strong>Period:</strong> {docConfig.statementDateStart || 'Start'} to {docConfig.statementDateEnd || 'Now'}</p></div>
-                </div>
-                <table className="w-full border-collapse border border-black text-sm">
-                    <thead><tr className="bg-gray-100"><th className="border border-black p-2">Date</th><th className="border border-black p-2">Description / Note</th><th className="border border-black p-2 text-right">Debit (Due)</th><th className="border border-black p-2 text-right">Credit (Paid)</th></tr></thead>
-                    <tbody>
-                        {filteredTxs.length === 0 && <tr><td colSpan={4} className="p-4 text-center">No records found for this period.</td></tr>}
-                        {filteredTxs.map(t => (
-                            <tr key={t.id}>
-                                <td className="border border-black p-2">{t.date}</td>
-                                <td className="border border-black p-2">{t.category} - {t.note}</td>
-                                <td className="border border-black p-2 text-right">{t.category.includes('Income') ? '' : formatCurrency(t.amount)}</td>
-                                <td className="border border-black p-2 text-right">{t.category.includes('Income') ? formatCurrency(t.amount) : ''}</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-        );
-    }
 
     return (
         <div className="doc-print-container text-black font-serif text-sm leading-relaxed">
@@ -281,7 +251,7 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
              <div className="absolute bottom-4 right-10 text-xs">Page 1 of 4</div>
           </div>
 
-          {/* Page 2: Continued Clauses & Signatures */}
+          {/* Page 2 */}
           <div className="w-[210mm] min-h-[297mm] p-10 bg-white mx-auto relative page-break">
              <ol className="list-decimal pl-6 space-y-3 text-sm" start={8}>
                  <li>
@@ -325,7 +295,7 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
              <div className="mt-8 mb-4 border-t pt-4">
                 <h2 className="font-bold text-lg mb-2">SECURITY DEPOSIT RECEIPT 按金收據</h2>
                 <div className="flex justify-between items-end mb-2">
-                    <span>Received the Security Deposit of HK$: <span className="font-bold underline text-xl">{docConfig.deposit.toLocaleString()}</span></span>
+                    <span>Received HK$: <span className="font-bold underline text-xl">{docConfig.deposit.toLocaleString()}</span></span>
                 </div>
                 <div className="flex justify-between items-end">
                     <span>by the Landlord 業主收到租客所交的保證金: <span className="font-bold underline text-xl">{convertNumberToEnglish(docConfig.deposit)}</span> (HK Dollars)</span>
@@ -484,21 +454,18 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
     );
 };
 
-// --- 5. 主應用程式 (Main App) ---
+// --- 5. 主應用程式 ---
 const App: React.FC = () => {
-  // 資料庫狀態
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [leases, setLeases] = useState<Lease[]>([]);
   const [eduDB, setEduDB] = useState<Record<string, EduConfig>>(INITIAL_EDUCATION_DB);
   const [dataLoaded, setDataLoaded] = useState(false);
 
-  // 介面狀態
   const [activeTab, setActiveTab] = useState('dashboard');
   const [propertyViewId, setPropertyViewId] = useState<string | null>(null);
   const [modalMode, setModalMode] = useState<'none' | 'transaction' | 'property' | 'doc'>('none');
 
-  // 表單與文件設定
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [editingProp, setEditingProp] = useState<Property | null>(null);
   const [docConfig, setDocConfig] = useState<DocConfig>({ 
@@ -521,7 +488,6 @@ const App: React.FC = () => {
   const [stressRate, setStressRate] = useState(0);
   const [rentDrop, setRentDrop] = useState(0);
 
-  // 載入資料 (Firebase Listeners)
   useEffect(() => {
     const qTx = query(collection(db, "transactions"), orderBy("date", "desc"));
     const unsubTx = onSnapshot(qTx, s => 
@@ -545,7 +511,6 @@ const App: React.FC = () => {
     return () => { unsubTx(); unsubProp(); unsubLease(); unsubEdu(); };
   }, []);
 
-  // --- 計算屬性 (Derived Stats) ---
   const propStats = useMemo(() => {
     return properties.map(p => {
         const pTxs = transactions.filter(t => t.propertyId === p.id);
@@ -925,8 +890,6 @@ const App: React.FC = () => {
         </div>
     );
   };
-
-  const DocModalContent = () => <></>; // Placeholder if needed
 
   if (!dataLoaded) {
        return <div className="h-screen flex items-center justify-center text-slate-500 animate-pulse">正在連接到 Firebase 雲端資料庫...</div>;

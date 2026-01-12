@@ -57,12 +57,24 @@ interface Property {
   address: string;
   type: 'Investment' | 'Self-use';
   status: 'Occupied' | 'Vacant' | 'Renovation';
+  
+  // 財務數據
   currentValue: number; 
-  purchasePrice: number; 
-  mortgageAmount: number; 
-  outstandingLoan: number; 
+  
+  // 買入流程詳情
+  purchasePrice: number; // 總價 (自動計算)
+  initialDeposit: number; // 細訂
+  furtherDeposit: number; // 大訂
+  balancePayment: number; // 尾數
+  mortgageLoan: number; // 按揭貸款額
+
+  mortgageAmount: number; // 月供
+  outstandingLoan: number; // 尚餘欠款
+  
   estRent: number; 
   tenure: number;  
+  
+  // 支出設定
   managementFee: number;
   govtRates: number;
   govtRent: number;
@@ -132,6 +144,7 @@ const ICONS = {
   GraduationCap: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>,
   ShieldCheck: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>,
   Edit2: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>,
+  Upload: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
 };
 
 // --- Constants ---
@@ -144,11 +157,11 @@ const CATEGORIES = [
 const MEMBERS = ['Charles', 'Carmen', 'Virginia', 'Jason', 'Family'];
 
 const INITIAL_PROPERTIES_DATA: Property[] = [
-    { id: 'p1', name: '京瑞二期 16E', address: '沙田安群街1號京瑞廣場二期16樓E室', type: 'Investment', status: 'Occupied', currentValue: 8000000, purchasePrice: 6000000, mortgageAmount: 15000, outstandingLoan: 3000000, managementFee: 1200, govtRates: 1500, govtRent: 900, estRent: 25000, tenure: 15 },
-    { id: 'p2', name: '京瑞二期 16F', address: '沙田安群街1號京瑞廣場二期16樓F室', type: 'Investment', status: 'Occupied', currentValue: 8000000, purchasePrice: 6000000, mortgageAmount: 15000, outstandingLoan: 3000000, managementFee: 1200, govtRates: 1500, govtRent: 900, estRent: 25000, tenure: 15 },
-    { id: 'p3', name: '帝欣苑 (Parc Versailles)', address: '大埔梅樹坑路8號帝欣苑', type: 'Investment', status: 'Occupied', currentValue: 12000000, purchasePrice: 9000000, mortgageAmount: 0, outstandingLoan: 0, managementFee: 2500, govtRates: 3000, govtRent: 1800, estRent: 38000, tenure: 0 },
-    { id: 'p4', name: '太湖花園 (Serenity Park)', address: '大埔大逸街太湖花園', type: 'Investment', status: 'Occupied', currentValue: 6500000, purchasePrice: 4000000, mortgageAmount: 0, outstandingLoan: 0, managementFee: 1500, govtRates: 1200, govtRent: 700, estRent: 18000, tenure: 0 },
-    { id: 'p5', name: '農圃道18號 (18 Farm Road)', address: '土瓜灣農圃道18號', type: 'Self-use', status: 'Occupied', currentValue: 15000000, purchasePrice: 13000000, mortgageAmount: 25000, outstandingLoan: 6000000, managementFee: 3000, govtRates: 4000, govtRent: 2400, estRent: 0, tenure: 10 },
+    { id: 'p1', name: '京瑞二期 16E', address: '沙田安群街1號京瑞廣場二期16樓E室', type: 'Investment', status: 'Occupied', currentValue: 8000000, purchasePrice: 6000000, initialDeposit: 300000, furtherDeposit: 300000, balancePayment: 5400000, mortgageLoan: 3000000, mortgageAmount: 15000, outstandingLoan: 3000000, managementFee: 1200, govtRates: 1500, govtRent: 900, estRent: 25000, tenure: 15 },
+    { id: 'p2', name: '京瑞二期 16F', address: '沙田安群街1號京瑞廣場二期16樓F室', type: 'Investment', status: 'Occupied', currentValue: 8000000, purchasePrice: 6000000, initialDeposit: 300000, furtherDeposit: 300000, balancePayment: 5400000, mortgageLoan: 3000000, mortgageAmount: 15000, outstandingLoan: 3000000, managementFee: 1200, govtRates: 1500, govtRent: 900, estRent: 25000, tenure: 15 },
+    { id: 'p3', name: '帝欣苑 (Parc Versailles)', address: '大埔梅樹坑路8號帝欣苑', type: 'Investment', status: 'Occupied', currentValue: 12000000, purchasePrice: 9000000, initialDeposit: 500000, furtherDeposit: 500000, balancePayment: 8000000, mortgageLoan: 4500000, mortgageAmount: 0, outstandingLoan: 0, managementFee: 2500, govtRates: 3000, govtRent: 1800, estRent: 38000, tenure: 0 },
+    { id: 'p4', name: '太湖花園 (Serenity Park)', address: '大埔大逸街太湖花園', type: 'Investment', status: 'Occupied', currentValue: 6500000, purchasePrice: 4000000, initialDeposit: 200000, furtherDeposit: 200000, balancePayment: 3600000, mortgageLoan: 2000000, mortgageAmount: 0, outstandingLoan: 0, managementFee: 1500, govtRates: 1200, govtRent: 700, estRent: 18000, tenure: 0 },
+    { id: 'p5', name: '農圃道18號 (18 Farm Road)', address: '土瓜灣農圃道18號', type: 'Self-use', status: 'Occupied', currentValue: 15000000, purchasePrice: 13000000, initialDeposit: 600000, furtherDeposit: 700000, balancePayment: 11700000, mortgageLoan: 6500000, mortgageAmount: 25000, outstandingLoan: 6000000, managementFee: 3000, govtRates: 4000, govtRent: 2400, estRent: 0, tenure: 10 },
 ];
 
 const INITIAL_EDUCATION_DB: Record<string, EduConfig> = {
@@ -164,7 +177,12 @@ const FAMILY_INFO = {
 };
 
 const convertNumberToEnglish = (n: any) => (Number(n) || 0).toString(); 
-const formatCurrency = (val: any) => `$${(Number(val) || 0).toLocaleString()}`;
+// 安全的格式化函數，防止白屏
+const formatCurrency = (val: any) => {
+    const num = Number(val);
+    if (isNaN(num)) return '$0';
+    return `$${num.toLocaleString()}`;
+};
 
 // --- 4. 輔助組件 ---
 const StatCard = ({ title, value, subtext, color, iconName }: any) => {
@@ -484,7 +502,7 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
     );
 };
 
-// --- 5. 主應用程式 ---
+// --- 6. 主應用程式 ---
 const App: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
@@ -662,8 +680,17 @@ const App: React.FC = () => {
             tenure: Number(editingProp.tenure),
             managementFee: Number(editingProp.managementFee),
             govtRates: Number(editingProp.govtRates),
-            govtRent: Number(editingProp.govtRent)
+            govtRent: Number(editingProp.govtRent),
+            initialDeposit: Number(editingProp.initialDeposit || 0),
+            furtherDeposit: Number(editingProp.furtherDeposit || 0),
+            balancePayment: Number(editingProp.balancePayment || 0),
+            mortgageLoan: Number(editingProp.mortgageLoan || 0),
         };
+        // Auto-calculate Purchase Price if components are filled
+        if (pData.initialDeposit || pData.furtherDeposit || pData.balancePayment) {
+            pData.purchasePrice = pData.initialDeposit + pData.furtherDeposit + pData.balancePayment + pData.mortgageLoan;
+        }
+
         if(editingProp.id) await setDoc(doc(db, "properties", editingProp.id), pData);
         else await addDoc(collection(db, "properties"), pData);
         setModalMode('none');
@@ -682,6 +709,31 @@ const App: React.FC = () => {
       }, 100);
   };
   
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if(!window.confirm("確定要將此 JSON 檔案匯入？")) return;
+
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+        try {
+            const result = ev.target?.result;
+            if (typeof result !== 'string') return;
+            const json = JSON.parse(result);
+            const list = Array.isArray(json) ? json : (json.data || []);
+            
+            const batch = writeBatch(db);
+            list.forEach((item: any) => {
+                const docRef = doc(collection(db, "transactions"));
+                batch.set(docRef, item);
+            });
+            await batch.commit();
+            alert(`成功匯入 ${list.length} 筆記錄！`);
+        } catch (err) { alert("匯入失敗: " + err); }
+    };
+    reader.readAsText(file);
+  };
+
   const handleExportJSON = () => {
       const jsonString = JSON.stringify({ meta: { generated: new Date() }, data: transactions }, null, 2);
       const blob = new Blob([jsonString], { type: 'application/json' });
@@ -752,7 +804,7 @@ const App: React.FC = () => {
                   </div>
               ))}
               
-               <button onClick={() => { setEditingProp({ id: '', name: '', address: '', type: 'Investment', status: 'Vacant', currentValue: 0, purchasePrice: 0, mortgageAmount: 0, outstandingLoan: 0, managementFee: 0, govtRates: 0, govtRent: 0, estRent: 0, tenure: 0 }); setModalMode('property'); }} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-xl hover:bg-slate-50 transition text-slate-400 hover:text-slate-600"><ICONS.Plus /><span className="mt-2 font-bold">新增物業 Add Property</span></button>
+               <button onClick={() => { setEditingProp({ id: '', name: '', address: '', type: 'Investment', status: 'Vacant', currentValue: 0, purchasePrice: 0, initialDeposit: 0, furtherDeposit: 0, balancePayment: 0, mortgageLoan: 0, mortgageAmount: 0, outstandingLoan: 0, managementFee: 0, govtRates: 0, govtRent: 0, estRent: 0, tenure: 0 }); setModalMode('property'); }} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-xl hover:bg-slate-50 transition text-slate-400 hover:text-slate-600"><ICONS.Plus /><span className="mt-2 font-bold">新增物業 Add Property</span></button>
                {properties.length === 0 && (
                   <button onClick={initializeDefaults} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-blue-300 bg-blue-50 rounded-xl hover:bg-blue-100 transition text-blue-500"><ICONS.Plus /><span className="mt-2 font-bold">初始化預設物業</span></button>
               )}
@@ -975,13 +1027,23 @@ const App: React.FC = () => {
               {activeTab === 'data' && (
                   <div className="bg-white p-10 rounded-xl shadow animate-in fade-in">
                       <h2 className="text-2xl font-bold mb-4">數據中心 Data Hub</h2>
-                      <p className="text-slate-500 mb-6">所有交易紀錄一覽 Table of All Transactions</p>
+                      <div className="flex justify-between items-center mb-6">
+                        <p className="text-slate-500">所有交易紀錄一覽 Table of All Transactions</p>
+                        <div className="flex gap-2">
+                            <label className="flex items-center gap-2 px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 cursor-pointer">
+                                <ICONS.Upload /> 匯入 Import JSON
+                                <input type="file" className="hidden" onChange={handleFileUpload} accept=".json" />
+                            </label>
+                            <button onClick={handleExportJSON} className="px-3 py-1 bg-slate-600 text-white text-xs rounded hover:bg-slate-700 flex items-center gap-2">
+                                <ICONS.Download /> 導出 Export JSON
+                            </button>
+                        </div>
+                      </div>
                       <div className="flex gap-4 mb-4">
                         <input type="text" placeholder="Search..." className="border rounded px-2 py-1 text-sm" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                         <select className="border rounded px-2 py-1" value={filterCategory} onChange={e=>setFilterCategory(e.target.value)}><option value="All">All Categories</option>{CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select>
                         <select className="border rounded px-2 py-1" value={filterMember} onChange={e=>setFilterMember(e.target.value)}><option value="All">All Members</option>{MEMBERS.map(m=><option key={m} value={m}>{m}</option>)}</select>
                         <select className="border rounded px-2 py-1" value={filterYear} onChange={e=>setFilterYear(e.target.value)}><option value="All">All Years</option>{[2024,2025,2026].map(y=><option key={y} value={y}>{y}</option>)}</select>
-                        <button onClick={handleExportJSON} className="px-3 py-1 bg-slate-600 text-white text-xs rounded hover:bg-slate-700">Export JSON</button>
                       </div>
                       <table className="w-full text-sm text-left">
                           <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0"><tr><th className="p-3">Date</th><th className="p-3">Merchant</th><th className="p-3">Amount</th><th className="p-3">Category</th><th className="p-3">Member</th></tr></thead>
@@ -1094,28 +1156,43 @@ const App: React.FC = () => {
 
           {modalMode === 'property' && (
               <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
-                  <div className="bg-white rounded-xl shadow-2xl p-6 w-[500px] animate-in fade-in zoom-in duration-200">
-                      <h3 className="font-bold mb-4">Edit Property</h3>
-                      <div className="space-y-3">
-                          <input className="border w-full p-2" placeholder="Name" value={editingProp?.name} onChange={e => setEditingProp({...editingProp, name: e.target.value} as any)} />
-                          <input className="border w-full p-2" placeholder="Address" value={editingProp?.address} onChange={e => setEditingProp({...editingProp, address: e.target.value} as any)} />
-                          <select className="border w-full p-2" value={editingProp?.status} onChange={e => setEditingProp({...editingProp, status: e.target.value} as any)}><option value="Occupied">Occupied</option><option value="Vacant">Vacant</option></select>
-                          <div className="grid grid-cols-2 gap-2">
-                               <input className="border p-2" type="number" placeholder="Value" value={editingProp?.currentValue} onChange={e => setEditingProp({...editingProp, currentValue: Number(e.target.value)} as any)} />
-                               <input className="border p-2" type="number" placeholder="Rent Est." value={editingProp?.estRent} onChange={e => setEditingProp({...editingProp, estRent: Number(e.target.value)} as any)} />
+                  <div className="bg-white rounded-xl shadow-2xl p-6 w-[600px] max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in duration-200">
+                      <h3 className="font-bold text-xl mb-6">Edit Property</h3>
+                      <div className="space-y-6">
+                          <div className="space-y-2">
+                              <label className="text-xs font-bold text-slate-500 uppercase">Basic Info</label>
+                              <input className="border w-full p-2 rounded" placeholder="Property Name" value={editingProp?.name} onChange={e => setEditingProp({...editingProp, name: e.target.value} as any)} />
+                              <input className="border w-full p-2 rounded" placeholder="Full Address" value={editingProp?.address} onChange={e => setEditingProp({...editingProp, address: e.target.value} as any)} />
+                              <select className="border w-full p-2 rounded" value={editingProp?.status} onChange={e => setEditingProp({...editingProp, status: e.target.value} as any)}><option value="Occupied">Occupied</option><option value="Vacant">Vacant</option></select>
                           </div>
-                          <div>
-                            <label className="block text-xs font-bold text-slate-500">Expenses</label>
+                          
+                          <div className="space-y-2">
+                              <label className="text-xs font-bold text-slate-500 uppercase">Purchase & Mortgage</label>
+                              <div className="grid grid-cols-2 gap-3">
+                                   <div><label className="text-xs">Current Value</label><input className="border w-full p-2 rounded" type="number" value={editingProp?.currentValue} onChange={e => setEditingProp({...editingProp, currentValue: Number(e.target.value)} as any)} /></div>
+                                   <div><label className="text-xs">Est. Rent</label><input className="border w-full p-2 rounded" type="number" value={editingProp?.estRent} onChange={e => setEditingProp({...editingProp, estRent: Number(e.target.value)} as any)} /></div>
+                              </div>
+                              <div className="p-3 bg-blue-50 rounded border border-blue-100 grid grid-cols-2 gap-3">
+                                  <div><label className="text-xs">Initial Deposit (細訂)</label><input className="border w-full p-1 rounded" type="number" value={editingProp?.initialDeposit || 0} onChange={e => setEditingProp({...editingProp, initialDeposit: Number(e.target.value)} as any)} /></div>
+                                  <div><label className="text-xs">Further Deposit (大訂)</label><input className="border w-full p-1 rounded" type="number" value={editingProp?.furtherDeposit || 0} onChange={e => setEditingProp({...editingProp, furtherDeposit: Number(e.target.value)} as any)} /></div>
+                                  <div><label className="text-xs">Balance (尾數)</label><input className="border w-full p-1 rounded" type="number" value={editingProp?.balancePayment || 0} onChange={e => setEditingProp({...editingProp, balancePayment: Number(e.target.value)} as any)} /></div>
+                                  <div><label className="text-xs">Mortgage Loan (按揭)</label><input className="border w-full p-1 rounded" type="number" value={editingProp?.mortgageLoan || 0} onChange={e => setEditingProp({...editingProp, mortgageLoan: Number(e.target.value)} as any)} /></div>
+                                  <div className="col-span-2 text-right text-sm font-bold text-blue-800">Total Purchase Price: {formatCurrency((editingProp?.initialDeposit||0) + (editingProp?.furtherDeposit||0) + (editingProp?.balancePayment||0) + (editingProp?.mortgageLoan||0))}</div>
+                              </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="text-xs font-bold text-slate-500 uppercase">Monthly Expenses</label>
                             <div className="grid grid-cols-3 gap-2">
-                              <input className="border p-1 text-sm" placeholder="Mgt Fee" value={editingProp?.managementFee} onChange={e=>setEditingProp({...editingProp, managementFee: Number(e.target.value)} as any)} />
-                              <input className="border p-1 text-sm" placeholder="Rates" value={editingProp?.govtRates} onChange={e=>setEditingProp({...editingProp, govtRates: Number(e.target.value)} as any)} />
-                              <input className="border p-1 text-sm" placeholder="Govt Rent" value={editingProp?.govtRent} onChange={e=>setEditingProp({...editingProp, govtRent: Number(e.target.value)} as any)} />
+                              <div><label className="text-xs">Mgt Fee</label><input className="border w-full p-2 rounded" type="number" value={editingProp?.managementFee} onChange={e=>setEditingProp({...editingProp, managementFee: Number(e.target.value)} as any)} /></div>
+                              <div><label className="text-xs">Rates (Qtr)</label><input className="border w-full p-2 rounded" type="number" value={editingProp?.govtRates} onChange={e=>setEditingProp({...editingProp, govtRates: Number(e.target.value)} as any)} /></div>
+                              <div><label className="text-xs">Govt Rent (Qtr)</label><input className="border w-full p-2 rounded" type="number" value={editingProp?.govtRent} onChange={e=>setEditingProp({...editingProp, govtRent: Number(e.target.value)} as any)} /></div>
                             </div>
                           </div>
                       </div>
-                      <div className="flex gap-2 mt-6">
-                          <button onClick={handleSaveProperty} className="flex-1 bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Save</button>
-                          <button onClick={() => setModalMode('none')} className="flex-1 bg-gray-200 p-2 rounded hover:bg-gray-300">Cancel</button>
+                      <div className="flex gap-2 mt-8 pt-4 border-t">
+                          <button onClick={handleSaveProperty} className="flex-1 bg-blue-600 text-white p-3 rounded-lg font-bold hover:bg-blue-700">Save Property</button>
+                          <button onClick={() => setModalMode('none')} className="flex-1 bg-gray-100 text-slate-600 p-3 rounded-lg font-bold hover:bg-gray-200">Cancel</button>
                       </div>
                   </div>
               </div>

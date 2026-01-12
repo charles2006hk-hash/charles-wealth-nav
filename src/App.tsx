@@ -1,4 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
+  Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell 
+} from 'recharts';
 import { initializeApp } from "firebase/app";
 import { 
   getFirestore, collection, doc, addDoc, setDoc, deleteDoc, updateDoc, 
@@ -31,7 +35,7 @@ interface Transaction {
   year: number;
   month: number;
   propertyId?: string; 
-  tags?: string[]; 
+  tags?: string[]; // 標籤系統
   isVerified?: boolean; 
 }
 
@@ -56,12 +60,20 @@ interface Property {
   type: 'Investment' | 'Self-use';
   status: 'Occupied' | 'Vacant' | 'Renovation';
   
-  // 財務數據
+  // 財務估值
   currentValue: number; 
-  purchasePrice: number; 
-  mortgageAmount: number; 
-  outstandingLoan: number; 
-  estRent: number; 
+  
+  // 買入紀錄
+  purchasePrice: number;
+  purchaseDate: string;
+  stampDuty: number;
+  agentFee: number;
+
+  // 按揭資料
+  bank: string;
+  mortgageAmount: number; // 月供
+  outstandingLoan: number; // 尚餘貸款
+  interestRate: number;
   tenure: number;  
 
   // 支出設定
@@ -70,12 +82,14 @@ interface Property {
   govtRent: number;
 }
 
+// 擴充 Property 類型以包含計算後的欄位 (用於顯示)
 interface PropertyWithStats extends Property {
     income: number;
     expense: number;
     net: number;
     activeLease?: Lease;
     isLate: boolean;
+    estRent: number; // For calculation compatibility
 }
 
 interface EduConfig {
@@ -123,7 +137,6 @@ const ICONS = {
   GraduationCap: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>,
 };
 
-// --- Constants ---
 const CATEGORIES = [
   'Rental Income (租金收入)', 'Management Fee (管理費)', 'Govt Rates (差餉)', 'Govt Rent (地租)',
   'Mortgage Payment (按揭供款)', 'Repair & Maint (維修)', 'Tax (稅項)', 
@@ -131,14 +144,6 @@ const CATEGORIES = [
   'Credit Card', 'Education', 'Transport', 'Telecom', 'Shopping', 'Dining', 'Medical', 'General'
 ];
 const MEMBERS = ['Charles', 'Carmen', 'Virginia', 'Jason', 'Family'];
-
-const INITIAL_PROPERTIES_DATA: Property[] = [
-    { id: 'p1', name: '京瑞二期 16E', address: '沙田安群街1號京瑞廣場二期16樓E室', type: 'Investment', status: 'Occupied', currentValue: 8000000, purchasePrice: 6000000, mortgageAmount: 15000, outstandingLoan: 3000000, managementFee: 1200, govtRates: 1500, govtRent: 900, estRent: 25000, tenure: 15 },
-    { id: 'p2', name: '京瑞二期 16F', address: '沙田安群街1號京瑞廣場二期16樓F室', type: 'Investment', status: 'Occupied', currentValue: 8000000, purchasePrice: 6000000, mortgageAmount: 15000, outstandingLoan: 3000000, managementFee: 1200, govtRates: 1500, govtRent: 900, estRent: 25000, tenure: 15 },
-    { id: 'p3', name: '帝欣苑 (Parc Versailles)', address: '大埔梅樹坑路8號帝欣苑', type: 'Investment', status: 'Occupied', currentValue: 12000000, purchasePrice: 9000000, mortgageAmount: 0, outstandingLoan: 0, managementFee: 2500, govtRates: 3000, govtRent: 1800, estRent: 38000, tenure: 0 },
-    { id: 'p4', name: '太湖花園 (Serenity Park)', address: '大埔大逸街太湖花園', type: 'Investment', status: 'Occupied', currentValue: 6500000, purchasePrice: 4000000, mortgageAmount: 0, outstandingLoan: 0, managementFee: 1500, govtRates: 1200, govtRent: 700, estRent: 18000, tenure: 0 },
-    { id: 'p5', name: '農圃道18號 (18 Farm Road)', address: '土瓜灣農圃道18號', type: 'Self-use', status: 'Occupied', currentValue: 15000000, purchasePrice: 13000000, mortgageAmount: 25000, outstandingLoan: 6000000, managementFee: 3000, govtRates: 4000, govtRent: 2400, estRent: 0, tenure: 10 },
-];
 
 const INITIAL_EDUCATION_DB: Record<string, EduConfig> = {
   HK: { name: '香港 (HK)', years: 4, tuition: 42100, living: 60000, salary: 19000, notes: '本地', paths: { academic: 'HKU/CUHK', vocational: 'IVE/THEi' } },
@@ -152,11 +157,10 @@ const FAMILY_INFO = {
   Jason: { age: 13, role: '兒子', educationStart: 2029 }
 };
 
-// 安全的格式化函數：防止 undefined 導致白屏
 const convertNumberToEnglish = (n: any) => (Number(n) || 0).toString(); 
 const formatCurrency = (val: any) => `$${(Number(val) || 0).toLocaleString()}`;
 
-// --- 4. 輔助組件 (StatCard) ---
+// --- 4. 輔助組件 ---
 const StatCard = ({ title, value, subtext, color, iconName }: any) => {
   const Icon = ICONS[iconName as keyof typeof ICONS] || ICONS.Tag;
   return (
@@ -171,21 +175,18 @@ const StatCard = ({ title, value, subtext, color, iconName }: any) => {
   );
 };
 
-// --- 5. 主應用程式 (Main App) ---
+// --- 5. 主應用程式 ---
 const App: React.FC = () => {
-  // 資料庫狀態
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [leases, setLeases] = useState<Lease[]>([]);
   const [eduDB, setEduDB] = useState<Record<string, EduConfig>>(INITIAL_EDUCATION_DB);
   const [dataLoaded, setDataLoaded] = useState(false);
 
-  // 介面狀態
   const [activeTab, setActiveTab] = useState('dashboard');
   const [propertyViewId, setPropertyViewId] = useState<string | null>(null);
   const [modalMode, setModalMode] = useState<'none' | 'transaction' | 'property' | 'doc'>('none');
 
-  // 表單與文件設定
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [editingProp, setEditingProp] = useState<Property | null>(null);
   const [docConfig, setDocConfig] = useState<DocConfig>({ 
@@ -196,14 +197,15 @@ const App: React.FC = () => {
   
   const [reportMode, setReportMode] = useState(false);
 
-  // Filters
   const [ledgerFilter, setLedgerFilter] = useState('');
   const [filterYear, setFilterYear] = useState('All');
   const [filterMember, setFilterMember] = useState('All');
   const [filterCategory, setFilterCategory] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
+  const [eduRegionV, setEduRegionV] = useState('UK');
+  const [eduRegionJ, setEduRegionJ] = useState('AUS');
+  const [childType, setChildType] = useState('Vocational');
 
-  // 載入資料 (Firebase Listeners)
   useEffect(() => {
     const qTx = query(collection(db, "transactions"), orderBy("date", "desc"));
     const unsubTx = onSnapshot(qTx, s => 
@@ -215,7 +217,6 @@ const App: React.FC = () => {
     const unsubLease = onSnapshot(collection(db, "leases"), s => 
         setLeases(s.docs.map(d => ({id: d.id, ...d.data()} as Lease))));
     
-    // 使用 onSnapshot 讀取但忽略參數，避免 TS6133 錯誤
     const unsubEdu = onSnapshot(doc(db, "settings", "education"), (docSnap) => {
       if (docSnap.exists()) {
         setEduDB(docSnap.data() as Record<string, EduConfig>);
@@ -228,7 +229,6 @@ const App: React.FC = () => {
     return () => { unsubTx(); unsubProp(); unsubLease(); unsubEdu(); };
   }, []);
 
-  // --- 計算屬性 (Derived Stats) ---
   const propStats = useMemo(() => {
     return properties.map(p => {
         const pTxs = transactions.filter(t => t.propertyId === p.id);
@@ -246,23 +246,63 @@ const App: React.FC = () => {
                 if (daysSince > 35) isLate = true;
             }
         }
-        return { ...p, income, expense, net: income - expense, activeLease, isLate } as PropertyWithStats;
+        // 計算 estRent (如果沒有租約，使用市場預估，否則使用實際租金)
+        const estRent = activeLease ? activeLease.monthlyRent : (p.estRent || 0);
+
+        return { ...p, income, expense, net: income - expense, activeLease, isLate, estRent } as PropertyWithStats;
     });
   }, [properties, transactions, leases]);
 
   const totalValuation = properties.reduce((sum, p) => sum + (p.currentValue || 0), 0);
   const totalMonthlyRent = leases.filter(l => l.status === 'Active').reduce((sum, l) => sum + (l.monthlyRent || 0), 0);
 
-  // --- 操作函數 (Actions) ---
-  const initializeDefaults = async () => {
-    if(!window.confirm("初始化預設物業？")) return;
-    const batch = writeBatch(db);
-    INITIAL_PROPERTIES_DATA.forEach(p => {
-        const ref = doc(collection(db, "properties"));
-        batch.set(ref, p);
+  const stats = useMemo(() => {
+    let filtered = transactions;
+    if(filterYear !== 'All') filtered = filtered.filter(d => d.year === parseInt(filterYear));
+    if(filterMember !== 'All') filtered = filtered.filter(d => d.member === filterMember);
+    if(filterCategory !== 'All') filtered = filtered.filter(d => d.category === filterCategory);
+    if(searchTerm) filtered = filtered.filter(d => d.merchant.toLowerCase().includes(searchTerm.toLowerCase()));
+    
+    const total = filtered.reduce((a,b) => a + b.amount, 0);
+    const byYear: Record<string, number> = {}; 
+    const byCat: Record<string, number> = {}; 
+    const insuranceByMember: Record<string, any[]> = {};
+
+    filtered.forEach(d => {
+        if(!byYear[d.year]) byYear[d.year] = 0; byYear[d.year] += d.amount;
+        const cat = d.category || 'Other'; if(!byCat[cat]) byCat[cat] = 0; byCat[cat] += d.amount;
+        if (cat.includes('Insurance')) {
+            let memberKey = d.member === 'Family (公用)' ? 'Charles' : d.member;
+            if(!insuranceByMember[memberKey]) insuranceByMember[memberKey] = [];
+            insuranceByMember[memberKey].push({ name: d.merchant, totalPaid: d.amount, note: d.note || '' });
+        }
     });
-    await batch.commit();
-  };
+    
+    return { 
+        total, 
+        count: filtered.length, 
+        byYear: Object.entries(byYear).map(([k,v])=>({year:k, amount:v})).sort((a:any,b:any)=>Number(a.year)-Number(b.year)), 
+        byCat: Object.entries(byCat).map(([k,v])=>({name:k, value:v})).sort((a:any,b:any)=>b.value-a.value), 
+        insuranceByMember
+    };
+  }, [transactions, filterYear, filterMember, filterCategory, searchTerm]);
+
+  const eduForecast = useMemo(() => {
+    const db = eduDB || INITIAL_EDUCATION_DB;
+    const regV = db[eduRegionV] || INITIAL_EDUCATION_DB.UK; 
+    const regJ = db[eduRegionJ] || INITIAL_EDUCATION_DB.AUS;
+    const currentYear = new Date().getFullYear(); const forecast = []; let totalNeeded = 0;
+    for(let i=0; i<12; i++) {
+        const year = currentYear + i; let vCost = 0; let jCost = 0;
+        const vYears = childType === 'Vocational' && eduRegionV === 'CAN' ? 2 : regV.years; const jYears = childType === 'Vocational' && eduRegionJ === 'CAN' ? 2 : regJ.years;
+        const vTuition = childType === 'Vocational' ? Number(regV.tuition) * 0.7 : Number(regV.tuition); const jTuition = childType === 'Vocational' ? Number(regJ.tuition) * 0.7 : Number(regJ.tuition);
+        const vLiving = Number(regV.living); const jLiving = Number(regJ.living);
+        if(year >= FAMILY_INFO.Virginia.educationStart && year < FAMILY_INFO.Virginia.educationStart + vYears) { vCost = (vTuition + vLiving) * Math.pow(1 + 0.03, i); }
+        if(year >= FAMILY_INFO.Jason.educationStart && year < FAMILY_INFO.Jason.educationStart + jYears) { jCost = (jTuition + jLiving) * Math.pow(1 + 0.03, i); }
+        totalNeeded += (vCost + jCost); forecast.push({ year, vCost: Math.round(vCost), jCost: Math.round(jCost), total: Math.round(vCost+jCost) });
+    }
+    return { data: forecast, totalNeeded: Math.round(totalNeeded) };
+  }, [eduRegionV, eduRegionJ, childType, eduDB, eduRegionV, eduRegionJ]);
 
   const handleSaveTransaction = async () => {
       if(!editingTx) return;
@@ -283,7 +323,10 @@ const App: React.FC = () => {
             purchasePrice: Number(editingProp.purchasePrice),
             mortgageAmount: Number(editingProp.mortgageAmount),
             estRent: Number(editingProp.estRent),
-            tenure: Number(editingProp.tenure)
+            tenure: Number(editingProp.tenure),
+            managementFee: Number(editingProp.managementFee),
+            govtRates: Number(editingProp.govtRates),
+            govtRent: Number(editingProp.govtRent)
         };
         if(editingProp.id) await setDoc(doc(db, "properties", editingProp.id), pData);
         else await addDoc(collection(db, "properties"), pData);
@@ -323,8 +366,12 @@ const App: React.FC = () => {
       }
   };
 
-  // --- 視圖組件 (Views) ---
+  const updateEduDB = async (newConfig: Record<string, EduConfig>) => {
+      setEduDB(newConfig); 
+      await setDoc(doc(db, "settings", "education"), newConfig);
+  };
 
+  // --- Views ---
   const PropertyDashboard = () => (
       <div className="space-y-8 animate-in fade-in">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -354,11 +401,7 @@ const App: React.FC = () => {
                   </div>
               ))}
               
-              {properties.length === 0 ? (
-                  <button onClick={initializeDefaults} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-blue-300 bg-blue-50 rounded-xl hover:bg-blue-100 transition text-blue-500"><ICONS.Plus /><span className="mt-2 font-bold">初始化預設物業</span></button>
-              ) : (
-                  <button onClick={() => { setEditingProp({ id: '', name: '', address: '', type: 'Investment', status: 'Vacant', currentValue: 0, purchasePrice: 0, mortgageAmount: 0, outstandingLoan: 0, managementFee: 0, govtRates: 0, govtRent: 0, estRent: 0, tenure: 0 }); setModalMode('property'); }} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-xl hover:bg-slate-50 transition text-slate-400 hover:text-slate-600"><ICONS.Plus /><span className="mt-2 font-bold">新增物業 Add Property</span></button>
-              )}
+               <button onClick={() => { setEditingProp({ id: '', name: '', address: '', type: 'Investment', status: 'Vacant', currentValue: 0, purchasePrice: 0, mortgageAmount: 0, outstandingLoan: 0, managementFee: 0, govtRates: 0, govtRent: 0, estRent: 0, tenure: 0 }); setModalMode('property'); }} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-xl hover:bg-slate-50 transition text-slate-400 hover:text-slate-600"><ICONS.Plus /><span className="mt-2 font-bold">新增物業 Add Property</span></button>
           </div>
       </div>
   );
@@ -403,6 +446,14 @@ const App: React.FC = () => {
                             <div><p className="text-slate-500">現估值 Value</p><p className="font-mono font-bold text-blue-600">{formatCurrency(p.currentValue)}</p></div>
                             <div><p className="text-slate-500">尚餘按揭 Loan</p><p className="font-mono">{formatCurrency(p.outstandingLoan)}</p></div>
                             <div><p className="text-slate-500">月供款 Mortgage</p><p className="font-mono text-red-500">-{formatCurrency(p.mortgageAmount)}</p></div>
+                        </div>
+                    </div>
+                    <div className="bg-white p-6 rounded-xl border space-y-4">
+                        <h3 className="font-bold border-b pb-2">收支紀錄 Expenses</h3>
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div><p className="text-slate-500">管理費 Mgt</p><p className="font-mono">{formatCurrency(p.managementFee)}/mo</p></div>
+                            <div><p className="text-slate-500">差餉 Rates</p><p className="font-mono">{formatCurrency(p.govtRates)}/qtr</p></div>
+                            <div><p className="text-slate-500">地租 Govt Rent</p><p className="font-mono">{formatCurrency(p.govtRent)}/qtr</p></div>
                         </div>
                     </div>
                 </div>
@@ -712,7 +763,26 @@ const App: React.FC = () => {
                   </div>
               )}
               
-              {activeTab === 'insurance' && <div className="bg-white p-10 rounded-xl shadow"><h3>保險庫功能開發中...</h3></div>}
+              {activeTab === 'insurance' && (
+                  <div className="space-y-6 animate-in fade-in">
+                      <div className="bg-indigo-50 p-6 rounded-xl border border-indigo-100 text-indigo-900 text-sm"><h3 className="font-bold text-lg mb-2 flex items-center gap-2"><ICONS.ShieldCheck /> 保險 AI 深度透視</h3>系統已自動分析您導入的 <code>payment_data.json</code> 中的 CSV 備註欄位。</div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          {Object.entries(stats.insuranceByMember).map(([member, policies]) => (
+                              <div key={member} className="bg-white border rounded-xl overflow-hidden shadow-sm">
+                                  <div className="bg-slate-50 px-4 py-3 border-b font-bold text-slate-700 flex justify-between"><span>{member}</span><span className="text-xs font-normal bg-white px-2 py-1 rounded border">總投入: ${(policies.reduce((a,b)=>a+b.totalPaid,0)/1000000).toFixed(2)}M</span></div>
+                                  <div className="overflow-x-auto">
+                                      <table className="w-full text-xs">
+                                          <thead><tr className="text-slate-400 bg-slate-50/50"><th className="p-2 text-left">計劃名稱</th><th className="p-2 text-right">已繳總額</th><th className="p-2 text-left">備註</th></tr></thead>
+                                          <tbody>{policies.map((p, idx) => (
+                                              <tr key={idx} className="border-t hover:bg-slate-50"><td className="p-2 font-medium text-slate-700">{p.name}</td><td className="p-2 text-right font-mono text-emerald-600">${p.totalPaid.toLocaleString()}</td><td className="p-2 text-slate-500 truncate max-w-xs text-[10px]">{p.note}</td></tr>
+                                          ))}</tbody>
+                                      </table>
+                                  </div>
+                              </div>
+                          ))}
+                      </div>
+                  </div>
+              )}
               
               {activeTab === 'education' && (
                    <div className="space-y-6 animate-in fade-in">
@@ -727,6 +797,22 @@ const App: React.FC = () => {
                               <p>目標: {eduDB['AUS'].name}</p>
                               <p>預算: {formatCurrency(eduDB['AUS'].tuition + eduDB['AUS'].living)} / year</p>
                           </div>
+                      </div>
+                      <div className="bg-slate-100 p-4 rounded-xl">
+                          <h4 className="font-bold text-slate-700 mb-2 text-sm flex items-center gap-2"><ICONS.Edit2 /> 調整預算參數 (AI Research 基準)</h4>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                              {Object.keys(eduDB).map(region => (
+                                  <div key={region} className="bg-white p-3 rounded border">
+                                      <div className="font-bold mb-1">{eduDB[region].name}</div>
+                                      <div className="flex justify-between items-center mb-1"><span>學費/年:</span><input type="number" value={eduDB[region].tuition} onChange={(e)=>updateEduDB({...eduDB, [region]: {...eduDB[region], tuition: Number(e.target.value)}})} className="w-16 border rounded px-1 text-right"/></div>
+                                      <div className="flex justify-between items-center"><span>生活費/年:</span><input type="number" value={eduDB[region].living} onChange={(e)=>updateEduDB({...eduDB, [region]: {...eduDB[region], living: Number(e.target.value)}})} className="w-16 border rounded px-1 text-right"/></div>
+                                  </div>
+                              ))}
+                          </div>
+                      </div>
+                      <div className="bg-white p-6 rounded-xl border shadow-sm h-80">
+                          <h3 className="font-bold text-slate-700 mb-4">未來 10 年資金需求預測</h3>
+                          <ResponsiveContainer><BarChart data={eduForecast.data}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="year" /><YAxis tickFormatter={v=>`${v/1000}k`}/><Tooltip formatter={v=>`$${v.toLocaleString()}`} /><Legend /><Bar dataKey="vCost" name="Virginia" stackId="a" fill="#EC4899" /><Bar dataKey="jCost" name="Jason" stackId="a" fill="#3B82F6" /></BarChart></ResponsiveContainer>
                       </div>
                    </div>
               )}
@@ -765,6 +851,14 @@ const App: React.FC = () => {
                           <div className="grid grid-cols-2 gap-2">
                                <input className="border p-2" type="number" placeholder="Value" value={editingProp?.currentValue} onChange={e => setEditingProp({...editingProp, currentValue: Number(e.target.value)} as any)} />
                                <input className="border p-2" type="number" placeholder="Rent Est." value={editingProp?.estRent} onChange={e => setEditingProp({...editingProp, estRent: Number(e.target.value)} as any)} />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-500">Expenses</label>
+                            <div className="grid grid-cols-3 gap-2">
+                              <input className="border p-1 text-sm" placeholder="Mgt Fee" value={editingProp?.managementFee} onChange={e=>setEditingProp({...editingProp, managementFee: Number(e.target.value)} as any)} />
+                              <input className="border p-1 text-sm" placeholder="Rates" value={editingProp?.govtRates} onChange={e=>setEditingProp({...editingProp, govtRates: Number(e.target.value)} as any)} />
+                              <input className="border p-1 text-sm" placeholder="Govt Rent" value={editingProp?.govtRent} onChange={e=>setEditingProp({...editingProp, govtRent: Number(e.target.value)} as any)} />
+                            </div>
                           </div>
                       </div>
                       <div className="flex gap-2 mt-6">

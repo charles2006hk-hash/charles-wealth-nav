@@ -203,6 +203,7 @@ const App: React.FC = () => {
   
   const [reportMode, setReportMode] = useState(false);
 
+  // Filters & Parameters
   const [ledgerFilter, setLedgerFilter] = useState('');
   const [filterYear, setFilterYear] = useState('All');
   const [filterMember, setFilterMember] = useState('All');

@@ -1,18 +1,16 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
-  Tooltip, Legend, ResponsiveContainer 
+  Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell 
 } from 'recharts';
-
-// --- Firebase Imports ---
 import { initializeApp } from "firebase/app";
 import { 
   getFirestore, collection, doc, addDoc, setDoc, deleteDoc, updateDoc, 
   onSnapshot, query, orderBy, writeBatch,
-  QuerySnapshot, DocumentData, DocumentSnapshot
+  QuerySnapshot, DocumentData, DocumentSnapshot, where
 } from "firebase/firestore";
 
-// --- Firebase Configuration ---
+// --- 1. Firebase 設定 (請確保這些設定正確) ---
 const firebaseConfig = {
   apiKey: "AIzaSyAeP-GggvT31EUY4TXEnX3GYVD8bcs8NJg",
   authDomain: "charles-wealth-nav.firebaseapp.com",
@@ -23,11 +21,10 @@ const firebaseConfig = {
   measurementId: "G-82MQGSGT3B"
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// --- Types ---
+// --- 2. 類型定義 (Types) ---
 interface Transaction {
   id: string; 
   date: string;
@@ -38,57 +35,42 @@ interface Transaction {
   note: string;
   year: number;
   month: number;
-  property?: string;
+  propertyId?: string; // 連結物業 ID
+  tags?: string[]; // 標籤 e.g. #repair
+  isVerified?: boolean; // 對數確認
+}
+
+interface Lease {
+  id: string;
+  propertyId: string;
+  tenantName: string;
+  tenantID: string; // HKID
+  startDate: string;
+  endDate: string;
+  monthlyRent: number;
+  deposit: number;
+  status: 'Active' | 'Terminated';
+  rentFreeStart?: string;
+  rentFreeEnd?: string;
 }
 
 interface Property {
   id: string;
   name: string;
-  address?: string; 
+  address: string;
   type: 'Investment' | 'Self-use';
+  status: 'Occupied' | 'Vacant' | 'Renovation';
   
-  value: number; 
-  estRent: number; 
-  mortgage: number; 
-  tenure: number; 
+  // 財務數據
+  currentValue: number; // 估值
+  purchasePrice: number; // 買入價
+  mortgageAmount: number; // 月供
+  outstandingLoan: number; // 尚餘貸款
   
-  purchaseInfo?: {
-      price: number;
-      date: string;
-      isNewBuild: boolean; 
-      stampDuty: number;
-      agentFee: number;
-  };
-  mortgageInfo?: {
-      bank: string;
-      principal: number; 
-      interestRate: number; 
-      totalYears: number; 
-      startDate: string;
-      isRefinanced: boolean; 
-      refinanceDate?: string;
-      notes?: string; 
-  };
-
-  expenses?: {
-      managementFee: number; 
-      govtRates: number; 
-      govtRent: number; 
-      utilities?: number; 
-  };
-
-  rentalInfo?: {
-      status: 'Occupied' | 'Vacant'; 
-      tenantName: string;
-      tenantID: string;
-      leaseStart: string;
-      leaseEnd: string;
-      monthlyRent: number;
-      deposit: number;
-      rentFreePeriodStart?: string;
-      rentFreePeriodEnd?: string;
-      vacancyLog?: string; 
-  };
+  // 支出設定
+  managementFee: number;
+  govtRates: number;
+  govtRent: number;
 }
 
 interface EduConfig {
@@ -102,11 +84,11 @@ interface EduConfig {
 }
 
 interface DocConfig {
-  type: 'receipt' | 'lease';
+  type: 'receipt' | 'lease' | 'statement';
   propId: string;
   tenant: string;
   tenantID?: string; 
-  period: string;
+  period: string; // e.g. "1 Jan 2026 to 31 Jan 2026"
   amount: number;
   deposit: number;
   startDate: string;
@@ -114,1205 +96,614 @@ interface DocConfig {
   landlord: string;
   landlordID?: string; 
   paymentMethod: 'Cash' | 'Cheque' | 'Bank Transfer';
+  statementDateStart?: string;
+  statementDateEnd?: string;
 }
 
-interface InsurancePolicy {
-    name: string;
-    totalPaid: number;
-    note: string;
-    lastPaid: string;
-    endYear: number | null;
-    rawMerchant: string;
-}
-
-// --- Icons ---
-const Icons = {
-  Tag: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/></svg>,
-  DollarSign: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
-  Activity: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>,
-  PieChart: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>,
+// --- 3. 常數與圖示 ---
+const ICONS = {
   Home: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
-  Shield: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
-  LayoutDashboard: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>,
-  Database: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>,
+  Dashboard: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>,
+  Data: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>,
+  Doc: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>,
   Printer: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>,
-  UploadCloud: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m16 16-4-4-4 4"/></svg>,
-  GraduationCap: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>,
-  ShieldCheck: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>,
-  Download: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>,
-  Trash: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>,
-  Book: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>,
-  Edit2: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>,
-  FilePen: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22h6a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v10"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10.4 12.6a2 2 0 1 1 3 3L8 21l-4 1 1-4Z"/></svg>,
-  FileText: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>,
   Plus: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>,
+  Search: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>,
+  Trash: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>,
+  Edit: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>,
 };
 
-// --- Constants ---
 const CATEGORIES = [
-  'Insurance (保險)', 'Management Fee (管理費)', 'Tax/Govt (稅項/差餉)', 
-  'Utilities (水電煤)', 'Credit Card (信用卡)', 'Mortgage (供樓/按揭)',
-  'Education (教育)', 'Transport (交通)', 'Telecom (電訊)', 
-  'Shopping (購物)', 'Dining (餐飲)', 'Medical (醫療)', 'General (其他)', 'Property Expense (物業支出)'
+  'Rental Income (租金收入)', 'Management Fee (管理費)', 'Govt Rates (差餉)', 'Govt Rent (地租)',
+  'Mortgage Payment (按揭供款)', 'Repair & Maint (維修)', 'Tax (稅項)', 
+  'Insurance (保險)', 'Utilities (水電煤)', 'Agent Fee (佣金)', 'Other (其他)',
+  'Credit Card', 'Education', 'Transport', 'Telecom', 'Shopping', 'Dining', 'Medical', 'General'
+];
+const MEMBERS = ['Charles', 'Carmen', 'Virginia', 'Jason', 'Family'];
+
+const INITIAL_PROPERTIES_DATA: Property[] = [
+    { id: 'p1', name: '京瑞二期 16E', address: '沙田安群街1號京瑞廣場二期16樓E室', type: 'Investment', status: 'Occupied', currentValue: 8000000, purchasePrice: 6000000, mortgageAmount: 15000, outstandingLoan: 3000000, managementFee: 1200, govtRates: 1500, govtRent: 900 },
+    { id: 'p2', name: '京瑞二期 16F', address: '沙田安群街1號京瑞廣場二期16樓F室', type: 'Investment', status: 'Occupied', currentValue: 8000000, purchasePrice: 6000000, mortgageAmount: 15000, outstandingLoan: 3000000, managementFee: 1200, govtRates: 1500, govtRent: 900 },
+    { id: 'p3', name: '帝欣苑 (Parc Versailles)', address: '大埔梅樹坑路8號帝欣苑', type: 'Investment', status: 'Occupied', currentValue: 12000000, purchasePrice: 9000000, mortgageAmount: 0, outstandingLoan: 0, managementFee: 2500, govtRates: 3000, govtRent: 1800 },
+    { id: 'p4', name: '太湖花園 (Serenity Park)', address: '大埔大逸街太湖花園', type: 'Investment', status: 'Occupied', currentValue: 6500000, purchasePrice: 4000000, mortgageAmount: 0, outstandingLoan: 0, managementFee: 1500, govtRates: 1200, govtRent: 700 },
+    { id: 'p5', name: '農圃道18號 (18 Farm Road)', address: '土瓜灣農圃道18號', type: 'Self-use', status: 'Occupied', currentValue: 15000000, purchasePrice: 13000000, mortgageAmount: 25000, outstandingLoan: 6000000, managementFee: 3000, govtRates: 4000, govtRent: 2400 },
 ];
 
-const MEMBERS = ['Charles', 'Carmen', 'Virginia', 'Jason', 'Family (公用)'];
+const convertNumberToEnglish = (n: number) => n.toString(); 
+const formatCurrency = (val: number) => `$${val.toLocaleString()}`;
 
-const INITIAL_EDUCATION_DB: Record<string, EduConfig> = {
-  HK: { 
-      name: '香港 (HK)', years: 4, tuition: 42100, living: 60000, salary: 19000, 
-      notes: '性價比最高，人脈在本地。',
-      paths: { academic: '傳統大學 (HKU, CUHK)...', vocational: '職訓局 (IVE/THEi)...' }
-  },
-  UK: { 
-      name: '英國 (UK)', years: 3, tuition: 200000, living: 150000, salary: 28000, 
-      notes: 'BNO 優勢，學制短。',
-      paths: { academic: 'Russell Group...', vocational: 'BTEC / Foundation...' }
-  },
-  AUS: { 
-      name: '澳洲 (AUS)', years: 3, tuition: 180000, living: 180000, salary: 32000, 
-      notes: '生活環境好，藍領薪水高。',
-      paths: { academic: '八大名校...', vocational: 'TAFE (技術學院)...' }
-  },
-  CAN: { 
-      name: '加拿大 (CAN)', years: 2, tuition: 150000, living: 120000, salary: 26000, 
-      notes: 'College 移民政策友善。',
-      paths: { academic: 'University...', vocational: 'College (學院)...' }
-  }
-};
-
-const INITIAL_PROPERTIES: Property[] = [
-    { id: 'p1', name: '京瑞二期 16E', type: 'Investment', estRent: 25000, value: 8000000, mortgage: 15000, tenure: 15 },
-    { id: 'p2', name: '京瑞二期 16F', type: 'Investment', estRent: 25000, value: 8000000, mortgage: 15000, tenure: 15 },
-    { id: 'p3', name: '帝欣苑 (Parc Versailles)', type: 'Investment', estRent: 38000, value: 12000000, mortgage: 0, tenure: 0 },
-    { id: 'p4', name: '太湖花園 (Serenity Park)', type: 'Investment', estRent: 18000, value: 6500000, mortgage: 0, tenure: 0 },
-    { id: 'p5', name: '農圃道18號 (18 Farm Road)', type: 'Self-use', estRent: 0, value: 15000000, mortgage: 25000, tenure: 10 },
-    { id: 'p6', name: '富善花園', type: 'Investment', estRent: 13000, value: 5000000, mortgage: 0, tenure: 0 },
-    { id: 'p7', name: '譚公道', type: 'Investment', estRent: 11000, value: 4000000, mortgage: 0, tenure: 0 },
-    { id: 'p8', name: '嘉熙 (Solaria)', type: 'Investment', estRent: 16000, value: 7000000, mortgage: 18000, tenure: 20 },
-    { id: 'p9', name: '鳳園 (Fung Yuen)', type: 'Investment', estRent: 14000, value: 6000000, mortgage: 12000, tenure: 18 },
-    { id: 'p10', name: '大埔中心 (Tai Wo Centre)', type: 'Investment', estRent: 15000, value: 5500000, mortgage: 0, tenure: 0 }
-];
-
-const FAMILY_INFO = {
-  Virginia: { age: 16, role: '女兒', educationStart: 2026 },
-  Jason: { age: 13, role: '兒子', educationStart: 2029 }
-};
-
-// --- Helper Functions ---
-const convertNumberToEnglish = (n: number) => {
-    // 簡單數字轉文字，正式環境可使用 'number-to-words' 套件
-    return n.toLocaleString(); 
-}
-
-const StatCard = ({ title, value, subtext, color, iconName }: { title: string, value: string, subtext?: string, color: string, iconName: keyof typeof Icons }) => {
-  const IconComp = Icons[iconName] || Icons.Tag;
+// --- 4. 輔助組件 (StatCard) ---
+const StatCard = ({ title, value, subtext, color, iconName }: any) => {
+  const Icon = ICONS[iconName as keyof typeof ICONS] || ICONS.Tag;
   return (
-      <div className={`bg-white p-5 rounded-xl shadow-sm border border-slate-100 flex flex-col justify-between h-full`}>
-          <div className="flex justify-between items-start mb-2">
-              <div className={`p-2 rounded-lg bg-${color}-50 text-${color}-600`}>
-                  <IconComp />
-              </div>
-              {subtext && <span className={`text-xs px-2 py-1 rounded-full bg-${color}-50 text-${color}-600 font-medium`}>{subtext}</span>}
-          </div>
-          <div>
-              <p className="text-slate-500 text-sm font-medium">{title}</p>
-              <h3 className="text-2xl font-bold text-slate-800">{value}</h3>
-          </div>
+    <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 h-full">
+      <div className="flex justify-between items-start mb-2">
+        <div className={`p-2 rounded-lg bg-${color}-50 text-${color}-600`}><Icon /></div>
+        {subtext && <span className={`text-xs px-2 py-1 rounded-full bg-${color}-50 text-${color}-600`}>{subtext}</span>}
       </div>
+      <p className="text-slate-500 text-sm font-medium">{title}</p>
+      <h3 className="text-2xl font-bold text-slate-800">{value}</h3>
+    </div>
   );
 };
 
-// --- Main App Component ---
+// --- 5. 主應用程式 (Main App) ---
 const App: React.FC = () => {
-  const [data, setData] = useState<Transaction[]>([]);
+  // 資料庫狀態
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
-  const [eduDB, setEduDB] = useState<Record<string, EduConfig>>(INITIAL_EDUCATION_DB);
-  const [dataLoaded, setDataLoaded] = useState(false);
+  const [leases, setLeases] = useState<Lease[]>([]);
+  const [loading, setLoading] = useState(true);
 
+  // 介面狀態
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [editingTx, setEditingTx] = useState<string | null>(null);
-  const [reportMode, setReportMode] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [propertyViewId, setPropertyViewId] = useState<string | null>(null); // 若有值，代表正在看該物業詳情
+  const [modalMode, setModalMode] = useState<'none' | 'transaction' | 'property' | 'doc'>('none');
 
-  const [isPropModalOpen, setPropModalOpen] = useState(false);
-  const [editingProp, setEditingProp] = useState<Property>({ id: '', name: '', type: 'Investment', estRent: 0, value: 0, mortgage: 0, tenure: 0 });
-  const [propTab, setPropTab] = useState<'basic' | 'finance' | 'expenses' | 'rental'>('basic'); 
-
-  const [isEntryModalOpen, setEntryModalOpen] = useState(false);
-  const [newTx, setNewTx] = useState({ date: new Date().toISOString().split('T')[0], merchant: '', amount: '', category: 'General (其他)', member: 'Family (公用)', note: '' });
-
-  const [isDocModalOpen, setDocModalOpen] = useState(false);
+  // 表單與文件設定
+  const [editingTx, setEditingTx] = useState<Transaction | null>(null);
+  const [editingProp, setEditingProp] = useState<Property | null>(null);
   const [docConfig, setDocConfig] = useState<DocConfig>({ 
-      type: 'receipt', 
-      propId: '', 
-      tenant: '', 
-      tenantID: '',
-      period: '', 
-      amount: 0, 
-      deposit: 0, 
-      startDate: '', 
-      endDate: '', 
-      landlord: 'Charles Lam',
-      landlordID: '',
-      paymentMethod: 'Cash'
+      type: 'receipt', propId: '', tenant: '', period: '', amount: 0, 
+      deposit: 0, startDate: '', endDate: '', landlord: 'Charles Lam', 
+      paymentMethod: 'Cash', statementDateStart: '', statementDateEnd: '' 
   });
 
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterYear, setFilterYear] = useState('All');
-  const [filterCategory, setFilterCategory] = useState('All');
-  const [filterMember, setFilterMember] = useState('All');
-
-  const [eduRegionV, setEduRegionV] = useState('UK');
-  const [eduRegionJ, setEduRegionJ] = useState('AUS');
-  const [childType, setChildType] = useState('Vocational');
-  const [stressRate, setStressRate] = useState(0);
-  const [rentDrop, setRentDrop] = useState(0);
-
+  // 載入資料 (Firebase Listeners)
   useEffect(() => {
-    const q = query(collection(db, "transactions"), orderBy("date", "desc"));
-    const unsubTx = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
-      const txs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
-      setData(txs);
-      setDataLoaded(true);
-    });
-
-    const unsubProp = onSnapshot(collection(db, "properties"), (snapshot: QuerySnapshot<DocumentData>) => {
-      const props = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Property));
-      setProperties(props);
-    });
-
-    const unsubEdu = onSnapshot(doc(db, "settings", "education"), (docSnap: DocumentSnapshot<DocumentData>) => {
-      if (docSnap.exists()) {
-        setEduDB(docSnap.data() as Record<string, EduConfig>);
-      } else {
-        setDoc(doc(db, "settings", "education"), INITIAL_EDUCATION_DB);
-      }
-    });
-
-    return () => {
-      unsubTx();
-      unsubProp();
-      unsubEdu();
-    };
+    const unsubTx = onSnapshot(collection(db, "transactions"), s => 
+        setTransactions(s.docs.map(d => ({id: d.id, ...d.data()} as Transaction))));
+    const unsubProp = onSnapshot(collection(db, "properties"), s => 
+        setProperties(s.docs.map(d => ({id: d.id, ...d.data()} as Property))));
+    const unsubLease = onSnapshot(collection(db, "leases"), s => 
+        setLeases(s.docs.map(d => ({id: d.id, ...d.data()} as Lease))));
+    
+    setLoading(false);
+    return () => { unsubTx(); unsubProp(); unsubLease(); };
   }, []);
 
-  const initializeDefaults = async () => {
-      if(!window.confirm("確定初始化預設物業資料？")) return;
-      setIsProcessing(true);
-      const batch = writeBatch(db);
-      INITIAL_PROPERTIES.forEach(p => {
-          batch.set(doc(db, "properties", p.id), p);
-      });
-      await batch.commit();
-      setIsProcessing(false);
-  };
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    if(!window.confirm("確定要將此 JSON 檔案的內容匯入到 Firebase 資料庫嗎？這將會新增大量記錄。")) return;
-
-    setIsProcessing(true);
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-        try {
-            const result = ev.target?.result;
-            if (typeof result !== 'string') return;
-            const json = JSON.parse(result);
-            const list = Array.isArray(json) ? json : (json.data || []);
-            
-            const batchSize = 450;
-            let chunks = [];
-            for (let i = 0; i < list.length; i += batchSize) {
-                chunks.push(list.slice(i, i + batchSize));
+  // --- 計算屬性 (Derived Stats) ---
+  const propStats = useMemo(() => {
+    return properties.map(p => {
+        const pTxs = transactions.filter(t => t.propertyId === p.id);
+        const income = pTxs.filter(t => t.category.includes('Income')).reduce((sum, t) => sum + t.amount, 0);
+        const expense = pTxs.filter(t => !t.category.includes('Income')).reduce((sum, t) => sum + t.amount, 0);
+        const activeLease = leases.find(l => l.propertyId === p.id && l.status === 'Active');
+        
+        // 判斷是否欠租 (超過 35 天未有 Rental Income)
+        let isLate = false;
+        if (activeLease && p.status === 'Occupied') {
+            const lastRentTx = pTxs
+                .filter(t => t.category.includes('Rental Income'))
+                .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+            if (lastRentTx) {
+                const daysSince = (new Date().getTime() - new Date(lastRentTx.date).getTime()) / (1000 * 3600 * 24);
+                if (daysSince > 35) isLate = true;
+            } else {
+                // 有租約但從未收租 (新租約)
+                isLate = false; 
             }
-
-            let count = 0;
-            for (const chunk of chunks) {
-                const batch = writeBatch(db);
-                chunk.forEach((item: any) => {
-                    const docRef = doc(collection(db, "transactions"));
-                    const txData = {
-                        date: item.date,
-                        merchant: item.merchant,
-                        amount: Number(item.amount),
-                        category: item.category || 'General (其他)',
-                        member: item.member || 'Family (公用)',
-                        note: item.note || '',
-                        year: new Date(item.date).getFullYear(),
-                        month: new Date(item.date).getMonth() + 1,
-                        property: item.property || null
-                    };
-                    batch.set(docRef, txData);
-                });
-                await batch.commit();
-                count += chunk.length;
-                console.log(`Uploaded ${count} records...`);
-            }
-            alert(`成功匯入 ${count} 筆記錄到雲端！`);
-        } catch (err) { 
-            console.error(err);
-            alert("匯入失敗: " + err); 
-        } finally { 
-            setIsProcessing(false); 
         }
-    };
-    reader.readAsText(file);
+        return { ...p, income, expense, net: income - expense, activeLease, isLate };
+    });
+  }, [properties, transactions, leases]);
+
+  const totalValuation = properties.reduce((sum, p) => sum + (p.currentValue || 0), 0);
+  const totalMonthlyRent = leases.filter(l => l.status === 'Active').reduce((sum, l) => sum + (l.monthlyRent || 0), 0);
+
+  // --- 操作函數 (Actions) ---
+  const initializeDefaults = async () => {
+    if(!window.confirm("初始化預設物業？")) return;
+    const batch = writeBatch(db);
+    INITIAL_PROPERTIES_DATA.forEach(p => {
+        const ref = doc(collection(db, "properties"));
+        batch.set(ref, p);
+    });
+    await batch.commit();
   };
 
-  const clearData = async () => {
-      if(window.confirm('危險：確定清除雲端所有交易記錄？此操作無法復原。')) {
-          setIsProcessing(true);
-          alert("為防止誤刪，請聯絡管理員進行批量刪除，或手動刪除特定項目。");
-          setIsProcessing(false);
-      }
-  };
-
-  const updateCategory = async (id: string, newCat: string, _merchant: string, applyToAll: boolean) => {
+  const handleSaveTransaction = async () => {
+      if(!editingTx) return;
       try {
-          const txRef = doc(db, "transactions", id);
-          await updateDoc(txRef, { category: newCat });
-
-          if (applyToAll) {
-              alert("批量更新功能在雲端模式下暫時停用，以節省寫入配額。");
-          }
-      } catch (e) {
-          console.error("Update failed", e);
-      }
-      setEditingTx(null);
+        const txData = { ...editingTx, amount: Number(editingTx.amount), year: new Date(editingTx.date).getFullYear(), month: new Date(editingTx.date).getMonth() + 1 };
+        if(editingTx.id) await setDoc(doc(db, "transactions", editingTx.id), txData);
+        else await addDoc(collection(db, "transactions"), txData);
+        setModalMode('none');
+      } catch(e) { alert(e); }
   };
 
   const handleSaveProperty = async () => {
-      const p = { ...editingProp };
-      p.value = Number(p.value);
-      p.estRent = Number(p.estRent);
-      p.mortgage = Number(p.mortgage);
-      p.tenure = Number(p.tenure);
-      
+      if(!editingProp) return;
       try {
-          if (p.id) {
-            await setDoc(doc(db, "properties", p.id), p);
-          } else {
-            await addDoc(collection(db, "properties"), p);
-          }
-          setPropModalOpen(false);
-      } catch(e) {
-          alert("儲存失敗: " + e);
-      }
-  };
-  
-  const handleDeleteProperty = async (id: string) => {
-      if(window.confirm('確定刪除此物業？')) {
-          await deleteDoc(doc(db, "properties", id));
-      }
+        const pData = { 
+            ...editingProp, 
+            currentValue: Number(editingProp.currentValue), 
+            purchasePrice: Number(editingProp.purchasePrice),
+            mortgageAmount: Number(editingProp.mortgageAmount)
+        };
+        if(editingProp.id) await setDoc(doc(db, "properties", editingProp.id), pData);
+        else await addDoc(collection(db, "properties"), pData);
+        setModalMode('none');
+      } catch(e) { alert(e); }
   };
 
-  const handleAddTx = async () => {
-      if(!newTx.amount || !newTx.merchant) return alert("請填寫金額和商戶");
-      try {
-          await addDoc(collection(db, "transactions"), {
-              ...newTx,
-              amount: parseFloat(newTx.amount),
-              year: new Date(newTx.date).getFullYear(),
-              month: new Date(newTx.date).getMonth() + 1,
-              note: newTx.note || ''
-          });
-          setEntryModalOpen(false);
-          setNewTx({ date: new Date().toISOString().split('T')[0], merchant: '', amount: '', category: 'General (其他)', member: 'Family (公用)', note: '' });
-      } catch (e) {
-          alert("新增失敗: " + e);
-      }
+  const deleteItem = async (col: string, id: string) => {
+      if(window.confirm('確定刪除?')) await deleteDoc(doc(db, col, id));
   };
 
-  const deleteTx = async (id: string) => {
-      if(window.confirm("確定刪除此記錄？")) {
-          await deleteDoc(doc(db, "transactions", id));
-      }
+  const handlePrint = () => window.print();
+
+  // --- 視圖組件 (Views) ---
+
+  // 1. 物業總覽 Dashboard (紅綠燈系統)
+  const PropertyDashboard = () => (
+      <div className="space-y-8 animate-in fade-in">
+          {/* Summary Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <StatCard title="物業總估值 Total Valuation" value={formatCurrency(totalValuation)} color="blue" iconName="Home" subtext={`${properties.length} Properties`} />
+              <StatCard title="每月租金收入 Monthly Rent" value={formatCurrency(totalMonthlyRent)} color="emerald" iconName="DollarSign" />
+              <StatCard title="整體出租率 Occupancy Rate" value={`${properties.length ? (properties.filter(p=>p.status==='Occupied').length / properties.length * 100).toFixed(0) : 0}%`} color="indigo" iconName="PieChart" />
+              <StatCard title="應收未收 Arrears" value={propStats.filter(p=>p.isLate).length} color="red" iconName="Shield" subtext="Units Late" />
+          </div>
+
+          {/* Property List with Status Indicators */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {propStats.map(p => (
+                  <div key={p.id} onClick={() => setPropertyViewId(p.id)} className="bg-white rounded-xl shadow-sm border hover:shadow-md transition cursor-pointer overflow-hidden group relative">
+                      {/* Status Bar */}
+                      <div className={`h-2 w-full ${p.status==='Occupied' ? (p.isLate ? 'bg-orange-500' : 'bg-emerald-500') : 'bg-red-500'}`} />
+                      
+                      <div className="p-5">
+                          <div className="flex justify-between items-start mb-2">
+                              <h3 className="font-bold text-lg text-slate-800 group-hover:text-blue-600 transition truncate">{p.name}</h3>
+                              <span className={`px-2 py-1 text-xs rounded-full font-bold whitespace-nowrap ${p.status==='Occupied' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                  {p.status === 'Occupied' ? (p.isLate ? '欠租 Arrears' : '出租 Occupied') : '空置 Vacant'}
+                              </span>
+                          </div>
+                          <p className="text-sm text-slate-500 mb-4 truncate">{p.address || 'No Address'}</p>
+                          
+                          <div className="grid grid-cols-2 gap-4 text-sm bg-slate-50 p-3 rounded-lg">
+                              <div>
+                                  <p className="text-xs text-slate-400">現時估值</p>
+                                  <p className="font-mono font-bold">{formatCurrency(p.currentValue)}</p>
+                              </div>
+                              <div>
+                                  <p className="text-xs text-slate-400">每月租金</p>
+                                  <p className="font-mono font-bold text-emerald-600">{p.activeLease ? formatCurrency(p.activeLease.monthlyRent) : '-'}</p>
+                              </div>
+                              <div>
+                                  <p className="text-xs text-slate-400">淨現金流 (Mo)</p>
+                                  <p className={`font-mono font-bold ${((p.activeLease?.monthlyRent || 0) - (p.mortgageAmount || 0) - (p.managementFee || 0)) > 0 ? 'text-blue-600' : 'text-red-500'}`}>
+                                      {formatCurrency((p.activeLease?.monthlyRent || 0) - (p.mortgageAmount || 0) - (p.managementFee || 0))}
+                                  </p>
+                              </div>
+                              <div>
+                                  <p className="text-xs text-slate-400">租約到期</p>
+                                  <p className="font-mono">{p.activeLease ? p.activeLease.endDate : '-'}</p>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+              ))}
+              
+              {/* Add New Property / Init Button */}
+              {properties.length === 0 ? (
+                  <button onClick={initializeDefaults} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-blue-300 bg-blue-50 rounded-xl hover:bg-blue-100 transition text-blue-500">
+                      <ICONS.Plus />
+                      <span className="mt-2 font-bold">初始化預設物業</span>
+                  </button>
+              ) : (
+                  <button onClick={() => { setEditingProp({ id: '', name: '', address: '', type: 'Investment', status: 'Vacant', currentValue: 0, purchasePrice: 0, mortgageAmount: 0, outstandingLoan: 0, managementFee: 0, govtRates: 0, govtRent: 0 }); setModalMode('property'); }} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-xl hover:bg-slate-50 transition text-slate-400 hover:text-slate-600">
+                      <ICONS.Plus />
+                      <span className="mt-2 font-bold">新增物業 Add Property</span>
+                  </button>
+              )}
+          </div>
+      </div>
+  );
+
+  // 2. 物業詳情頁 Property Detail (Ledger, Tenants, Overview)
+  const PropertyDetailView = ({ propId }: { propId: string }) => {
+    const p = propStats.find(x => x.id === propId);
+    if (!p) return <div>Property not found</div>;
+    
+    // Local State
+    const [viewTab, setViewTab] = useState<'overview'|'ledger'|'tenants'>('overview');
+    const [ledgerFilter, setLedgerFilter] = useState('');
+    
+    const pTransactions = transactions.filter(t => t.propertyId === propId).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const pLeases = leases.filter(l => l.propertyId === propId);
+    
+    return (
+        <div className="space-y-6 animate-in fade-in">
+            <button onClick={() => setPropertyViewId(null)} className="text-sm text-slate-500 hover:text-blue-600 flex items-center gap-1">← 返回總覽 Back to Dashboard</button>
+            
+            {/* Header */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex justify-between items-start">
+                <div>
+                    <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+                        {p.name} 
+                        <span className={`text-sm px-2 py-1 rounded-full font-normal ${p.status==='Occupied'?'bg-green-100 text-green-800':'bg-red-100 text-red-800'}`}>{p.status}</span>
+                    </h1>
+                    <p className="text-slate-500 mt-1">{p.address}</p>
+                </div>
+                <div className="flex gap-2">
+                    <button onClick={() => { 
+                        setDocConfig({ ...docConfig, propId: p.id, type: 'lease', amount: p.activeLease?.monthlyRent || 0, tenant: p.activeLease?.tenantName || '' }); 
+                        setModalMode('doc'); 
+                    }} className="px-3 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-bold hover:bg-indigo-100">建立租約</button>
+                     <button onClick={() => { 
+                        setDocConfig({ ...docConfig, propId: p.id, type: 'receipt', amount: p.activeLease?.monthlyRent || 0, tenant: p.activeLease?.tenantName || '' }); 
+                        setModalMode('doc'); 
+                    }} className="px-3 py-2 bg-emerald-50 text-emerald-700 rounded-lg text-sm font-bold hover:bg-emerald-100">開收據</button>
+                     <button onClick={() => { 
+                        setDocConfig({ ...docConfig, propId: p.id, type: 'statement', amount: 0, tenant: p.activeLease?.tenantName || '' }); 
+                        setModalMode('doc'); 
+                    }} className="px-3 py-2 bg-blue-50 text-blue-700 rounded-lg text-sm font-bold hover:bg-blue-100">租務對數</button>
+                    <button onClick={() => { setEditingProp(p); setModalMode('property'); }} className="p-2 bg-gray-100 rounded-lg hover:bg-gray-200"><ICONS.Edit /></button>
+                </div>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex gap-4 border-b border-slate-200">
+                {['overview', 'ledger', 'tenants'].map(t => (
+                    <button key={t} onClick={() => setViewTab(t as any)} className={`pb-2 px-1 text-sm font-bold capitalize ${viewTab === t ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500'}`}>{t}</button>
+                ))}
+            </div>
+
+            {/* Content: Overview */}
+            {viewTab === 'overview' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-white p-6 rounded-xl border space-y-4">
+                        <h3 className="font-bold border-b pb-2">財務摘要 Financials</h3>
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div><p className="text-slate-500">買入價 Purchase</p><p className="font-mono">{formatCurrency(p.purchasePrice)}</p></div>
+                            <div><p className="text-slate-500">現估值 Value</p><p className="font-mono font-bold text-blue-600">{formatCurrency(p.currentValue)}</p></div>
+                            <div><p className="text-slate-500">尚餘按揭 Loan</p><p className="font-mono">{formatCurrency(p.outstandingLoan)}</p></div>
+                            <div><p className="text-slate-500">月供款 Mortgage</p><p className="font-mono text-red-500">-{formatCurrency(p.mortgageAmount)}</p></div>
+                        </div>
+                    </div>
+                    <div className="bg-white p-6 rounded-xl border space-y-4">
+                        <h3 className="font-bold border-b pb-2">固定支出 Fixed Expenses</h3>
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div><p className="text-slate-500">管理費 Mgt Fee</p><p className="font-mono">-{formatCurrency(p.managementFee)} /mo</p></div>
+                            <div><p className="text-slate-500">差餉 Rates</p><p className="font-mono">-{formatCurrency(p.govtRates)} /qtr</p></div>
+                            <div><p className="text-slate-500">地租 Govt Rent</p><p className="font-mono">-{formatCurrency(p.govtRent)} /qtr</p></div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Content: Ledger (交易流水帳) */}
+            {viewTab === 'ledger' && (
+                <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+                    <div className="p-4 bg-slate-50 flex justify-between items-center border-b">
+                        <div className="flex gap-2">
+                            <input type="text" placeholder="Search..." className="border rounded px-2 py-1 text-sm" value={ledgerFilter} onChange={e => setLedgerFilter(e.target.value)} />
+                        </div>
+                        <button onClick={() => { setEditingTx({ propertyId: p.id, date: new Date().toISOString().split('T')[0] } as any); setModalMode('transaction'); }} className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 font-bold">+ 新增紀錄 Add Record</button>
+                    </div>
+                    <div className="max-h-[500px] overflow-y-auto">
+                        <table className="w-full text-sm text-left">
+                            <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0"><tr><th className="p-3">Date</th><th className="p-3">Category</th><th className="p-3">Detail</th><th className="p-3">Amount</th><th className="p-3">Tags</th><th className="p-3">Action</th></tr></thead>
+                            <tbody className="divide-y">
+                                {pTransactions.filter(t => JSON.stringify(t).toLowerCase().includes(ledgerFilter.toLowerCase())).map(t => (
+                                    <tr key={t.id} className="hover:bg-blue-50">
+                                        <td className="p-3">{t.date}</td>
+                                        <td className="p-3"><span className="px-2 py-1 bg-slate-100 rounded text-xs">{t.category}</span></td>
+                                        <td className="p-3 font-medium">{t.merchant} <span className="text-slate-400 text-xs">{t.note}</span></td>
+                                        <td className={`p-3 font-mono font-bold ${t.category.includes('Income') ? 'text-emerald-600' : 'text-red-500'}`}>{t.category.includes('Income') ? '+' : '-'}{formatCurrency(t.amount)}</td>
+                                        <td className="p-3 flex gap-1">{t.tags?.map(tag => <span key={tag} className="text-xs bg-yellow-100 text-yellow-800 px-1 rounded">#{tag}</span>)}</td>
+                                        <td className="p-3"><button onClick={() => deleteItem('transactions', t.id)} className="text-red-400 hover:text-red-600"><ICONS.Trash /></button></td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
+            {/* Content: Tenants (租客管理) */}
+            {viewTab === 'tenants' && (
+                <div className="space-y-4">
+                     <div className="flex justify-between items-center">
+                        <h3 className="font-bold">租約紀錄 Lease History</h3>
+                        <button onClick={()=>{
+                             const newLease: Lease = { id: '', propertyId: p.id, tenantName: '', tenantID: '', startDate: '', endDate: '', monthlyRent: p.estRent, deposit: 0, status: 'Active' };
+                             // 這裡簡化處理，實際應彈出 Modal 編輯
+                             alert('需新增 Lease Modal，目前請直接修改資料庫');
+                        }} className="text-sm text-blue-600 hover:underline">+ Register New Lease</button>
+                     </div>
+                     {pLeases.map(l => (
+                         <div key={l.id} className={`p-4 rounded-xl border ${l.status === 'Active' ? 'bg-green-50 border-green-200' : 'bg-gray-50'}`}>
+                             <div className="flex justify-between">
+                                 <div>
+                                     <p className="font-bold text-slate-800">{l.tenantName} <span className="text-xs font-normal text-slate-500">({l.tenantID})</span></p>
+                                     <p className="text-sm">{l.startDate} to {l.endDate}</p>
+                                 </div>
+                                 <div className="text-right">
+                                     <p className="font-bold font-mono">{formatCurrency(l.monthlyRent)}/mo</p>
+                                     {l.status === 'Active' && <span className="text-xs bg-green-200 text-green-800 px-2 py-0.5 rounded">Active</span>}
+                                 </div>
+                             </div>
+                         </div>
+                     ))}
+                </div>
+            )}
+        </div>
+    );
   };
 
-  const updateEduDB = async (newConfig: Record<string, EduConfig>) => {
-      setEduDB(newConfig); 
-      await setDoc(doc(db, "settings", "education"), newConfig);
+  // --- 文書彈窗 (Document Modal) ---
+  const DocModal = () => {
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
+            <div className="bg-white rounded-xl shadow-2xl p-6 w-[1200px] h-[95vh] flex flex-col">
+                <div className="flex justify-between items-center mb-4 border-b pb-2">
+                    <h3 className="text-xl font-bold flex items-center gap-2"><ICONS.FileText /> 文書生成器</h3>
+                    <button onClick={() => setModalMode('none')} className="text-slate-400 hover:text-slate-600">✕</button>
+                </div>
+                <div className="flex gap-6 flex-1 overflow-hidden">
+                    <div className="w-1/4 space-y-4 overflow-y-auto pr-2 border-r">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 mb-1">文件類型</label>
+                            <div className="flex rounded bg-slate-100 p-1">
+                                {['receipt', 'lease', 'statement'].map(t => (
+                                    <button key={t} onClick={() => setDocConfig({ ...docConfig, type: t as any })} className={`flex-1 text-xs py-1 rounded capitalize ${docConfig.type === t ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}>{t}</button>
+                                ))}
+                            </div>
+                        </div>
+                        
+                        <div><label className="block text-xs font-bold text-slate-500">Property</label><select className="w-full border rounded p-1" value={docConfig.propId} onChange={e=>{
+                             const p = properties.find(x=>x.id===e.target.value);
+                             if(p) setDocConfig({...docConfig, propId: p.id, amount: p.activeLease?.monthlyRent || 0, tenant: p.activeLease?.tenantName || '' });
+                        }}>{properties.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+                        
+                        {docConfig.type === 'statement' && (
+                             <div className="p-3 bg-blue-50 rounded text-sm space-y-2">
+                                 <p className="font-bold text-blue-800">對數設定</p>
+                                 <div><label className="text-xs">Start Date</label><input type="date" className="w-full border rounded" value={docConfig.statementDateStart} onChange={e=>setDocConfig({...docConfig, statementDateStart: e.target.value})} /></div>
+                                 <div><label className="text-xs">End Date</label><input type="date" className="w-full border rounded" value={docConfig.statementDateEnd} onChange={e=>setDocConfig({...docConfig, statementDateEnd: e.target.value})} /></div>
+                             </div>
+                        )}
+                        
+                        <div className="space-y-2">
+                            <label className="block text-xs font-bold">Tenant Name</label><input type="text" className="w-full border rounded p-1" value={docConfig.tenant} onChange={e=>setDocConfig({...docConfig, tenant: e.target.value})} />
+                            <label className="block text-xs font-bold">Period / Date</label><input type="text" className="w-full border rounded p-1" value={docConfig.period} onChange={e=>setDocConfig({...docConfig, period: e.target.value})} />
+                            <label className="block text-xs font-bold">Amount ($)</label><input type="number" className="w-full border rounded p-1" value={docConfig.amount} onChange={e=>setDocConfig({...docConfig, amount: Number(e.target.value)})} />
+                        </div>
+
+                        <button onClick={handlePrint} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold shadow mt-4 flex justify-center items-center gap-2"><ICONS.Printer /> Print / Save PDF</button>
+                    </div>
+                    <div className="w-3/4 bg-slate-200 rounded-lg p-8 overflow-y-auto flex justify-center shadow-inner">
+                        <div className="doc-print-container">
+                            <DocPreviewContent docConfig={docConfig} properties={properties} transactions={transactions} />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
   };
 
-   const exportJSON = () => {
-      const jsonString = JSON.stringify({ meta: { generated: new Date() }, data: data }, null, 2);
-      const blob = new Blob([jsonString], { type: 'application/json' });
-      const href = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = href;
-      link.download = `Charles_Finance_Data.json`;
-      document.body.appendChild(link);
-      link.click();
-  };
-  
-  const handlePrint = () => {
-      setTimeout(() => window.print(), 100);
-  }
-  
-  const handlePrintDoc = () => {
-      document.body.classList.add('printing-doc');
-      window.print();
-      setTimeout(() => document.body.classList.remove('printing-doc'), 1000);
-  };
-
-  const stats = useMemo(() => {
-      let filtered = data;
-      if(filterYear !== 'All') filtered = filtered.filter(d => d.year === parseInt(filterYear));
-      if(filterMember !== 'All') filtered = filtered.filter(d => d.member === filterMember);
-      if(filterCategory !== 'All') filtered = filtered.filter(d => d.category === filterCategory);
-      if(searchTerm) filtered = filtered.filter(d => d.merchant.toLowerCase().includes(searchTerm.toLowerCase()));
-      
-      const total = filtered.reduce((a,b) => a + b.amount, 0);
-      const byYear: Record<string, number> = {}; 
-      const byCat: Record<string, number> = {}; 
-      const insuranceByMember: Record<string, InsurancePolicy[]> = {};
-
-      filtered.forEach(d => {
-          if(!byYear[d.year]) byYear[d.year] = 0; byYear[d.year] += d.amount;
-          const cat = d.category || 'Other'; if(!byCat[cat]) byCat[cat] = 0; byCat[cat] += d.amount;
-          if (cat.includes('Insurance')) {
-              let memberKey = d.member === 'Family (公用)' ? 'Charles' : d.member;
-              if(!insuranceByMember[memberKey]) insuranceByMember[memberKey] = [];
-              let policyName = d.merchant;
-              if(policyName.includes('Insurance:')) { policyName = policyName.split('Insurance:')[1].trim(); } else { policyName = policyName.replace(/AXA_|Prudential_|Manulift_/gi, '').split('(')[0].trim(); }
-              const existing = insuranceByMember[memberKey].find(p => p.name === policyName);
-              const txDate = d.date || '';
-              if(existing) { 
-                  existing.totalPaid += d.amount; 
-                  if(d.note && !existing.note) existing.note = d.note; 
-                  if(txDate > existing.lastPaid) existing.lastPaid = txDate; 
-              } else { 
-                  let endYear = null; 
-                  if(d.note) { const yearMatch = d.note.match(/20\d{2}/); if(yearMatch) endYear = parseInt(yearMatch[0]); } 
-                  insuranceByMember[memberKey].push({ name: policyName, totalPaid: d.amount, note: d.note || '', lastPaid: txDate, endYear: endYear, rawMerchant: d.merchant }); 
-              }
-          }
-      });
-      
-      const propStats = properties.map(p => {
-          const keywords = p.name.split(' ')[0];
-          const relatedTx = data.filter(d => (d.property === p.name) || (d.merchant && d.merchant.includes(keywords)));
-          const totalExpense = relatedTx.reduce((sum, tx) => sum + tx.amount, 0);
-          const yearsCovered = Math.max(1, Object.keys(byYear).length);
-          const monthlyExpense = Math.round(totalExpense / (yearsCovered * 12)) || 0; 
-          const mortgagePart = p.mortgage || 0; const otherPart = monthlyExpense;
-          const stressedMortgage = mortgagePart * (1 + (stressRate * 0.12)); const stressedExpense = otherPart + stressedMortgage;
-          const stressedRent = p.estRent * (1 - (rentDrop / 100));
-          const netFlow = (p.type === 'Investment' ? (stressedRent) : 0) - stressedExpense;
-          const annualNetRent = (p.estRent * 12) - (otherPart * 12);
-          const yieldRate = p.value > 0 ? (annualNetRent / p.value) * 100 : 0;
-          const dsr = p.estRent > 0 ? (mortgagePart / p.estRent) * 100 : 0;
-          return { ...p, monthlyExpense: otherPart + mortgagePart, stressedExpense, stressedRent, netFlow, yieldRate, dsr, netAnnual: netFlow * 12 };
-      });
-      
-      const passiveIncome = propStats.filter(p => p.type === 'Investment').reduce((acc, p) => acc + (p.netFlow || 0), 0);
-      return { 
-        total, 
-        count: filtered.length, 
-        byYear: Object.entries(byYear).map(([k,v])=>({year:k, amount:v})).sort((a,b)=>Number(a.year)-Number(b.year)), 
-        byCat: Object.entries(byCat).map(([k,v])=>({name:k, value:v})).sort((a,b)=>b.value-a.value), 
-        insuranceByMember, 
-        propStats, 
-        passiveIncome 
-      };
-  }, [data, properties, filterYear, filterMember, filterCategory, searchTerm, stressRate, rentDrop]);
-
-  const eduForecast = useMemo(() => {
-      const db = eduDB || INITIAL_EDUCATION_DB;
-      const regV = db[eduRegionV] || INITIAL_EDUCATION_DB.UK; 
-      const regJ = db[eduRegionJ] || INITIAL_EDUCATION_DB.AUS;
-      const currentYear = new Date().getFullYear(); const forecast = []; let totalNeeded = 0;
-      for(let i=0; i<12; i++) {
-          const year = currentYear + i; let vCost = 0; let jCost = 0;
-          const vYears = childType === 'Vocational' && eduRegionV === 'CAN' ? 2 : regV.years; const jYears = childType === 'Vocational' && eduRegionJ === 'CAN' ? 2 : regJ.years;
-          const vTuition = childType === 'Vocational' ? Number(regV.tuition) * 0.7 : Number(regV.tuition); const jTuition = childType === 'Vocational' ? Number(regJ.tuition) * 0.7 : Number(regJ.tuition);
-          const vLiving = Number(regV.living); const jLiving = Number(regJ.living);
-          if(year >= FAMILY_INFO.Virginia.educationStart && year < FAMILY_INFO.Virginia.educationStart + vYears) { vCost = (vTuition + vLiving) * Math.pow(1 + 0.03, i); }
-          if(year >= FAMILY_INFO.Jason.educationStart && year < FAMILY_INFO.Jason.educationStart + jYears) { jCost = (jTuition + jLiving) * Math.pow(1 + 0.03, i); }
-          totalNeeded += (vCost + jCost); forecast.push({ year, vCost: Math.round(vCost), jCost: Math.round(jCost), total: Math.round(vCost+jCost) });
-      }
-      return { data: forecast, totalNeeded: Math.round(totalNeeded) };
-  }, [eduRegionV, eduRegionJ, childType, eduDB]);
-
-  const DocPreview = () => {
-    const prop = properties.find(p => p.id === docConfig.propId) || { name: '未知物業', estRent: 0, value: 0, mortgage: 0, tenure: 0, type: 'Investment', id: '' };
+  // --- 文書預覽內容 (獨立出來避免太長) ---
+  const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig: DocConfig, properties: Property[], transactions: Transaction[] }) => {
+    const prop = properties.find(p => p.id === docConfig.propId) || { name: 'Unknown Property', address: '' } as Property;
 
     if (docConfig.type === 'receipt') {
-      return (
-        <div className="doc-print-container">
-          <div className="border border-black p-8 w-[210mm] h-[148mm] mx-auto bg-white text-black font-serif relative">
-            <h1 className="text-2xl font-bold text-center underline mb-2">OFFICIAL RECEIPT 正式收據</h1>
-            
-            <div className="absolute top-8 right-8 text-sm">
-              <div>Receipt No. 編號: <span className="font-mono font-bold">{new Date().getFullYear()}-{Math.floor(Math.random()*10000)}</span></div>
-              <div>Date 日期: <span className="underline">{new Date().toLocaleDateString()}</span></div>
+        // 半頁 A4 收據
+        return (
+             <div className="border border-black p-8 w-[210mm] h-[148mm] mx-auto bg-white text-black font-serif relative">
+                <h1 className="text-2xl font-bold text-center underline mb-2">OFFICIAL RECEIPT 正式收據</h1>
+                <div className="absolute top-8 right-8 text-sm"><div>Receipt No. {new Date().getFullYear()}-{Math.floor(Math.random()*10000)}</div><div>Date: {new Date().toLocaleDateString()}</div></div>
+                <div className="mt-8 space-y-4 text-sm leading-loose">
+                    <div className="flex"><span className="w-32 font-bold">Received from:</span><span className="border-b border-black flex-1 px-2">{docConfig.tenant}</span></div>
+                    <div className="flex"><span className="w-32 font-bold">The Sum of:</span><span className="border-b border-black flex-1 px-2">HK$ {docConfig.amount.toLocaleString()} (Words: {convertNumberToEnglish(docConfig.amount)})</span></div>
+                    <div className="flex"><span className="w-32 font-bold">For Rent of:</span><span className="border-b border-black flex-1 px-2">{prop.name} {prop.address}</span></div>
+                    <div className="flex"><span className="w-32 font-bold">Period:</span><span className="border-b border-black flex-1 px-2">{docConfig.period}</span></div>
+                    <div className="mt-8 text-right border-t border-black w-64 ml-auto pt-2 text-center">Signature of Landlord<br/>{docConfig.landlord}</div>
+                </div>
             </div>
-
-            <div className="mt-8 space-y-4 text-sm leading-loose">
-              <div className="flex">
-                <span className="w-32 font-bold">Received from:</span>
-                <span className="border-b border-black flex-1 px-2">{docConfig.tenant}</span>
-              </div>
-              <div className="flex">
-                <span className="w-32 font-bold">茲收到租客:</span>
-                <span className="flex-1"></span>
-              </div>
-
-              <div className="flex">
-                <span className="w-32 font-bold">The Sum of:</span>
-                <span className="border-b border-black flex-1 px-2 flex justify-between">
-                  <span>HK$ {docConfig.amount.toLocaleString()}</span>
-                  <span className="text-xs text-gray-500">(Words: {convertNumberToEnglish(docConfig.amount)})</span>
-                </span>
-              </div>
-               <div className="flex">
-                <span className="w-32 font-bold">港幣金額:</span>
-                <span className="flex-1"></span>
-              </div>
-
-
-              <div className="flex">
-                <span className="w-32 font-bold">Being Rent for:</span>
-                <span className="border-b border-black flex-1 px-2">{prop.name} {prop.address ? `(${prop.address})` : ''}</span>
-              </div>
-               <div className="flex">
-                <span className="w-32 font-bold">物業地址:</span>
-                <span className="flex-1"></span>
-              </div>
-
-              <div className="flex">
-                <span className="w-32 font-bold">For Period:</span>
-                <span className="border-b border-black flex-1 px-2">{docConfig.period}</span>
-              </div>
-               <div className="flex">
-                <span className="w-32 font-bold">租用期:</span>
-                <span className="flex-1"></span>
-              </div>
-
-              <div className="flex gap-8 mt-4">
-                 <div className="border p-2 w-1/3 text-center">
-                    <div className="font-bold border-b mb-1">Payment Method</div>
-                    <div className="text-lg">{docConfig.paymentMethod}</div>
-                 </div>
-                 <div className="flex-1 flex flex-col justify-end">
-                    <div className="border-t border-black pt-2 text-center">
-                        <div>Signature of Landlord 業主簽署</div>
-                        <div className="font-script text-xl mt-2">{docConfig.landlord}</div>
+        );
+    } 
+    
+    if (docConfig.type === 'statement') {
+        // 租務對數單
+        const filteredTxs = transactions
+            .filter(t => t.propertyId === docConfig.propId && (!docConfig.statementDateStart || t.date >= docConfig.statementDateStart) && (!docConfig.statementDateEnd || t.date <= docConfig.statementDateEnd))
+            .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        
+        return (
+            <div className="bg-white p-10 w-[210mm] min-h-[297mm] text-black font-serif">
+                <h1 className="text-2xl font-bold text-center underline mb-6">RENTAL STATEMENT 租務對數單</h1>
+                <div className="flex justify-between mb-8">
+                    <div>
+                        <p><strong>Property:</strong> {prop.name}</p>
+                        <p><strong>Address:</strong> {prop.address}</p>
                     </div>
-                 </div>
-              </div>
+                    <div className="text-right">
+                        <p><strong>Tenant:</strong> {docConfig.tenant}</p>
+                        <p><strong>Period:</strong> {docConfig.statementDateStart || 'Start'} to {docConfig.statementDateEnd || 'Now'}</p>
+                    </div>
+                </div>
+                <table className="w-full border-collapse border border-black text-sm">
+                    <thead><tr className="bg-gray-100"><th className="border border-black p-2">Date</th><th className="border border-black p-2">Description / Note</th><th className="border border-black p-2 text-right">Debit (Due)</th><th className="border border-black p-2 text-right">Credit (Paid)</th></tr></thead>
+                    <tbody>
+                        {filteredTxs.length === 0 && <tr><td colSpan={4} className="p-4 text-center">No records found for this period.</td></tr>}
+                        {filteredTxs.map(t => (
+                            <tr key={t.id}>
+                                <td className="border border-black p-2">{t.date}</td>
+                                <td className="border border-black p-2">{t.category} - {t.note}</td>
+                                <td className="border border-black p-2 text-right">{t.category.includes('Income') ? '' : formatCurrency(t.amount)}</td>
+                                <td className="border border-black p-2 text-right">{t.category.includes('Income') ? formatCurrency(t.amount) : ''}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
             </div>
-          </div>
-        </div>
-      );
-    } else {
-      // LEASE AGREEMENT (4 Pages)
-      return (
+        );
+    }
+
+    // Default: Lease Agreement (4 Pages)
+    return (
         <div className="doc-print-container text-black font-serif text-sm leading-relaxed">
-          {/* Page 1: Main Agreement */}
+          {/* Page 1 */}
           <div className="w-[210mm] min-h-[297mm] p-10 bg-white mx-auto relative page-break">
             <h1 className="text-2xl font-bold text-center mb-6 underline">TENANCY AGREEMENT 租約</h1>
-            
-            <div className="mb-4">
-                <p><strong>An Agreement</strong> made the <span className="underline decoration-dotted">{new Date().getDate()}</span> day of <span className="underline decoration-dotted">{new Date().toLocaleString('default', { month: 'long' })}</span> <span className="underline decoration-dotted">{new Date().getFullYear()}</span> between the Landlord and the Tenant as more particularly described in Schedule I.</p>
-                <p className="mt-1 text-xs text-gray-600">此合約由業主及租客（雙方資料詳列於附表一）於上述日期訂立。</p>
-            </div>
-
-            <div className="mb-4">
-               <p>The Landlord shall let and the Tenant shall take the Premises for the Term and at the Rent as more particularly described in Schedule I and both parties agree to observe and perform the terms and conditions as follows:-</p>
-               <p className="mt-1 text-xs text-gray-600">業主及租客雙方以詳列於附表一的租期及租金分別租出及租入詳列於附表一的物業，並同意遵守及履行下列條款：</p>
-            </div>
-
+            <div className="mb-4"><p><strong>An Agreement</strong> made the <span className="underline">{new Date().toLocaleDateString()}</span> between the Landlord and the Tenant as more particularly described in Schedule I.</p></div>
             <ol className="list-decimal pl-6 space-y-4">
-                <li>
-                    <p>The Tenant shall pay to the Landlord the Rent in advance on the 1st day of each and every calendar month during the Term. If the Tenant shall fail to pay the Rent within 7 days from the due date, the Landlord shall have the right to institute appropriate action to recover the Rent and all costs.</p>
-                    <p className="text-xs text-gray-600">租客須在租期內每個月份第一天預繳付指定的租金予業主。倘租客於應繳租金之日的七天內仍未付該租金，則業主有權採取適當行動追討。</p>
-                </li>
-                <li>
-                    <p>The Tenant shall not make any alteration and/or additions to the Premises without the prior written consent of the Landlord.</p>
-                    <p className="text-xs text-gray-600">租客在沒有業主書面同意前，不得對該物業作任何改動及/或加建。</p>
-                </li>
-                <li>
-                    <p>The Tenant shall not assign, transfer, sublet or part with the possession of the Premises or any part thereof to any other person.</p>
-                    <p className="text-xs text-gray-600">租客不得轉讓、轉租或分租該物業或其任何部分。</p>
-                </li>
-                <li>
-                    <p>The Tenant shall comply with all ordinances, regulations and rules of Hong Kong and Deed of Mutual Covenant.</p>
-                    <p className="text-xs text-gray-600">租客須遵守香港一切法律條例及大廈公契。</p>
-                </li>
-                <li>
-                    <p>The Tenant shall during the Term pay and discharge all charges in respect of water, electricity, gas and telephone.</p>
-                    <p className="text-xs text-gray-600">租客須在租約期內清繳一切有關該物業的水費、電費、煤氣費、電話費等。</p>
-                </li>
-                <li>
-                    <p>The Tenant shall during the Term keep the interior of the Premises in good and tenantable repair and condition.</p>
-                    <p className="text-xs text-gray-600">租客須在租約期內保持物業內部的維修狀態良好。</p>
-                </li>
-                 <li>
-                    <p>The Tenant shall pay to the Landlord the Security Deposit set out in Schedule I.</p>
-                    <p className="text-xs text-gray-600">租客須交予業主保証金（金額如附表一所列）。</p>
-                </li>
-                 <li>
-                    <p>The Landlord shall refund the Security Deposit to the Tenant without interest within 7 days from the date of delivery of vacant possession. The Landlord may deduct any loss or damage from the deposit.</p>
-                    <p className="text-xs text-gray-600">若租客無違約，業主須於收回物業後七天內無息退還保証金。業主可從保証金內扣除因租客違約之損失。</p>
-                </li>
-                 <li>
-                    <p>The Landlord shall keep and maintain the structural parts of the Premises including main drains, pipes and cables.</p>
-                    <p className="text-xs text-gray-600">業主須保養及適當維修該物業內各主要結構部分。</p>
-                </li>
-                <li>
-                    <p>The Tenant shall cover insurance for his/her own belongings. The Landlord shall not be responsible for any damage or loss.</p>
-                    <p className="text-xs text-gray-600">租客須自投買財物保險，業主不負任何責任。</p>
-                </li>
-                 <li>
-                    <p>The Landlord shall pay the Property Tax.</p>
-                    <p className="text-xs text-gray-600">業主負責繳付物業稅。</p>
-                </li>
-                 <li>
-                    <p>Stamp Duty shall be borne by the Landlord and the Tenant in equal shares.</p>
-                    <p className="text-xs text-gray-600">業主及租客各負責印花稅一半費用。</p>
-                </li>
-                <li>
-                    <p>Both parties agree to be bound by the additional terms in Schedule II (if any).</p>
-                    <p className="text-xs text-gray-600">雙方同意遵守附表二內的附加條款。</p>
-                </li>
-                <li>
-                    <p>If there is conflict between English and Chinese version, English version prevails.</p>
-                    <p className="text-xs text-gray-600">中英文本有差異時，以英文本為準。</p>
-                </li>
-                 <li>
-                    <p>Tenant has to move out all belongings upon delivery of vacant possession.</p>
-                    <p className="text-xs text-gray-600">租客遷出時，須搬走所有物品。</p>
-                </li>
-                 <li>
-                    <p>Security Deposit cannot be utilised as rent payment.</p>
-                    <p className="text-xs text-gray-600">按金不能用作支付租金。</p>
-                </li>
+                <li>The Tenant shall pay to the Landlord the Rent in advance on the 1st day of each and every calendar month during the Term.</li>
+                <li>The Tenant shall not make any alteration and/or additions to the Premises without the prior written consent of the Landlord.</li>
+                <li>The Tenant shall not assign, transfer, sublet or part with the possession of the Premises or any part thereof to any other person.</li>
+                <li>The Tenant shall comply with all ordinances, regulations and rules of Hong Kong and Deed of Mutual Covenant.</li>
+                <li>The Tenant shall during the Term pay and discharge all charges in respect of water, electricity, gas and telephone.</li>
+                <li>The Tenant shall during the Term keep the interior of the Premises in good and tenantable repair and condition.</li>
+                <li>The Tenant shall pay to the Landlord the Security Deposit set out in Schedule I.</li>
+                <li>The Landlord shall refund the Security Deposit to the Tenant without interest within 7 days from the date of delivery of vacant possession.</li>
             </ol>
              <div className="absolute bottom-4 right-10 text-xs">Page 1 of 4</div>
           </div>
-
-          {/* Page 2: Signatures & Key Receipt */}
+          {/* Page 2 */}
           <div className="w-[210mm] min-h-[297mm] p-10 bg-white mx-auto relative page-break">
              <div className="mb-12">
                 <h2 className="font-bold text-lg mb-4 border-b pb-2">SECURITY DEPOSIT RECEIPT 按金收據</h2>
-                <div className="flex justify-between items-end mb-4">
-                    <span>Received the Security Deposit of HK$: <span className="font-bold underline text-xl">{docConfig.deposit.toLocaleString()}</span></span>
-                </div>
-                <div className="flex justify-between items-end">
-                    <span>by the Landlord 業主收到租客所交的保證金: <span className="font-bold underline text-xl">{convertNumberToEnglish(docConfig.deposit)}</span> (HK Dollars)</span>
-                </div>
+                <div className="flex justify-between items-end mb-4"><span>Received HK$: <span className="font-bold underline text-xl">{docConfig.deposit.toLocaleString()}</span></span></div>
              </div>
-
              <div className="grid grid-cols-2 gap-16 mb-16">
-                 <div>
-                     <p className="mb-8">Confirmed and Accepted all the terms and conditions contained herein by the <strong>Landlord</strong>:</p>
-                     <p className="text-xs text-gray-600 mb-8">業主確認及接受本合約內所有條款的約束：</p>
-                     <div className="h-24 border-b border-black mb-2"></div>
-                     <p>Signature 簽署</p>
-                     <p className="mt-4">Name: {docConfig.landlord}</p>
-                     <p>HKID: {docConfig.landlordID || '__________________'}</p>
-                 </div>
-                 <div>
-                     <p className="mb-8">Confirmed and Accepted all the terms and conditions contained herein by the <strong>Tenant</strong>:</p>
-                     <p className="text-xs text-gray-600 mb-8">租客確認及接受本合約內所有條款的約束：</p>
-                     <div className="h-24 border-b border-black mb-2"></div>
-                     <p>Signature 簽署</p>
-                     <p className="mt-4">Name: {docConfig.tenant}</p>
-                     <p>HKID: {docConfig.tenantID || '__________________'}</p>
-                 </div>
-             </div>
-
-             <div className="border-t-2 border-black pt-8">
-                <h2 className="font-bold text-lg mb-4">KEY RECEIPT 鎖匙收據</h2>
-                <p className="mb-4">Acknowledged the receipt of keys of the premises by the Tenant:</p>
-                <p className="text-xs text-gray-600 mb-6">租客接收業主所交屬該物業之鎖匙：</p>
-                
-                <div className="space-y-2 mb-8">
-                    <label className="flex items-center gap-2"><input type="checkbox" /> Main Door (大門)</label>
-                    <label className="flex items-center gap-2"><input type="checkbox" /> Iron Gate (鐵閘)</label>
-                    <label className="flex items-center gap-2"><input type="checkbox" /> Mail Box (信箱)</label>
-                    <label className="flex items-center gap-2"><input type="checkbox" /> Bedroom (睡房)</label>
-                    <label className="flex items-center gap-2"><input type="checkbox" /> Other (其他): _________________</label>
-                </div>
-
-                <div className="w-1/2">
-                    <div className="h-16 border-b border-black mb-2"></div>
-                     <p>Tenant's Signature 租客簽署</p>
-                </div>
+                 <div><p className="mb-8">Signed by <strong>Landlord</strong>:</p><div className="h-24 border-b border-black mb-2"></div><p>Name: {docConfig.landlord}</p></div>
+                 <div><p className="mb-8">Signed by <strong>Tenant</strong>:</p><div className="h-24 border-b border-black mb-2"></div><p>Name: {docConfig.tenant}</p></div>
              </div>
              <div className="absolute bottom-4 right-10 text-xs">Page 2 of 4</div>
           </div>
-
-          {/* Page 3: Schedule I */}
-          <div className="w-[210mm] min-h-[297mm] p-10 bg-white mx-auto relative page-break">
+           {/* Page 3: Schedule I */}
+           <div className="w-[210mm] min-h-[297mm] p-10 bg-white mx-auto relative page-break">
             <h1 className="text-2xl font-bold text-center mb-8 underline">Schedule I 附表一</h1>
-            
             <table className="w-full border-collapse border border-black">
                 <tbody>
-                    <tr>
-                        <td className="border border-black p-4 w-1/4 font-bold bg-gray-50">The Premises<br/>物業地址</td>
-                        <td className="border border-black p-4">{prop.name} {prop.address ? `(${prop.address})` : ''}</td>
-                    </tr>
-                    <tr>
-                        <td className="border border-black p-4 w-1/4 font-bold bg-gray-50">The Landlord<br/>業主</td>
-                        <td className="border border-black p-4">
-                            Name: {docConfig.landlord}<br/>
-                            ID: {docConfig.landlordID || '__________________'}
-                        </td>
-                    </tr>
-                    <tr>
-                        <td className="border border-black p-4 w-1/4 font-bold bg-gray-50">The Tenant<br/>租客</td>
-                        <td className="border border-black p-4">
-                            Name: {docConfig.tenant}<br/>
-                            ID: {docConfig.tenantID || '__________________'}
-                        </td>
-                    </tr>
-                     <tr>
-                        <td className="border border-black p-4 w-1/4 font-bold bg-gray-50">Term<br/>租期</td>
-                        <td className="border border-black p-4">
-                            From: {docConfig.startDate}<br/>
-                            To: {docConfig.endDate}<br/>
-                            (Both days inclusive 包括首尾兩天)
-                        </td>
-                    </tr>
-                    <tr>
-                        <td className="border border-black p-4 w-1/4 font-bold bg-gray-50">Rent<br/>租金</td>
-                        <td className="border border-black p-4">
-                            HK$ {docConfig.amount.toLocaleString()} per month<br/>
-                            (每月港幣 {convertNumberToEnglish(docConfig.amount)})
-                        </td>
-                    </tr>
-                    <tr>
-                        <td className="border border-black p-4 w-1/4 font-bold bg-gray-50">Security Deposit<br/>保證金</td>
-                        <td className="border border-black p-4">
-                            HK$ {docConfig.deposit.toLocaleString()}<br/>
-                            (港幣 {convertNumberToEnglish(docConfig.deposit)})
-                        </td>
-                    </tr>
+                    <tr><td className="border border-black p-4 font-bold bg-gray-50">The Premises</td><td className="border border-black p-4">{prop.name} <br/> {prop.address}</td></tr>
+                    <tr><td className="border border-black p-4 font-bold bg-gray-50">The Landlord</td><td className="border border-black p-4">{docConfig.landlord} (ID: {docConfig.landlordID})</td></tr>
+                    <tr><td className="border border-black p-4 font-bold bg-gray-50">The Tenant</td><td className="border border-black p-4">{docConfig.tenant} (ID: {docConfig.tenantID})</td></tr>
+                    <tr><td className="border border-black p-4 font-bold bg-gray-50">Term</td><td className="border border-black p-4">{docConfig.startDate} to {docConfig.endDate}</td></tr>
+                    <tr><td className="border border-black p-4 font-bold bg-gray-50">Rent</td><td className="border border-black p-4">HK$ {docConfig.amount.toLocaleString()} / month</td></tr>
+                    <tr><td className="border border-black p-4 font-bold bg-gray-50">Deposit</td><td className="border border-black p-4">HK$ {docConfig.deposit.toLocaleString()}</td></tr>
                 </tbody>
             </table>
             <div className="absolute bottom-4 right-10 text-xs">Page 3 of 4</div>
           </div>
-
-          {/* Page 4: Schedule II & Furniture */}
+          {/* Page 4: Schedule II */}
           <div className="w-[210mm] min-h-[297mm] p-10 bg-white mx-auto relative page-break">
              <h1 className="text-2xl font-bold text-center mb-8 underline">Schedule II 附表二</h1>
-             
              <div className="space-y-6">
-                 <div>
-                     <h3 className="font-bold border-b border-black inline-block mb-2">1. User 用途</h3>
-                     <p>The Tenant shall not use the Premises for any purpose other than for <strong>Residential (住宅)</strong> purpose only.</p>
-                     <p className="text-xs text-gray-600">租客除將該物業作住宅用途外，不可將該物業作其他用途。</p>
-                 </div>
-
-                 <div>
-                     <h3 className="font-bold border-b border-black inline-block mb-2">2. Miscellaneous Payments 雜項費用</h3>
-                     <p>(a) Management fee paid by <strong>Landlord (業主)</strong>.</p>
-                     <p className="text-xs text-gray-600">管理費由業主支付。</p>
-                     <p>(b) Government Rates paid by <strong>Landlord (業主)</strong>.</p>
-                     <p className="text-xs text-gray-600">差餉由業主支付。</p>
-                     <p>(c) Government Rent paid by <strong>Landlord (業主)</strong>.</p>
-                     <p className="text-xs text-gray-600">地租由業主支付。</p>
-                 </div>
-
-                 <div>
-                     <h3 className="font-bold border-b border-black inline-block mb-2">3. Rent Free Period 免租期</h3>
-                     <p>The Tenant shall be entitled to a rent free period from ___________ to ___________.</p>
-                     <p className="text-xs text-gray-600">租客可享有免租期（如有）。租客仍需負責水電煤等雜費。</p>
-                 </div>
-
-                 <div>
-                     <h3 className="font-bold border-b border-black inline-block mb-2">4. Break Clause 退租權</h3>
-                     <p>Either party shall be entitled to terminate this Agreement earlier by serving not less than <strong>2 months</strong> written notice after <strong>12 months</strong> of the Term (Fixed Term).</p>
-                     <p className="text-xs text-gray-600">死約一年，生約一年。任何一方可於首 12 個月後給予對方不少於 2 個月通知期解除合約。</p>
-                 </div>
-
+                 <p>1. User: Residential Purpose Only.</p>
+                 <p>2. Mgt Fee & Rates: Paid by Landlord.</p>
+                 <p>3. Break Clause: 12 months fixed + 2 months notice.</p>
                  <div className="pt-8 border-t-2 border-dashed border-gray-300">
-                     <h3 className="font-bold mb-4">Furniture & Fixture List 傢俬及設備清單</h3>
+                     <h3 className="font-bold mb-4">Furniture List</h3>
                      <div className="grid grid-cols-2 gap-4 text-sm">
-                         <label><input type="checkbox" /> Air-conditioner 冷氣機 (Qty: __)</label>
-                         <label><input type="checkbox" /> Water Heater 熱水爐</label>
-                         <label><input type="checkbox" /> Range Hood 抽油煙機</label>
-                         <label><input type="checkbox" /> Cooker 煮食爐</label>
-                         <label><input type="checkbox" /> Refrigerator雪櫃</label>
-                         <label><input type="checkbox" /> Washing Machine 洗衣機</label>
-                         <label><input type="checkbox" /> Wardrobe 衣櫃</label>
-                         <label><input type="checkbox" /> Bed 床</label>
-                         <label><input type="checkbox" /> Sofa 梳化</label>
-                         <label><input type="checkbox" /> Television 電視</label>
+                         <label><input type="checkbox" /> Air-conditioner</label><label><input type="checkbox" /> Water Heater</label>
+                         <label><input type="checkbox" /> Fridge</label><label><input type="checkbox" /> Washer</label>
                      </div>
                  </div>
              </div>
              <div className="absolute bottom-4 right-10 text-xs">Page 4 of 4</div>
           </div>
         </div>
-      );
-    }
+    );
   };
 
-  const ReportHeader = () => (<div className="border-b-2 border-slate-800 pb-4 mb-8"><h1 className="text-3xl font-bold text-slate-900">Charles's 家庭導航 - 綜合分析報告</h1><div className="flex justify-between mt-2 text-slate-500"><span>生成日期: {new Date().toLocaleDateString()}</span><span>數據來源: {data.length} 筆記錄</span></div></div>);
-  
-  const ReportView = () => { 
-      if (!stats) return null; 
-      return (
-        <div className="report-container bg-white p-10 max-w-5xl mx-auto shadow-xl print-container">
-            <ReportHeader />
-            <div className="space-y-10">
-                <section>
-                    <h2 className="text-xl font-bold mb-4 border-l-4 border-blue-600 pl-3">1. 財務健康總結</h2>
-                    <div className="grid grid-cols-3 gap-4 mb-4">
-                        <div className="p-4 bg-slate-50 border rounded"><p className="text-sm text-slate-500">歷史總支出</p><p className="text-2xl font-bold">${(stats.total/1000000).toFixed(2)}M</p></div>
-                        <div className="p-4 bg-slate-50 border rounded"><p className="text-sm text-slate-500">主要開支分類</p><p className="text-xl font-bold text-blue-600">{stats.byCat[0]?.name}</p></div>
-                        <div className="p-4 bg-slate-50 border rounded"><p className="text-sm text-slate-500">物業總淨年回報</p><p className="text-xl font-bold text-emerald-600">+${Math.round(stats.propStats.reduce((a,b)=>a + (b.netAnnual || 0),0)/1000).toLocaleString()}k</p></div>
-                    </div>
-                    <div className="h-64 border rounded p-4">
-                        <ResponsiveContainer>
-                            <AreaChart data={stats.byYear}><XAxis dataKey="year"/><YAxis/><Area type="monotone" dataKey="amount" stroke="#2563EB" fill="#3B82F6"/></AreaChart>
-                        </ResponsiveContainer>
-                    </div>
-                </section>
-                <div className="page-break"></div>
-                <section>
-                    <h2 className="text-xl font-bold mb-4 border-l-4 border-emerald-600 pl-3">2. 物業投資表現</h2>
-                    <table className="w-full text-sm border">
-                        <thead className="bg-slate-100"><tr><th className="p-2 text-left">物業</th><th className="p-2 text-right">估值</th><th className="p-2 text-right">年淨回報 (Yield)</th><th className="p-2 text-right">供款佔比 (DSR)</th></tr></thead>
-                        <tbody>{stats.propStats.map(p=><tr key={p.id} className="border-t"><td className="p-2">{p.name} <span className="text-xs text-slate-500">({p.type})</span></td><td className="p-2 text-right">${(p.value/1000000).toFixed(1)}M</td><td className={`p-2 text-right font-bold ${(p.netAnnual || 0)>=0?'text-emerald-600':'text-red-600'}`}>{(p.yieldRate || 0).toFixed(2)}%</td><td className="p-2 text-right">{(p.dsr || 0) > 0 ? (p.dsr || 0).toFixed(1)+'%' : '-'}</td></tr>)}</tbody>
-                    </table>
-                </section>
-                <section>
-                    <h2 className="text-xl font-bold mb-4 border-l-4 border-indigo-600 pl-3">3. AI 建議摘要</h2>
-                    <div className="bg-blue-50 p-4 rounded text-sm text-blue-900 leading-relaxed">根據數據分析，您的家庭主要開支集中在 <strong>{stats.byCat[0]?.name}</strong>。物業組合提供穩定的現金流。</div>
-                </section>
-            </div>
-            <div className="mt-8 text-center no-print">
-                <button onClick={handlePrint} className="bg-blue-600 text-white px-6 py-2 rounded font-bold shadow hover:bg-blue-700">列印 / 儲存 PDF</button>
-                <button onClick={()=>setReportMode(false)} className="ml-4 text-slate-500 hover:underline">返回</button>
-            </div>
-        </div>
-      );
-  };
-
-  const EduReportView = () => (
-    <div className="report-container bg-white p-10 max-w-5xl mx-auto shadow-xl print-container">
-        <ReportHeader />
-        <h2 className="text-2xl font-bold mb-6 text-center">子女升學與職業路徑規劃報告 ({childType==='Vocational'?'實用型導向':'傳統學術導向'})</h2>
-        <div className="grid grid-cols-2 gap-8 mb-8">
-            <div className="bg-pink-50 p-6 rounded-xl border border-pink-100">
-                <h3 className="font-bold text-lg text-pink-800 mb-2">Virginia (16歲)</h3>
-                <p className="text-sm mb-4">目標地區：<strong>{eduDB[eduRegionV].name}</strong></p>
-                <ul className="text-sm space-y-2 text-pink-900"><li>• 預計入學：2026年 (18歲)</li><li>• 總預算：<span className="font-bold">${(eduForecast.data.reduce((a,b)=>a+b.vCost,0)/1000000).toFixed(2)}M</span></li></ul>
-            </div>
-            <div className="bg-blue-50 p-6 rounded-xl border border-blue-100">
-                <h3 className="font-bold text-lg text-blue-800 mb-2">Jason (13歲)</h3>
-                <p className="text-sm mb-4">目標地區：<strong>{eduDB[eduRegionJ].name}</strong></p>
-                <ul className="text-sm space-y-2 text-blue-900"><li>• 預計入學：2029年 (18歲)</li><li>• 總預算：<span className="font-bold">${(eduForecast.data.reduce((a,b)=>a+b.jCost,0)/1000000).toFixed(2)}M</span></li></ul>
-            </div>
-        </div>
-        <div className="mt-8 text-center no-print">
-            <button onClick={handlePrint} className="bg-purple-600 text-white px-6 py-2 rounded font-bold shadow hover:bg-purple-700">列印升學報告 (PDF)</button>
-            <button onClick={()=>setReportMode(false)} className="ml-4 text-slate-500 hover:underline">返回</button>
-        </div>
-    </div>
-  );
-
-  // --- Initialize Check ---
-  if (!dataLoaded) {
-       return <div className="h-screen flex items-center justify-center text-slate-500 animate-pulse">正在連接到 Firebase 雲端資料庫...</div>;
-  }
+  if (loading) return <div className="h-screen flex items-center justify-center">Loading...</div>;
 
   return (
-      <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 text-slate-900">
-          <style>{`
-            @media print {
-                @page { size: A4; margin: 10mm; }
-                body { background-color: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; overflow: visible !important; height: auto !important; }
-                #root { overflow: visible !important; height: auto !important; }
-                .no-print, nav, .sidebar, .modal-overlay { display: none !important; }
-                .doc-print-container { 
-                    display: block !important; position: absolute; top: 0; left: 0; width: 100%; background: white; z-index: 9999; padding: 0;
-                }
-                .report-container { display: block !important; width: 100%; box-shadow: none; }
-                .page-break { page-break-before: always; }
-                body.printing-doc #root > div { visibility: hidden; }
-                body.printing-doc .doc-print-container { visibility: visible; }
-                .bg-slate-50 { background-color: #f8fafc !important; }
-            }
-            ::-webkit-scrollbar { width: 6px; height: 6px; }
-            ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
-            .modal-overlay { background-color: rgba(0, 0, 0, 0.5); }
-            .paper { background: white; box-shadow: 0 0 10px rgba(0,0,0,0.1); padding: 40px; min-height: 800px; font-family: "Times New Roman", "MingLiU", serif; }
-          `}</style>
+    <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 text-slate-900 font-sans">
+        {/* Sidebar */}
+        <div className="w-full md:w-64 bg-slate-900 text-slate-300 flex flex-col sticky top-0 h-screen no-print">
+            <div className="p-6">
+                <h1 className="text-xl font-bold text-white flex items-center gap-2"><ICONS.Home /> Charles's 導航</h1>
+            </div>
+            <nav className="flex-1 px-3 space-y-1">
+                {[
+                    {id: 'dashboard', icon: 'LayoutDashboard', label: '物業總覽 Overview'},
+                    {id: 'data', icon: 'Data', label: '數據中心 Data Hub'},
+                    {id: 'insurance', icon: 'Shield', label: '保險庫 Insurance'},
+                    {id: 'education', icon: 'GraduationCap', label: '升學 Education'}
+                ].map(item => (
+                    <button key={item.id} onClick={() => { setActiveTab(item.id); setPropertyViewId(null); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${activeTab===item.id && !propertyViewId ? 'bg-blue-600 text-white' : 'hover:bg-slate-800'}`}>
+                        {item.id === 'dashboard' ? <ICONS.LayoutDashboard /> : item.id === 'data' ? <ICONS.Data /> : item.id === 'insurance' ? <ICONS.Shield /> : <ICONS.GraduationCap />} {item.label}
+                    </button>
+                ))}
+            </nav>
+        </div>
 
-          {!reportMode && (
-              <div className="w-full md:w-64 bg-slate-900 text-slate-300 flex flex-col sticky top-0 h-screen overflow-y-auto no-print">
-                  <div className="p-6">
-                      <h1 className="text-xl font-bold text-white flex items-center gap-2"><span className="text-blue-500"><Icons.Home /></span> Charles's 導航</h1>
-                      <div className="mt-4 mb-2"><label className={`flex items-center justify-center gap-2 w-full py-2 ${isProcessing ? 'bg-slate-600 cursor-wait' : 'bg-emerald-600 hover:bg-emerald-500 cursor-pointer'} text-white text-sm font-bold rounded transition`}><Icons.UploadCloud /> {isProcessing ? '處理中...' : '匯入數據'}<input type="file" className="hidden" onChange={handleFileUpload} accept=".json" disabled={isProcessing} /></label></div>
-                  </div>
-                  <nav className="flex-1 px-3 space-y-1">
-                      {[
-                          {id: 'dashboard', icon: 'LayoutDashboard', label: '總覽 (Overview)'},
-                          {id: 'data', icon: 'Database', label: '數據中心 (Data Hub)'},
-                          {id: 'insurance', icon: 'Shield', label: '保險金庫 (Insurance)'},
-                          {id: 'education', icon: 'GraduationCap', label: '升學導航 (Education)'},
-                          {id: 'property', icon: 'Home', label: '物業管理 (Property)'},
-                      ].map(item => { const IconComp = Icons[item.icon as keyof typeof Icons]; return (<button key={item.id} onClick={()=>{setActiveTab(item.id); setReportMode(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${activeTab===item.id && !reportMode ?'bg-blue-600 text-white':'hover:bg-slate-800'}`}><IconComp /> {item.label}</button>)})}
-                  </nav>
-                  <div className="p-4 border-t border-slate-800 space-y-2">
-                       <button onClick={()=>{setReportMode(true); setActiveTab('report');}} className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-bold shadow"><Icons.Printer /> 綜合報告</button>
-                       <button onClick={()=>{setReportMode(true); setActiveTab('edu_report');}} className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-sm font-bold shadow"><Icons.Book /> 升學報告</button>
-                       <button onClick={clearData} className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-slate-800 hover:bg-red-900 text-slate-400 text-xs rounded">清除資料庫</button>
-                  </div>
-              </div>
-          )}
+        {/* Main Content */}
+        <div className="flex-1 p-8 overflow-y-auto print-container">
+            {activeTab === 'dashboard' && (
+                propertyViewId ? <PropertyDetailView propId={propertyViewId} /> : <PropertyDashboard />
+            )}
+            {activeTab === 'data' && <div className="bg-white p-10 rounded-xl shadow">數據中心功能開發中 (Transaction Table)</div>}
+        </div>
 
-          <div className="flex-1 p-8 overflow-y-auto print-container">
-              {reportMode && activeTab === 'report' && <ReportView />}
-              {reportMode && activeTab === 'edu_report' && <EduReportView />}
-
-              {!reportMode && (
-                  <>
-                      {activeTab === 'dashboard' && (
-                          <div className="space-y-6 animate-in fade-in">
-                              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                                  <StatCard title="歷史總支出" value={`$${(stats.total/1000000).toFixed(2)}M`} subtext="From 2005" color="blue" iconName="DollarSign" />
-                                  <StatCard title="物業年淨值" value={`$${Math.round(stats.propStats.reduce((a,b)=>a + (b.netAnnual || 0),0)/1000).toLocaleString()}k`} subtext="被動收入" color="emerald" iconName="Home" />
-                                  <StatCard title="保險總投入" value={`$${(Object.values(stats.insuranceByMember).flat().reduce((a,b)=>a+b.totalPaid,0)/1000000).toFixed(2)}M`} subtext="全家保障" color="indigo" iconName="ShieldCheck" />
-                                  <StatCard title="最大類別" value={stats.byCat[0]?.name || '-'} subtext={`${((stats.byCat[0]?.value/stats.total)*100).toFixed(0)}%`} color="orange" iconName="PieChart" />
-                              </div>
-                              <div className="bg-white p-6 rounded-xl border shadow-sm h-96"><h3 className="font-bold text-slate-700 mb-4">支出趨勢</h3><ResponsiveContainer><AreaChart data={stats.byYear}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="year"/><YAxis tickFormatter={(v:any)=>`${v/1000}k`}/><Tooltip/><Area type="monotone" dataKey="amount" stroke="#2563EB" fill="#3B82F6"/></AreaChart></ResponsiveContainer></div>
-                          </div>
-                      )}
-                      
-                      {activeTab === 'property' && (
-                          <div className="space-y-6 animate-in fade-in">
-                              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-xl border shadow-sm">
-                                  <div>
-                                      <h2 className="text-xl font-bold text-slate-800">物業資產管理</h2>
-                                      <button onClick={()=>{setDocConfig({...docConfig, propId: properties[0]?.id}); setDocModalOpen(true);}} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow hover:bg-indigo-700"><Icons.FilePen /> 開單/租約</button>
-                                  </div>
-                                  <div className="flex gap-4">
-                                      <div className="text-center"><label className="block text-xs text-slate-500">利率上升</label><input type="range" min="0" max="5" step="0.5" value={stressRate} onChange={e=>setStressRate(Number(e.target.value))} className="accent-red-500"/><div className="text-red-600 font-bold">+{stressRate}%</div></div>
-                                      <div className="text-center"><label className="block text-xs text-slate-500">租金下跌</label><input type="range" min="0" max="30" step="5" value={rentDrop} onChange={e=>setRentDrop(Number(e.target.value))} className="accent-orange-500"/><div className="text-orange-600 font-bold">-{rentDrop}%</div></div>
-                                      <button onClick={()=>{setEditingProp({id: '', name: '', type: 'Investment', estRent: 0, value: 0, mortgage: 0, tenure: 20}); setPropModalOpen(true);}} className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow hover:bg-emerald-700 h-10 mt-auto"><Icons.Plus /> 新增</button>
-                                  </div>
-                              </div>
-
-                              {/* 初始化預設資料按鈕 */}
-                              {properties.length === 0 && (
-                                <div className="p-8 text-center bg-blue-50 border-2 border-blue-200 border-dashed rounded-xl">
-                                    <p className="text-blue-700 mb-4 font-bold">雲端目前沒有物業資料，是否載入預設範本？</p>
-                                    <button onClick={initializeDefaults} className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-bold shadow">
-                                        🚀 一鍵載入預設物業
-                                    </button>
-                                </div>
-                              )}
-
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                  {stats.propStats.map(p => (
-                                      <div key={p.id} className="bg-white p-5 rounded-xl border shadow-sm hover:shadow-md transition relative group">
-                                          <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition"><button onClick={()=>{setEditingProp(p); setPropModalOpen(true);}} className="p-1.5 bg-slate-100 rounded text-blue-600 hover:bg-blue-100"><Icons.Edit2 /></button><button onClick={()=>handleDeleteProperty(p.id)} className="p-1.5 bg-slate-100 rounded text-red-600 hover:bg-red-100"><Icons.Trash /></button></div>
-                                          <div className="mb-4"><h3 className="font-bold text-slate-800 text-lg truncate pr-16">{p.name}</h3><span className={`text-xs px-2 py-0.5 rounded ${p.type==='Self-use'?'bg-slate-200 text-slate-600':'bg-green-100 text-green-700'}`}>{p.type==='Self-use'?'自住':'收租'}</span></div>
-                                          <div className="space-y-3 text-sm">
-                                              <div className="flex justify-between"><span className="text-slate-500">估值</span><span className="font-bold">${(p.value/1000000).toFixed(1)}M</span></div>
-                                              <div className="flex justify-between"><span className="text-slate-500">預估月租</span><span className="text-emerald-600 font-mono">+${p.estRent.toLocaleString()}</span></div>
-                                              <div className="flex justify-between"><span className="text-slate-500">壓力後支出</span><span className="text-red-500 font-mono">-${(p.stressedExpense || 0).toLocaleString()}</span></div>
-                                              <div className="pt-3 border-t flex justify-between items-center"><span className="font-bold text-slate-700">月淨現金流</span><span className={`font-bold text-lg ${(p.netFlow || 0)>=0?'text-emerald-600':'text-red-600'}`}>{(p.netFlow || 0)>=0?'+':''}${(p.netFlow || 0).toLocaleString()}</span></div>
-                                          </div>
-                                      </div>
-                                  ))}
-                              </div>
-                          </div>
-                      )}
-                      
-                      {activeTab === 'education' && (
-                          <div className="space-y-6 animate-in fade-in">
-                              <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-4 rounded-xl border shadow-sm gap-4">
-                                  <div><h2 className="text-xl font-bold text-slate-800">升學與職業導航</h2><p className="text-sm text-slate-500">針對「非學術型」學生的多元出路分析</p></div>
-                                  <div className="flex gap-2 items-center bg-slate-100 p-1 rounded-lg">
-                                      <button onClick={()=>setChildType('Standard')} className={`px-3 py-1 text-xs rounded-md transition ${childType==='Standard'?'bg-white shadow text-blue-600':'text-slate-500'}`}>傳統學術 (大學)</button>
-                                      <button onClick={()=>setChildType('Vocational')} className={`px-3 py-1 text-xs rounded-md transition ${childType==='Vocational'?'bg-white shadow text-purple-600':'text-slate-500'}`}>職業導向 (專科)</button>
-                                  </div>
-                              </div>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                  <div className="bg-pink-50 p-6 rounded-xl border border-pink-100">
-                                      <div className="flex justify-between items-center mb-4"><h3 className="font-bold text-pink-800">Virginia (16歲)</h3><select className="border rounded p-1 text-xs" value={eduRegionV} onChange={e=>setEduRegionV(e.target.value)}>{Object.keys(eduDB).map(r=><option key={r} value={r}>{eduDB[r].name}</option>)}</select></div>
-                                      <div className="text-sm text-pink-900 mb-4"><strong>推薦路徑 ({childType==='Vocational'?'實用型':'學術型'}):</strong><br/>{childType==='Vocational' ? eduDB[eduRegionV].paths.vocational : eduDB[eduRegionV].paths.academic}</div>
-                                      <div className="bg-white p-3 rounded text-xs text-slate-600">預計總開支: <strong>${(eduForecast.data.reduce((a,b)=>a+b.vCost,0)/1000000).toFixed(2)}M</strong></div>
-                                  </div>
-                                  <div className="bg-blue-50 p-6 rounded-xl border border-blue-100">
-                                      <div className="flex justify-between items-center mb-4"><h3 className="font-bold text-blue-800">Jason (13歲)</h3><select className="border rounded p-1 text-xs" value={eduRegionJ} onChange={e=>setEduRegionJ(e.target.value)}>{Object.keys(eduDB).map(r=><option key={r} value={r}>{eduDB[r].name}</option>)}</select></div>
-                                      <div className="text-sm text-blue-900 mb-4"><strong>推薦路徑 ({childType==='Vocational'?'實用型':'學術型'}):</strong><br/>{childType==='Vocational' ? eduDB[eduRegionJ].paths.vocational : eduDB[eduRegionJ].paths.academic}</div>
-                                      <div className="bg-white p-3 rounded text-xs text-slate-600">預計總開支: <strong>${(eduForecast.data.reduce((a,b)=>a+b.jCost,0)/1000000).toFixed(2)}M</strong></div>
-                                  </div>
-                              </div>
-                              <div className="bg-white p-6 rounded-xl border shadow-sm h-80">
-                                  <h3 className="font-bold text-slate-700 mb-4">未來 10 年資金需求預測</h3>
-                                  <ResponsiveContainer><BarChart data={eduForecast.data}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="year" /><YAxis tickFormatter={(v:any)=>`${v/1000}k`}/><Tooltip formatter={(v:any)=>`$${v.toLocaleString()}`} /><Legend /><Bar dataKey="vCost" name="Virginia" stackId="a" fill="#EC4899" /><Bar dataKey="jCost" name="Jason" stackId="a" fill="#3B82F6" /></BarChart></ResponsiveContainer>
-                              </div>
-                              
-                              <div className="bg-slate-100 p-4 rounded-xl">
-                                  <h4 className="font-bold text-slate-700 mb-2 text-sm flex items-center gap-2"><Icons.Edit2 /> 調整預算參數 (AI Research 基準)</h4>
-                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-                                      {Object.keys(eduDB).map(region => (
-                                          <div key={region} className="bg-white p-3 rounded border">
-                                              <div className="font-bold mb-1">{eduDB[region].name}</div>
-                                              <div className="flex justify-between items-center mb-1"><span>學費/年:</span><input type="number" value={eduDB[region].tuition} onChange={(e)=>updateEduDB({...eduDB, [region]: {...eduDB[region], tuition: Number(e.target.value)}})} className="w-16 border rounded px-1 text-right"/></div>
-                                              <div className="flex justify-between items-center"><span>生活費/年:</span><input type="number" value={eduDB[region].living} onChange={(e)=>updateEduDB({...eduDB, [region]: {...eduDB[region], living: Number(e.target.value)}})} className="w-16 border rounded px-1 text-right"/></div>
-                                          </div>
-                                      ))}
-                                  </div>
-                              </div>
-                          </div>
-                      )}
-                      
-                      {activeTab === 'insurance' && (
-                          <div className="space-y-6 animate-in fade-in">
-                              <div className="bg-indigo-50 p-6 rounded-xl border border-indigo-100 text-indigo-900 text-sm"><h3 className="font-bold text-lg mb-2 flex items-center gap-2"><Icons.ShieldCheck /> 保險 AI 深度透視</h3>系統已自動分析您導入的 <code>payment_data.json</code> 中的 CSV 備註欄位。</div>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                  {Object.entries(stats.insuranceByMember).map(([member, policies]) => (
-                                      <div key={member} className="bg-white border rounded-xl overflow-hidden shadow-sm">
-                                          <div className="bg-slate-50 px-4 py-3 border-b font-bold text-slate-700 flex justify-between"><span>{member}</span><span className="text-xs font-normal bg-white px-2 py-1 rounded border">總投入: ${(policies.reduce((a,b)=>a+b.totalPaid,0)/1000000).toFixed(2)}M</span></div>
-                                          <div className="overflow-x-auto">
-                                              <table className="w-full text-xs">
-                                                  <thead><tr className="text-slate-400 bg-slate-50/50"><th className="p-2 text-left">計劃名稱</th><th className="p-2 text-right">已繳總額</th><th className="p-2 text-center">進度</th><th className="p-2 text-left">備註 (來自 CSV)</th></tr></thead>
-                                                  <tbody>{policies.map((p, idx) => { const remainingYears = p.endYear ? p.endYear - new Date().getFullYear() : null; return (<tr key={idx} className="border-t hover:bg-slate-50"><td className="p-2 font-medium text-slate-700">{p.name}</td><td className="p-2 text-right font-mono text-emerald-600">${p.totalPaid.toLocaleString()}</td><td className="p-2 text-center">{remainingYears ? (remainingYears > 0 ? <span className="text-orange-500 font-bold">{remainingYears}年剩餘</span> : <span className="text-green-500 font-bold">已供滿</span>) : '-'}</td><td className="p-2 text-slate-500 truncate max-w-xs text-[10px]" title={p.note}>{p.note}</td></tr>); })}</tbody>
-                                              </table>
-                                          </div>
-                                      </div>
-                                  ))}
-                              </div>
-                          </div>
-                      )}
-
-                      {activeTab === 'data' && (
-                          <div className="bg-white rounded-xl border shadow-sm flex flex-col h-[80vh] animate-in fade-in">
-                              <div className="p-4 border-b bg-slate-50 flex flex-wrap gap-4 justify-between items-center">
-                                  <div className="flex gap-2"><h3 className="font-bold text-slate-700">數據中心</h3><button onClick={()=>setEntryModalOpen(true)} className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"><Icons.Plus /> 新增</button><button onClick={exportJSON} className="flex items-center gap-1 px-3 py-1 bg-slate-600 text-white text-xs rounded hover:bg-slate-700"><Icons.Download /> 導出 JSON</button></div>
-                                  <div className="flex gap-2 text-sm">
-                                      <input type="text" placeholder="搜尋..." className="border rounded px-2 py-1" value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} />
-                                      <select className="border rounded px-2 py-1" value={filterYear} onChange={e=>setFilterYear(e.target.value)}>
-                                          <option value="All">所有年份</option>
-                                          {stats.byYear.map(y => <option key={y.year} value={y.year}>{y.year}</option>)}
-                                      </select>
-                                      <select className="border rounded px-2 py-1" value={filterMember} onChange={e=>setFilterMember(e.target.value)}>
-                                          <option value="All">所有成員</option>
-                                          {MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
-                                      </select>
-                                      <select className="border rounded px-2 py-1" value={filterCategory} onChange={e=>setFilterCategory(e.target.value)}><option value="All">所有類別</option>{CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select>
-                                  </div>
-                              </div>
-                              <div className="overflow-auto flex-1 p-0">
-                                  <table className="w-full text-sm text-left">
-                                      <thead className="text-xs text-slate-500 uppercase bg-slate-50 sticky top-0 z-10"><tr><th className="px-4 py-3">日期</th><th className="px-4 py-3">商戶</th><th className="px-4 py-3">金額</th><th className="px-4 py-3">成員</th><th className="px-4 py-3">類別</th><th className="px-4 py-3">操作</th></tr></thead>
-                                      <tbody className="divide-y divide-slate-100">
-                                          {data.filter(d => (filterCategory==='All'||d.category===filterCategory) && (searchTerm===''||d.merchant.toLowerCase().includes(searchTerm.toLowerCase()))).slice(0, 100).map(tx => (
-                                              <tr key={tx.id} className="hover:bg-blue-50">
-                                                  <td className="px-4 py-2">{tx.date}</td><td className="px-4 py-2 font-medium">{tx.merchant}</td><td className="px-4 py-2 font-mono">${tx.amount.toLocaleString()}</td><td className="px-4 py-2"><span className="px-2 py-1 bg-slate-100 rounded text-xs">{tx.member}</span></td>
-                                                  <td className="px-4 py-2">{editingTx === tx.id ? (<select className="border rounded p-1" onChange={(e) => updateCategory(tx.id, e.target.value, tx.merchant, window.confirm('應用到所有同名商戶?'))} defaultValue={tx.category} autoFocus onBlur={() => setEditingTx(null)}>{CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}</select>) : <span className="cursor-pointer hover:text-blue-600" onClick={()=>setEditingTx(tx.id)}>{tx.category}</span>}</td>
-                                                  <td className="px-4 py-2 text-center"><button onClick={()=>deleteTx(tx.id)} className="text-red-400 hover:text-red-600"><Icons.Trash /></button></td>
-                                              </tr>
-                                          ))}
-                                      </tbody>
-                                  </table>
-                              </div>
-                          </div>
-                      )}
-                  </>
-              )}
-          </div>
-
-          {/* New Property Modal: Tabbed Design */}
-          {isPropModalOpen && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
-                  <div className="bg-white rounded-xl shadow-2xl p-0 w-[600px] max-h-[90vh] overflow-hidden flex flex-col animate-in fade-in zoom-in duration-200">
-                      <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
-                          <h3 className="text-lg font-bold">{editingProp.id ? '編輯物業' : '新增物業'}</h3>
-                          <div className="flex gap-2">
-                             <button onClick={()=>setPropTab('basic')} className={`px-3 py-1 text-xs rounded-full ${propTab==='basic'?'bg-blue-600 text-white':'bg-white border'}`}>基本</button>
-                             <button onClick={()=>setPropTab('finance')} className={`px-3 py-1 text-xs rounded-full ${propTab==='finance'?'bg-blue-600 text-white':'bg-white border'}`}>買入/按揭</button>
-                             <button onClick={()=>setPropTab('expenses')} className={`px-3 py-1 text-xs rounded-full ${propTab==='expenses'?'bg-blue-600 text-white':'bg-white border'}`}>支出</button>
-                             <button onClick={()=>setPropTab('rental')} className={`px-3 py-1 text-xs rounded-full ${propTab==='rental'?'bg-blue-600 text-white':'bg-white border'}`}>租務</button>
-                          </div>
-                      </div>
-
-                      <div className="p-6 overflow-y-auto flex-1 space-y-4">
-                        {propTab === 'basic' && (
-                            <div className="space-y-4">
-                                <div><label className="block text-xs text-slate-500 font-bold mb-1">物業名稱 Name</label><input type="text" value={editingProp.name} onChange={e=>setEditingProp({...editingProp, name:e.target.value})} className="w-full border rounded p-2" /></div>
-                                <div><label className="block text-xs text-slate-500 font-bold mb-1">詳細地址 Address (用於租約)</label><input type="text" value={editingProp.address || ''} onChange={e=>setEditingProp({...editingProp, address:e.target.value})} className="w-full border rounded p-2" placeholder="e.g. Flat A, 10/F, Block 1..." /></div>
-                                <div><label className="block text-xs text-slate-500 font-bold mb-1">用途 Type</label><select value={editingProp.type} onChange={e=>setEditingProp({...editingProp, type:e.target.value as any})} className="w-full border rounded p-2"><option value="Investment">收租 Investment</option><option value="Self-use">自住 Self-use</option></select></div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div><label className="block text-xs text-slate-500 font-bold mb-1">現時估值 Current Value ($)</label><input type="number" value={editingProp.value} onChange={e=>setEditingProp({...editingProp, value:Number(e.target.value)})} className="w-full border rounded p-2" /></div>
-                                </div>
-                            </div>
-                        )}
-
-                        {propTab === 'finance' && (
-                            <div className="space-y-4">
-                                <div className="p-3 bg-blue-50 rounded border border-blue-100">
-                                    <h4 className="font-bold text-blue-800 text-sm mb-2">買入資料 Purchase Info</h4>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div><label className="text-xs">買入價 Price ($)</label><input type="number" value={editingProp.purchaseInfo?.price || 0} onChange={e=>setEditingProp({...editingProp, purchaseInfo: {...editingProp.purchaseInfo, price: Number(e.target.value)} as any})} className="w-full border rounded p-1" /></div>
-                                        <div><label className="text-xs">買入日期 Date</label><input type="date" value={editingProp.purchaseInfo?.date || ''} onChange={e=>setEditingProp({...editingProp, purchaseInfo: {...editingProp.purchaseInfo, date: e.target.value} as any})} className="w-full border rounded p-1" /></div>
-                                    </div>
-                                </div>
-                                <div className="p-3 bg-green-50 rounded border border-green-100">
-                                    <h4 className="font-bold text-green-800 text-sm mb-2">現時按揭 Current Mortgage</h4>
-                                    <div className="space-y-2">
-                                        <div><label className="text-xs">承造銀行 Bank</label><input type="text" value={editingProp.mortgageInfo?.bank || ''} onChange={e=>setEditingProp({...editingProp, mortgageInfo: {...editingProp.mortgageInfo, bank: e.target.value} as any})} className="w-full border rounded p-1" /></div>
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div><label className="text-xs">每月供款 ($)</label><input type="number" value={editingProp.mortgage} onChange={e=>setEditingProp({...editingProp, mortgage: Number(e.target.value)})} className="w-full border rounded p-1" /></div>
-                                            <div><label className="text-xs">剩餘年期 (Years)</label><input type="number" value={editingProp.tenure} onChange={e=>setEditingProp({...editingProp, tenure: Number(e.target.value)})} className="w-full border rounded p-1" /></div>
-                                            <div><label className="text-xs">目前利率 Rate (%)</label><input type="number" step="0.01" value={editingProp.mortgageInfo?.interestRate || 0} onChange={e=>setEditingProp({...editingProp, mortgageInfo: {...editingProp.mortgageInfo, interestRate: Number(e.target.value)} as any})} className="w-full border rounded p-1" /></div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {propTab === 'expenses' && (
-                            <div className="space-y-4">
-                                <div><label className="block text-xs text-slate-500 font-bold mb-1">每月管理費 Management Fee</label><input type="number" value={editingProp.expenses?.managementFee || 0} onChange={e=>setEditingProp({...editingProp, expenses: {...editingProp.expenses, managementFee: Number(e.target.value)} as any})} className="w-full border rounded p-2" /></div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div><label className="block text-xs text-slate-500 font-bold mb-1">每季差餉 Rates (Quarterly)</label><input type="number" value={editingProp.expenses?.govtRates || 0} onChange={e=>setEditingProp({...editingProp, expenses: {...editingProp.expenses, govtRates: Number(e.target.value)} as any})} className="w-full border rounded p-2" /></div>
-                                    <div><label className="block text-xs text-slate-500 font-bold mb-1">每季地租 Govt Rent (Quarterly)</label><input type="number" value={editingProp.expenses?.govtRent || 0} onChange={e=>setEditingProp({...editingProp, expenses: {...editingProp.expenses, govtRent: Number(e.target.value)} as any})} className="w-full border rounded p-2" /></div>
-                                </div>
-                            </div>
-                        )}
-
-                        {propTab === 'rental' && (
-                            <div className="space-y-4">
-                                <div className="flex gap-4 mb-2">
-                                    <label className="flex items-center gap-2 text-sm"><input type="radio" name="r_status" checked={editingProp.rentalInfo?.status === 'Occupied'} onChange={()=>setEditingProp({...editingProp, rentalInfo: {...editingProp.rentalInfo, status: 'Occupied'} as any})} /> 出租中 Occupied</label>
-                                    <label className="flex items-center gap-2 text-sm"><input type="radio" name="r_status" checked={editingProp.rentalInfo?.status === 'Vacant'} onChange={()=>setEditingProp({...editingProp, rentalInfo: {...editingProp.rentalInfo, status: 'Vacant'} as any})} /> 空置 Vacant</label>
-                                </div>
-
-                                <div className={`space-y-3 ${editingProp.rentalInfo?.status === 'Vacant' ? 'opacity-50 pointer-events-none' : ''}`}>
-                                    <div><label className="block text-xs text-slate-500 font-bold">租客姓名 Tenant Name</label><input type="text" value={editingProp.rentalInfo?.tenantName || ''} onChange={e=>setEditingProp({...editingProp, rentalInfo: {...editingProp.rentalInfo, tenantName: e.target.value} as any})} className="w-full border rounded p-2" /></div>
-                                    <div><label className="block text-xs text-slate-500 font-bold">租客身分證 Tenant ID</label><input type="text" value={editingProp.rentalInfo?.tenantID || ''} onChange={e=>setEditingProp({...editingProp, rentalInfo: {...editingProp.rentalInfo, tenantID: e.target.value} as any})} className="w-full border rounded p-2" /></div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div><label className="block text-xs text-slate-500 font-bold">每月租金 ($)</label><input type="number" value={editingProp.estRent} onChange={e=>setEditingProp({...editingProp, estRent: Number(e.target.value), rentalInfo: {...editingProp.rentalInfo, monthlyRent: Number(e.target.value)} as any})} className="w-full border rounded p-2" /></div>
-                                        <div><label className="block text-xs text-slate-500 font-bold">按金 Deposit ($)</label><input type="number" value={editingProp.rentalInfo?.deposit || 0} onChange={e=>setEditingProp({...editingProp, rentalInfo: {...editingProp.rentalInfo, deposit: Number(e.target.value)} as any})} className="w-full border rounded p-2" /></div>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div><label className="block text-xs text-slate-500 font-bold">起租日 Start Date</label><input type="date" value={editingProp.rentalInfo?.leaseStart || ''} onChange={e=>setEditingProp({...editingProp, rentalInfo: {...editingProp.rentalInfo, leaseStart: e.target.value} as any})} className="w-full border rounded p-2" /></div>
-                                        <div><label className="block text-xs text-slate-500 font-bold">完結日 End Date</label><input type="date" value={editingProp.rentalInfo?.leaseEnd || ''} onChange={e=>setEditingProp({...editingProp, rentalInfo: {...editingProp.rentalInfo, leaseEnd: e.target.value} as any})} className="w-full border rounded p-2" /></div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                      </div>
-
-                      <div className="flex gap-2 p-4 border-t bg-gray-50">
-                          <button onClick={handleSaveProperty} className="flex-1 bg-blue-600 text-white py-2 rounded font-bold hover:bg-blue-700">保存</button>
-                          <button onClick={()=>setPropModalOpen(false)} className="flex-1 bg-slate-200 text-slate-700 py-2 rounded hover:bg-slate-300">取消</button>
-                      </div>
-                  </div>
-              </div>
-          )}
-
-          {/* Document Modal */}
-          {isDocModalOpen && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
-                  <div className="bg-white rounded-xl shadow-2xl p-6 w-[1200px] h-[95vh] flex flex-col">
-                      <div className="flex justify-between items-center mb-4 border-b pb-2">
-                          <h3 className="text-xl font-bold flex items-center gap-2"><Icons.FileText /> 文書生成器</h3>
-                          <button onClick={()=>setDocModalOpen(false)} className="text-slate-400 hover:text-slate-600">✕</button>
-                      </div>
-                      <div className="flex gap-6 flex-1 overflow-hidden">
-                          {/* Left: Controls */}
-                          <div className="w-1/4 space-y-4 overflow-y-auto pr-2 border-r">
-                              <div><label className="block text-xs font-bold text-slate-500 mb-1">文件類型</label><div className="flex rounded bg-slate-100 p-1"><button onClick={()=>setDocConfig({...docConfig, type:'receipt'})} className={`flex-1 text-xs py-1 rounded ${docConfig.type==='receipt'?'bg-white shadow text-blue-600':'text-slate-500'}`}>收據</button><button onClick={()=>setDocConfig({...docConfig, type:'lease'})} className={`flex-1 text-xs py-1 rounded ${docConfig.type==='lease'?'bg-white shadow text-blue-600':'text-slate-500'}`}>租約</button></div></div>
-                              
-                              <div>
-                                <label className="block text-xs font-bold text-slate-500 mb-1">選擇物業 (自動填入資料)</label>
-                                <select className="w-full border rounded p-2 text-sm" value={docConfig.propId} onChange={e=>{ 
-                                    const p = properties.find(x=>x.id===e.target.value); 
-                                    if(p) {
-                                        setDocConfig({
-                                            ...docConfig, 
-                                            propId: e.target.value, 
-                                            amount: p.rentalInfo?.monthlyRent || p.estRent || 0,
-                                            tenant: p.rentalInfo?.tenantName || '',
-                                            tenantID: p.rentalInfo?.tenantID || '',
-                                            deposit: p.rentalInfo?.deposit || 0,
-                                            startDate: p.rentalInfo?.leaseStart || '',
-                                            endDate: p.rentalInfo?.leaseEnd || ''
-                                        }); 
-                                    }
-                                }}>
-                                    {properties.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-                                </select>
-                              </div>
-                              
-                              <div className="p-3 bg-blue-50 rounded-lg space-y-3">
-                                <p className="text-xs font-bold text-blue-700 border-b border-blue-200 pb-1">租客資料</p>
-                                <div><label className="block text-xs font-bold text-slate-500">姓名 Name</label><input type="text" className="w-full border rounded p-1 text-sm" value={docConfig.tenant} onChange={e=>setDocConfig({...docConfig, tenant:e.target.value})} /></div>
-                                <div><label className="block text-xs font-bold text-slate-500">身分證 HKID</label><input type="text" className="w-full border rounded p-1 text-sm" value={docConfig.tenantID} onChange={e=>setDocConfig({...docConfig, tenantID:e.target.value})} /></div>
-                              </div>
-
-                              <div className="p-3 bg-green-50 rounded-lg space-y-3">
-                                <p className="text-xs font-bold text-green-700 border-b border-green-200 pb-1">業主資料</p>
-                                <div><label className="block text-xs font-bold text-slate-500">姓名 Name</label><input type="text" className="w-full border rounded p-1 text-sm" value={docConfig.landlord} onChange={e=>setDocConfig({...docConfig, landlord:e.target.value})} /></div>
-                                <div><label className="block text-xs font-bold text-slate-500">身分證 HKID</label><input type="text" className="w-full border rounded p-1 text-sm" value={docConfig.landlordID} onChange={e=>setDocConfig({...docConfig, landlordID:e.target.value})} /></div>
-                              </div>
-
-                              {docConfig.type === 'receipt' ? (
-                                  <>
-                                  <div className="p-3 bg-yellow-50 rounded-lg space-y-3">
-                                    <p className="text-xs font-bold text-yellow-700 border-b border-yellow-200 pb-1">收據詳情</p>
-                                    <div><label className="block text-xs font-bold text-slate-500">租期 (Period)</label><input type="text" className="w-full border rounded p-1 text-sm" value={docConfig.period} onChange={e=>setDocConfig({...docConfig, period:e.target.value})} placeholder="e.g. 1 Jan 2026 - 31 Jan 2026" /></div>
-                                    <div><label className="block text-xs font-bold text-slate-500">金額 Amount ($)</label><input type="number" className="w-full border rounded p-1 text-sm" value={docConfig.amount} onChange={e=>setDocConfig({...docConfig, amount:Number(e.target.value)})} /></div>
-                                    <div><label className="block text-xs font-bold text-slate-500">付款方式</label><select className="w-full border rounded p-1 text-sm" value={docConfig.paymentMethod} onChange={e=>setDocConfig({...docConfig, paymentMethod:e.target.value as any})}><option value="Cash">Cash 現金</option><option value="Cheque">Cheque 支票</option><option value="Bank Transfer">Bank Transfer 銀行轉帳</option></select></div>
-                                  </div>
-                                  </>
-                              ) : (
-                                  <>
-                                    <div className="p-3 bg-purple-50 rounded-lg space-y-3">
-                                      <p className="text-xs font-bold text-purple-700 border-b border-purple-200 pb-1">租約條款</p>
-                                      <div className="flex gap-2"><div><label className="block text-xs font-bold text-slate-500">起租日</label><input type="date" className="w-full border rounded p-1 text-sm" value={docConfig.startDate} onChange={e=>setDocConfig({...docConfig, startDate:e.target.value})} /></div><div><label className="block text-xs font-bold text-slate-500">完結日</label><input type="date" className="w-full border rounded p-1 text-sm" value={docConfig.endDate} onChange={e=>setDocConfig({...docConfig, endDate:e.target.value})} /></div></div>
-                                      <div><label className="block text-xs font-bold text-slate-500">每月租金 ($)</label><input type="number" className="w-full border rounded p-1 text-sm" value={docConfig.amount} onChange={e=>setDocConfig({...docConfig, amount:Number(e.target.value)})} /></div>
-                                      <div><label className="block text-xs font-bold text-slate-500">按金 Deposit ($)</label><input type="number" className="w-full border rounded p-1 text-sm" value={docConfig.deposit} onChange={e=>setDocConfig({...docConfig, deposit:Number(e.target.value)})} /></div>
-                                    </div>
-                                  </>
-                              )}
-                              
-                              <button onClick={()=>handlePrintDoc()} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold shadow hover:bg-blue-700 mt-4 flex justify-center items-center gap-2"><Icons.Printer /> 列印文件 (Print)</button>
-                          </div>
-                          {/* Right: Preview */}
-                          <div className="w-3/4 bg-slate-200 rounded-lg p-8 overflow-y-auto flex justify-center shadow-inner">
-                                <DocPreview />
-                          </div>
-                      </div>
-                  </div>
-              </div>
-          )}
-
-          {/* Data Entry Modal */}
-          {isEntryModalOpen && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
-                  <div className="bg-white rounded-xl shadow-2xl p-6 w-96 animate-in fade-in zoom-in duration-200">
-                      <h3 className="text-lg font-bold mb-4 text-slate-800">新增交易</h3>
+        {/* Modals */}
+        {modalMode === 'doc' && <DocModal />}
+        
+        {modalMode === 'transaction' && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
+                <div className="bg-white rounded-xl shadow-2xl p-6 w-96">
+                      <h3 className="text-lg font-bold mb-4">新增交易 Record</h3>
                       <div className="space-y-3">
-                          <input type="date" className="w-full border rounded p-2" value={newTx.date} onChange={e=>setNewTx({...newTx, date: e.target.value})} />
-                          <input type="text" placeholder="商戶名稱" className="w-full border rounded p-2" value={newTx.merchant} onChange={e=>setNewTx({...newTx, merchant: e.target.value})} />
-                          <input type="number" placeholder="金額" className="w-full border rounded p-2" value={newTx.amount} onChange={e=>setNewTx({...newTx, amount: e.target.value})} />
-                          <select className="w-full border rounded p-2" value={newTx.category} onChange={e=>setNewTx({...newTx, category: e.target.value})}>{CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select>
-                          <select className="w-full border rounded p-2" value={newTx.member} onChange={e=>setNewTx({...newTx, member: e.target.value})}>{MEMBERS.map(m=><option key={m} value={m}>{m}</option>)}</select>
+                          <input type="date" className="w-full border rounded p-2" value={editingTx?.date} onChange={e=>setEditingTx({...editingTx, date: e.target.value} as any)} />
+                          <input type="text" placeholder="Detail/Merchant" className="w-full border rounded p-2" value={editingTx?.merchant} onChange={e=>setEditingTx({...editingTx, merchant: e.target.value} as any)} />
+                          <input type="number" placeholder="Amount" className="w-full border rounded p-2" value={editingTx?.amount} onChange={e=>setEditingTx({...editingTx, amount: Number(e.target.value)} as any)} />
+                          <select className="w-full border rounded p-2" value={editingTx?.category} onChange={e=>setEditingTx({...editingTx, category: e.target.value} as any)}>{CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select>
                       </div>
                       <div className="flex gap-2 mt-6">
-                          <button onClick={handleAddTx} className="flex-1 bg-blue-600 text-white py-2 rounded font-bold hover:bg-blue-700">保存</button>
-                          <button onClick={()=>setEntryModalOpen(false)} className="flex-1 bg-slate-200 text-slate-700 py-2 rounded hover:bg-slate-300">取消</button>
+                          <button onClick={handleSaveTransaction} className="flex-1 bg-blue-600 text-white py-2 rounded font-bold">Save</button>
+                          <button onClick={()=>setModalMode('none')} className="flex-1 bg-gray-200 py-2 rounded">Cancel</button>
                       </div>
                   </div>
-              </div>
-          )}
-      </div>
+            </div>
+        )}
+
+        {modalMode === 'property' && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
+                <div className="bg-white rounded-xl shadow-2xl p-6 w-[500px]">
+                    <h3 className="font-bold mb-4">Edit Property</h3>
+                    <div className="space-y-3">
+                        <input className="border w-full p-2" placeholder="Name" value={editingProp?.name} onChange={e => setEditingProp({...editingProp, name: e.target.value} as any)} />
+                        <input className="border w-full p-2" placeholder="Address" value={editingProp?.address} onChange={e => setEditingProp({...editingProp, address: e.target.value} as any)} />
+                        <select className="border w-full p-2" value={editingProp?.status} onChange={e => setEditingProp({...editingProp, status: e.target.value} as any)}><option value="Occupied">Occupied</option><option value="Vacant">Vacant</option></select>
+                        <div className="grid grid-cols-2 gap-2">
+                             <input className="border p-2" type="number" placeholder="Value" value={editingProp?.currentValue} onChange={e => setEditingProp({...editingProp, currentValue: Number(e.target.value)} as any)} />
+                             <input className="border p-2" type="number" placeholder="Rent Est." value={editingProp?.estRent} onChange={e => setEditingProp({...editingProp, estRent: Number(e.target.value)} as any)} />
+                        </div>
+                    </div>
+                    <div className="flex gap-2 mt-6">
+                        <button onClick={handleSaveProperty} className="flex-1 bg-blue-600 text-white p-2 rounded">Save</button>
+                        <button onClick={() => setModalMode('none')} className="flex-1 bg-gray-200 p-2 rounded">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        )}
+    </div>
   );
 };
 

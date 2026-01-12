@@ -213,7 +213,7 @@ const App: React.FC = () => {
   useEffect(() => {
     // 1. Transactions
     const q = query(collection(db, "transactions"), orderBy("date", "desc"));
-    const unsubTx = onSnapshot(q, (snapshot) => {
+    const unsubTx = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
       // Fix 4: Cast Firestore data to Transaction type
       const txs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
       setData(txs);
@@ -221,13 +221,13 @@ const App: React.FC = () => {
     });
 
     // 2. Properties
-    const unsubProp = onSnapshot(collection(db, "properties"), (snapshot) => {
+    const unsubProp = onSnapshot(collection(db, "properties"), (snapshot: QuerySnapshot<DocumentData>) => {
       const props = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Property));
       setProperties(props);
     });
 
     // 3. Education Config
-    const unsubEdu = onSnapshot(doc(db, "settings", "education"), (docSnap) => {
+    const unsubEdu = onSnapshot(doc(db, "settings", "education"), (docSnap: DocumentSnapshot<DocumentData>) => {
       if (docSnap.exists()) {
         setEduDB(docSnap.data() as Record<string, EduConfig>);
       } else {

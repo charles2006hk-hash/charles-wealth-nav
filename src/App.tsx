@@ -513,7 +513,8 @@ const App: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState('dashboard');
   const [propertyViewId, setPropertyViewId] = useState<string | null>(null);
-  const [modalMode, setModalMode] = useState<'none' | 'transaction' | 'property' | 'doc'>('none');
+  const [modalMode, setModalMode] = useState<'none' | 'transaction' | 'property' | 'doc' | 'lease'>('none');
+  const [editingLease, setEditingLease] = useState<Lease | null>(null);
 
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [editingProp, setEditingProp] = useState<Property | null>(null);
@@ -700,6 +701,23 @@ const App: React.FC = () => {
         setModalMode('none');
       } catch(e) { alert(e); }
   };
+
+  const handleSaveLease = async () => {
+      if (!editingLease) return;
+      try {
+        const leaseData = {
+             ...editingLease,
+             monthlyRent: Number(editingLease.monthlyRent),
+             deposit: Number(editingLease.deposit)
+        };
+        if (editingLease.id) {
+             await setDoc(doc(db, "leases", editingLease.id), leaseData);
+        } else {
+             await addDoc(collection(db, "leases"), leaseData);
+        }
+        setModalMode('none');
+      } catch(e) { alert(e); }
+  }
 
   const deleteItem = async (col: string, id: string) => {
       if(window.confirm('確定刪除?')) await deleteDoc(doc(db, col, id));
@@ -888,7 +906,10 @@ const App: React.FC = () => {
                                         <td className="p-3 font-medium">{t.merchant} <span className="text-slate-400 text-xs">{t.note}</span></td>
                                         <td className={`p-3 font-mono font-bold ${t.category?.includes('Income') ? 'text-emerald-600' : 'text-red-500'}`}>{t.category?.includes('Income') ? '+' : '-'}{formatCurrency(t.amount)}</td>
                                         <td className="p-3 flex gap-1">{t.tags?.map(tag => <span key={tag} className="text-xs bg-yellow-100 text-yellow-800 px-1 rounded">#{tag}</span>)}</td>
-                                        <td className="p-3"><button onClick={() => deleteItem('transactions', t.id)} className="text-red-400 hover:text-red-600"><ICONS.Trash /></button></td>
+                                        <td className="p-3">
+                                            <button onClick={() => { setEditingTx(t); setModalMode('transaction'); }} className="text-blue-400 hover:text-blue-600 mr-2"><ICONS.Edit /></button>
+                                            <button onClick={() => deleteItem('transactions', t.id)} className="text-red-400 hover:text-red-600"><ICONS.Trash /></button>
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -902,9 +923,9 @@ const App: React.FC = () => {
                      <div className="flex justify-between items-center">
                         <h3 className="font-bold">租約紀錄 Lease History</h3>
                         <button onClick={()=>{
-                            const newLease = { propertyId: p.id, tenantName: 'New Tenant', status: 'Active', startDate: '2026-01-01', endDate: '2027-01-01', monthlyRent: 15000 };
-                            addDoc(collection(db, "leases"), newLease);
-                        }} className="text-sm text-blue-600 hover:underline">+ Register New Lease (Demo)</button>
+                            setEditingLease({ propertyId: p.id, tenantName: '', tenantID: '', startDate: '', endDate: '', monthlyRent: 0, deposit: 0, status: 'Active' } as Lease);
+                            setModalMode('lease');
+                        }} className="text-sm text-blue-600 hover:underline">+ Register New Lease</button>
                      </div>
                      {pLeases.map(l => (
                          <div key={l.id} className={`p-4 rounded-xl border ${l.status === 'Active' ? 'bg-green-50 border-green-200' : 'bg-gray-50'}`}>
@@ -915,7 +936,10 @@ const App: React.FC = () => {
                                  </div>
                                  <div className="text-right">
                                      <p className="font-bold font-mono">{formatCurrency(l.monthlyRent)}/mo</p>
-                                     {l.status === 'Active' && <span className="text-xs bg-green-200 text-green-800 px-2 py-0.5 rounded">Active</span>}
+                                     <div className="flex gap-2 justify-end mt-1">
+                                         {l.status === 'Active' && <span className="text-xs bg-green-200 text-green-800 px-2 py-0.5 rounded">Active</span>}
+                                         <button onClick={() => { setEditingLease(l); setModalMode('lease'); }} className="text-xs text-blue-600 hover:underline">Edit</button>
+                                     </div>
                                  </div>
                              </div>
                          </div>
@@ -1230,6 +1254,30 @@ const App: React.FC = () => {
                       <div className="flex gap-2 mt-8 pt-4 border-t">
                           <button onClick={handleSaveProperty} className="flex-1 bg-blue-600 text-white p-3 rounded-lg font-bold hover:bg-blue-700">Save Property</button>
                           <button onClick={() => setModalMode('none')} className="flex-1 bg-gray-100 text-slate-600 p-3 rounded-lg font-bold hover:bg-gray-200">Cancel</button>
+                      </div>
+                  </div>
+              </div>
+          )}
+          {modalMode === 'lease' && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
+                  <div className="bg-white rounded-xl shadow-2xl p-6 w-[500px] animate-in fade-in zoom-in duration-200">
+                      <h3 className="font-bold text-xl mb-6">Manage Lease</h3>
+                      <div className="space-y-4">
+                          <input className="border w-full p-2 rounded" placeholder="Tenant Name" value={editingLease?.tenantName} onChange={e => setEditingLease({...editingLease, tenantName: e.target.value} as any)} />
+                          <input className="border w-full p-2 rounded" placeholder="Tenant ID" value={editingLease?.tenantID} onChange={e => setEditingLease({...editingLease, tenantID: e.target.value} as any)} />
+                          <div className="grid grid-cols-2 gap-4">
+                              <div><label className="text-xs">Start Date</label><input type="date" className="border w-full p-2 rounded" value={editingLease?.startDate} onChange={e => setEditingLease({...editingLease, startDate: e.target.value} as any)} /></div>
+                              <div><label className="text-xs">End Date</label><input type="date" className="border w-full p-2 rounded" value={editingLease?.endDate} onChange={e => setEditingLease({...editingLease, endDate: e.target.value} as any)} /></div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                              <div><label className="text-xs">Monthly Rent</label><input type="number" className="border w-full p-2 rounded" value={editingLease?.monthlyRent} onChange={e => setEditingLease({...editingLease, monthlyRent: Number(e.target.value)} as any)} /></div>
+                              <div><label className="text-xs">Deposit</label><input type="number" className="border w-full p-2 rounded" value={editingLease?.deposit} onChange={e => setEditingLease({...editingLease, deposit: Number(e.target.value)} as any)} /></div>
+                          </div>
+                          <select className="border w-full p-2 rounded" value={editingLease?.status} onChange={e => setEditingLease({...editingLease, status: e.target.value} as any)}><option value="Active">Active</option><option value="Terminated">Terminated</option></select>
+                      </div>
+                      <div className="flex gap-2 mt-6">
+                          <button onClick={handleSaveLease} className="flex-1 bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Save Lease</button>
+                          <button onClick={() => setModalMode('none')} className="flex-1 bg-gray-200 p-2 rounded hover:bg-gray-300">Cancel</button>
                       </div>
                   </div>
               </div>

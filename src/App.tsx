@@ -1,12 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
-  Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell 
-} from 'recharts';
 import { initializeApp } from "firebase/app";
 import { 
-  getFirestore, collection, doc, addDoc, setDoc, deleteDoc, 
-  onSnapshot, query, orderBy, writeBatch
+  getFirestore, collection, doc, addDoc, setDoc, deleteDoc, updateDoc, 
+  onSnapshot, query, orderBy, writeBatch,
+  QuerySnapshot, DocumentData, DocumentSnapshot
 } from "firebase/firestore";
 
 // --- 1. Firebase 設定 ---
@@ -65,8 +62,8 @@ interface Property {
   purchasePrice: number; 
   mortgageAmount: number; 
   outstandingLoan: number; 
-  estRent: number; // 修正：補回預估租金欄位
-  tenure: number;  // 修正：補回按揭年期欄位
+  estRent: number; 
+  tenure: number;  
 
   // 支出設定
   managementFee: number;
@@ -127,6 +124,7 @@ const ICONS = {
   GraduationCap: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>,
 };
 
+// --- Constants ---
 const CATEGORIES = [
   'Rental Income (租金收入)', 'Management Fee (管理費)', 'Govt Rates (差餉)', 'Govt Rent (地租)',
   'Mortgage Payment (按揭供款)', 'Repair & Maint (維修)', 'Tax (稅項)', 
@@ -691,6 +689,7 @@ const App: React.FC = () => {
                         <select className="border rounded px-2 py-1" value={filterCategory} onChange={e=>setFilterCategory(e.target.value)}><option value="All">All Categories</option>{CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select>
                         <select className="border rounded px-2 py-1" value={filterMember} onChange={e=>setFilterMember(e.target.value)}><option value="All">All Members</option>{MEMBERS.map(m=><option key={m} value={m}>{m}</option>)}</select>
                         <select className="border rounded px-2 py-1" value={filterYear} onChange={e=>setFilterYear(e.target.value)}><option value="All">All Years</option>{[2024,2025,2026].map(y=><option key={y} value={y}>{y}</option>)}</select>
+                        <button onClick={handleExportJSON} className="px-3 py-1 bg-slate-600 text-white text-xs rounded hover:bg-slate-700">Export JSON</button>
                       </div>
                       <table className="w-full text-sm text-left">
                           <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0"><tr><th className="p-3">Date</th><th className="p-3">Merchant</th><th className="p-3">Amount</th><th className="p-3">Category</th><th className="p-3">Member</th></tr></thead>

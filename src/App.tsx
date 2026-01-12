@@ -109,6 +109,9 @@ interface InsurancePolicy {
     name: string;
     totalPaid: number;
     note: string;
+    lastPaid?: string;
+    endYear?: number | null;
+    rawMerchant?: string;
 }
 
 // --- 3. 常數與圖示 ---
@@ -287,7 +290,10 @@ const App: React.FC = () => {
                  insuranceByMember[memberKey].push({ 
                      name: d.merchant, 
                      totalPaid: d.amount, 
-                     note: d.note || ''
+                     note: d.note || '',
+                     lastPaid: d.date,
+                     endYear: null,
+                     rawMerchant: d.merchant
                  });
             }
         }

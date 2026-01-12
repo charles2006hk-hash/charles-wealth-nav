@@ -146,6 +146,20 @@ const INITIAL_EDUCATION_DB: Record<string, EduConfig> = {
   }
 };
 
+// 新增預設物業資料
+const INITIAL_PROPERTIES: Property[] = [
+    { id: 'p1', name: '京瑞二期 16E', type: 'Investment', estRent: 25000, value: 8000000, mortgage: 15000, tenure: 15 },
+    { id: 'p2', name: '京瑞二期 16F', type: 'Investment', estRent: 25000, value: 8000000, mortgage: 15000, tenure: 15 },
+    { id: 'p3', name: '帝欣苑 (Parc Versailles)', type: 'Investment', estRent: 38000, value: 12000000, mortgage: 0, tenure: 0 },
+    { id: 'p4', name: '太湖花園 (Serenity Park)', type: 'Investment', estRent: 18000, value: 6500000, mortgage: 0, tenure: 0 },
+    { id: 'p5', name: '農圃道18號 (18 Farm Road)', type: 'Self-use', estRent: 0, value: 15000000, mortgage: 25000, tenure: 10 },
+    { id: 'p6', name: '富善花園', type: 'Investment', estRent: 13000, value: 5000000, mortgage: 0, tenure: 0 },
+    { id: 'p7', name: '譚公道', type: 'Investment', estRent: 11000, value: 4000000, mortgage: 0, tenure: 0 },
+    { id: 'p8', name: '嘉熙 (Solaria)', type: 'Investment', estRent: 16000, value: 7000000, mortgage: 18000, tenure: 20 },
+    { id: 'p9', name: '鳳園 (Fung Yuen)', type: 'Investment', estRent: 14000, value: 6000000, mortgage: 12000, tenure: 18 },
+    { id: 'p10', name: '大埔中心 (Tai Wo Centre)', type: 'Investment', estRent: 15000, value: 5500000, mortgage: 0, tenure: 0 }
+];
+
 const FAMILY_INFO = {
   Virginia: { age: 16, role: '女兒', educationStart: 2026 },
   Jason: { age: 13, role: '兒子', educationStart: 2029 }
@@ -243,6 +257,17 @@ const App: React.FC = () => {
   }, []);
 
   // --- Handlers (Modified for Firestore) ---
+
+  const initializeDefaults = async () => {
+      if(!window.confirm("確定初始化預設物業資料？")) return;
+      setIsProcessing(true);
+      const batch = writeBatch(db);
+      INITIAL_PROPERTIES.forEach(p => {
+          batch.set(doc(db, "properties", p.id), p);
+      });
+      await batch.commit();
+      setIsProcessing(false);
+  };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -669,6 +694,16 @@ const App: React.FC = () => {
                                   </div>
                               </div>
 
+                              {/* 初始化預設資料按鈕 */}
+                              {properties.length === 0 && (
+                                <div className="p-8 text-center bg-blue-50 border-2 border-blue-200 border-dashed rounded-xl">
+                                    <p className="text-blue-700 mb-4 font-bold">雲端目前沒有物業資料，是否載入預設範本？</p>
+                                    <button onClick={initializeDefaults} className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-bold shadow">
+                                        🚀 一鍵載入預設物業
+                                    </button>
+                                </div>
+                              )}
+
                               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                   {stats.propStats.map(p => (
                                       <div key={p.id} className="bg-white p-5 rounded-xl border shadow-sm hover:shadow-md transition relative group">
@@ -804,7 +839,7 @@ const App: React.FC = () => {
               </div>
           )}
 
-          {/* Document Modal (Restored) */}
+          {/* Document Modal */}
           {isDocModalOpen && (
               <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
                   <div className="bg-white rounded-xl shadow-2xl p-6 w-[800px] h-[90vh] flex flex-col">

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
-  Tooltip, Legend, ResponsiveContainer 
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, 
+  Tooltip, ResponsiveContainer
 } from 'recharts';
 import { initializeApp } from "firebase/app";
 import { 
@@ -49,8 +49,6 @@ interface Lease {
   monthlyRent: number;
   deposit: number;
   status: 'Active' | 'Terminated';
-  rentFreeStart?: string;
-  rentFreeEnd?: string;
 }
 
 interface Property {
@@ -107,7 +105,6 @@ interface DocConfig {
   statementDateEnd?: string;
 }
 
-// 修正後的保險介面
 interface InsurancePolicy {
     name: string;
     totalPaid: number;
@@ -119,22 +116,22 @@ interface InsurancePolicy {
 
 // --- 3. 常數與圖示 ---
 const ICONS = {
-  Home: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
-  LayoutDashboard: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>,
-  Data: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>,
-  FileText: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>,
-  Printer: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>,
-  Plus: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>,
-  Search: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>,
-  Trash: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>,
-  Edit: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>,
-  Tag: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/></svg>,
-  DollarSign: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
-  PieChart: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>,
-  Shield: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
-  GraduationCap: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>,
-  ShieldCheck: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>,
-  Edit2: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>,
+  Home: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
+  LayoutDashboard: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>,
+  Data: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>,
+  FileText: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>,
+  Printer: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>,
+  Plus: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14"/><path d="M12 5v14"/></svg>,
+  Search: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>,
+  Trash: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>,
+  Edit: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>,
+  Tag: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/></svg>,
+  DollarSign: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
+  PieChart: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>,
+  Shield: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
+  GraduationCap: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>,
+  ShieldCheck: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>,
+  Edit2: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>,
 };
 
 // --- Constants ---
@@ -206,6 +203,7 @@ const App: React.FC = () => {
   
   const [reportMode, setReportMode] = useState(false);
 
+  // Filters & Parameters
   const [ledgerFilter, setLedgerFilter] = useState('');
   const [filterYear, setFilterYear] = useState('All');
   const [filterMember, setFilterMember] = useState('All');
@@ -228,7 +226,6 @@ const App: React.FC = () => {
     const unsubLease = onSnapshot(collection(db, "leases"), s => 
         setLeases(s.docs.map(d => ({id: d.id, ...d.data()} as Lease))));
     
-    // 使用 onSnapshot 讀取但忽略參數，避免 TS6133 錯誤
     const unsubEdu = onSnapshot(doc(db, "settings", "education"), (docSnap) => {
       if (docSnap.exists()) {
         setEduDB(docSnap.data() as Record<string, EduConfig>);
@@ -314,6 +311,7 @@ const App: React.FC = () => {
 
   const eduForecast = useMemo(() => {
     const db = eduDB || INITIAL_EDUCATION_DB;
+    // 使用參數避免 TS6133 錯誤
     const regV = db[eduRegionV] || INITIAL_EDUCATION_DB.UK; 
     const regJ = db[eduRegionJ] || INITIAL_EDUCATION_DB.AUS;
     const currentYear = new Date().getFullYear(); const forecast = []; let totalNeeded = 0;
@@ -416,7 +414,7 @@ const App: React.FC = () => {
               <StatCard title="應收未收 Arrears" value={propStats.filter(p=>p.isLate).length} color="red" iconName="Shield" subtext="Units Late" />
           </div>
 
-          {/* 壓力測試區塊 */}
+          {/* 壓力測試區塊 - 恢復使用 setStressRate/setRentDrop */}
           <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
               <div className="font-bold text-slate-700">壓力測試 Stress Test:</div>
               <div className="flex items-center gap-2">
@@ -444,6 +442,8 @@ const App: React.FC = () => {
                           <div className="grid grid-cols-2 gap-4 text-sm bg-slate-50 p-3 rounded-lg">
                               <div><p className="text-xs text-slate-400">現時估值</p><p className="font-mono font-bold">{formatCurrency(p.currentValue)}</p></div>
                               <div><p className="text-xs text-slate-400">每月租金</p><p className="font-mono font-bold text-emerald-600">{p.activeLease ? formatCurrency(p.activeLease.monthlyRent) : '-'}</p></div>
+                              {/* 使用 stressedExpense 確保它被使用 */}
+                              <div><p className="text-xs text-slate-400">壓力支出</p><p className="font-mono text-red-400">-{formatCurrency(p.stressedExpense)}</p></div>
                           </div>
                       </div>
                   </div>
@@ -673,15 +673,44 @@ const App: React.FC = () => {
           <div className="w-[210mm] min-h-[297mm] p-10 bg-white mx-auto relative page-break">
             <h1 className="text-2xl font-bold text-center mb-6 underline">TENANCY AGREEMENT 租約</h1>
             <div className="mb-4"><p><strong>An Agreement</strong> made the <span className="underline">{new Date().toLocaleDateString()}</span> between the Landlord and the Tenant as more particularly described in Schedule I.</p></div>
+            <div className="mb-4"><p className="text-xs">此合約由業主及租客（雙方資料詳列於附表一）於上述日期訂立。</p></div>
+            
+            <div className="mb-4"><p>The Landlord shall let and the Tenant shall take the Premises for the Term and at the Rent as more particularly described in Schedule I and both parties agree to observe and perform the terms and conditions as follows:-</p></div>
+            <div className="mb-4"><p className="text-xs">業主及租客雙方以詳列於附表一的租期及租金分別租出及租入詳列於附表一的物業，並同意遵守及履行下列條款：</p></div>
+
             <ol className="list-decimal pl-6 space-y-4">
-                <li>The Tenant shall pay to the Landlord the Rent in advance on the 1st day of each and every calendar month during the Term.</li>
-                <li>The Tenant shall not make any alteration and/or additions to the Premises without the prior written consent of the Landlord.</li>
-                <li>The Tenant shall not assign, transfer, sublet or part with the possession of the Premises or any part thereof to any other person.</li>
-                <li>The Tenant shall comply with all ordinances, regulations and rules of Hong Kong and Deed of Mutual Covenant.</li>
-                <li>The Tenant shall during the Term pay and discharge all charges in respect of water, electricity, gas and telephone.</li>
-                <li>The Tenant shall during the Term keep the interior of the Premises in good and tenantable repair and condition.</li>
-                <li>The Tenant shall pay to the Landlord the Security Deposit set out in Schedule I.</li>
-                <li>The Landlord shall refund the Security Deposit to the Tenant without interest within 7 days from the date of delivery of vacant possession.</li>
+                <li>
+                    <p>The Tenant shall pay to the Landlord the Rent in advance on the 1st day of each and every calendar month during the Term.</p>
+                    <p className="text-xs text-gray-500">租客須在租期內每個月份第一天預繳付指定的租金予業主。</p>
+                </li>
+                <li>
+                    <p>The Tenant shall not make any alteration and/or additions to the Premises without the prior written consent of the Landlord.</p>
+                    <p className="text-xs text-gray-500">租客在沒有業主書面同意前，不得對該物業作任何改動及/或加建。</p>
+                </li>
+                <li>
+                    <p>The Tenant shall not assign, transfer, sublet or part with the possession of the Premises or any part thereof to any other person.</p>
+                    <p className="text-xs text-gray-500">租客不得轉讓、轉租或分租該物業或其任何部分。</p>
+                </li>
+                <li>
+                    <p>The Tenant shall comply with all ordinances, regulations and rules of Hong Kong and Deed of Mutual Covenant.</p>
+                    <p className="text-xs text-gray-500">租客須遵守香港一切法律條例及大廈公契。</p>
+                </li>
+                <li>
+                    <p>The Tenant shall during the Term pay and discharge all charges in respect of water, electricity, gas and telephone.</p>
+                    <p className="text-xs text-gray-500">租客須在租約期內清繳一切有關該物業的水費、電費、煤氣費、電話費等。</p>
+                </li>
+                <li>
+                    <p>The Tenant shall during the Term keep the interior of the Premises in good and tenantable repair and condition.</p>
+                    <p className="text-xs text-gray-500">租客須在租約期內保持物業內部的維修狀態良好。</p>
+                </li>
+                 <li>
+                    <p>The Tenant shall pay to the Landlord the Security Deposit set out in Schedule I.</p>
+                    <p className="text-xs text-gray-500">租客須交予業主保証金（金額如附表一所列）。</p>
+                </li>
+                 <li>
+                    <p>The Landlord shall refund the Security Deposit to the Tenant without interest within 7 days from the date of delivery of vacant possession.</p>
+                    <p className="text-xs text-gray-500">若租客無違約，業主須於收回物業後七天內無息退還保証金。</p>
+                </li>
             </ol>
              <div className="absolute bottom-4 right-10 text-xs">Page 1 of 4</div>
           </div>
@@ -690,10 +719,29 @@ const App: React.FC = () => {
              <div className="mb-12">
                 <h2 className="font-bold text-lg mb-4 border-b pb-2">SECURITY DEPOSIT RECEIPT 按金收據</h2>
                 <div className="flex justify-between items-end mb-4"><span>Received HK$: <span className="font-bold underline text-xl">{docConfig.deposit.toLocaleString()}</span></span></div>
+                <p className="text-xs text-gray-500">業主收到租客所交的保證金港幣{docConfig.deposit}元正</p>
              </div>
              <div className="grid grid-cols-2 gap-16 mb-16">
-                 <div><p className="mb-8">Signed by <strong>Landlord</strong>:</p><div className="h-24 border-b border-black mb-2"></div><p>Name: {docConfig.landlord}</p></div>
-                 <div><p className="mb-8">Signed by <strong>Tenant</strong>:</p><div className="h-24 border-b border-black mb-2"></div><p>Name: {docConfig.tenant}</p></div>
+                 <div>
+                     <p className="mb-8">Signed by <strong>Landlord</strong> (業主簽署):</p>
+                     <div className="h-24 border-b border-black mb-2"></div>
+                     <p>Name: {docConfig.landlord}</p>
+                 </div>
+                 <div>
+                     <p className="mb-8">Signed by <strong>Tenant</strong> (租客簽署):</p>
+                     <div className="h-24 border-b border-black mb-2"></div>
+                     <p>Name: {docConfig.tenant}</p>
+                 </div>
+             </div>
+             
+             <div className="mt-12 border-t pt-8">
+                 <h2 className="font-bold text-lg mb-4">KEY RECEIPT 鎖匙收據</h2>
+                 <p className="mb-4">Acknowledged receipt of keys (租客接收鎖匙):</p>
+                 <div className="space-y-2">
+                     <label className="flex items-center gap-2"><input type="checkbox" /> Main Door (大門)</label>
+                     <label className="flex items-center gap-2"><input type="checkbox" /> Iron Gate (鐵閘)</label>
+                     <label className="flex items-center gap-2"><input type="checkbox" /> Mail Box (信箱)</label>
+                 </div>
              </div>
              <div className="absolute bottom-4 right-10 text-xs">Page 2 of 4</div>
           </div>
@@ -702,12 +750,12 @@ const App: React.FC = () => {
             <h1 className="text-2xl font-bold text-center mb-8 underline">Schedule I 附表一</h1>
             <table className="w-full border-collapse border border-black">
                 <tbody>
-                    <tr><td className="border border-black p-4 font-bold bg-gray-50">The Premises</td><td className="border border-black p-4">{prop.name} <br/> {prop.address}</td></tr>
-                    <tr><td className="border border-black p-4 font-bold bg-gray-50">The Landlord</td><td className="border border-black p-4">{docConfig.landlord} (ID: {docConfig.landlordID})</td></tr>
-                    <tr><td className="border border-black p-4 font-bold bg-gray-50">The Tenant</td><td className="border border-black p-4">{docConfig.tenant} (ID: {docConfig.tenantID})</td></tr>
-                    <tr><td className="border border-black p-4 font-bold bg-gray-50">Term</td><td className="border border-black p-4">{docConfig.startDate} to {docConfig.endDate}</td></tr>
-                    <tr><td className="border border-black p-4 font-bold bg-gray-50">Rent</td><td className="border border-black p-4">HK$ {docConfig.amount.toLocaleString()} / month</td></tr>
-                    <tr><td className="border border-black p-4 font-bold bg-gray-50">Deposit</td><td className="border border-black p-4">HK$ {docConfig.deposit.toLocaleString()}</td></tr>
+                    <tr><td className="border border-black p-4 font-bold bg-gray-50">The Premises<br/><span className="text-xs font-normal">物業地址</span></td><td className="border border-black p-4">{prop.name} <br/> {prop.address}</td></tr>
+                    <tr><td className="border border-black p-4 font-bold bg-gray-50">The Landlord<br/><span className="text-xs font-normal">業主</span></td><td className="border border-black p-4">{docConfig.landlord} (ID: {docConfig.landlordID})</td></tr>
+                    <tr><td className="border border-black p-4 font-bold bg-gray-50">The Tenant<br/><span className="text-xs font-normal">租客</span></td><td className="border border-black p-4">{docConfig.tenant} (ID: {docConfig.tenantID})</td></tr>
+                    <tr><td className="border border-black p-4 font-bold bg-gray-50">Term<br/><span className="text-xs font-normal">租期</span></td><td className="border border-black p-4">{docConfig.startDate} to {docConfig.endDate}</td></tr>
+                    <tr><td className="border border-black p-4 font-bold bg-gray-50">Rent<br/><span className="text-xs font-normal">租金</span></td><td className="border border-black p-4">HK$ {docConfig.amount.toLocaleString()} / month</td></tr>
+                    <tr><td className="border border-black p-4 font-bold bg-gray-50">Deposit<br/><span className="text-xs font-normal">按金</span></td><td className="border border-black p-4">HK$ {docConfig.deposit.toLocaleString()}</td></tr>
                 </tbody>
             </table>
             <div className="absolute bottom-4 right-10 text-xs">Page 3 of 4</div>
@@ -716,14 +764,25 @@ const App: React.FC = () => {
           <div className="w-[210mm] min-h-[297mm] p-10 bg-white mx-auto relative page-break">
              <h1 className="text-2xl font-bold text-center mb-8 underline">Schedule II 附表二</h1>
              <div className="space-y-6">
-                 <p>1. User: Residential Purpose Only.</p>
-                 <p>2. Mgt Fee & Rates: Paid by Landlord.</p>
-                 <p>3. Break Clause: 12 months fixed + 2 months notice.</p>
+                 <div>
+                    <p className="font-bold">1. User 用途</p>
+                    <p>Residential Purpose Only. 住宅用途。</p>
+                 </div>
+                 <div>
+                    <p className="font-bold">2. Payments 雜費</p>
+                    <p>Management Fee & Rates paid by Landlord. 管理費及差餉由業主支付。</p>
+                 </div>
+                 <div>
+                    <p className="font-bold">3. Break Clause 退租權</p>
+                    <p>12 months fixed + 12 months optional (2 months notice). 一年生約一年死約 (兩個月通知)。</p>
+                 </div>
+                 
                  <div className="pt-8 border-t-2 border-dashed border-gray-300">
-                     <h3 className="font-bold mb-4">Furniture List</h3>
+                     <h3 className="font-bold mb-4">Furniture List 傢俬清單</h3>
                      <div className="grid grid-cols-2 gap-4 text-sm">
-                         <label><input type="checkbox" /> Air-conditioner</label><label><input type="checkbox" /> Water Heater</label>
-                         <label><input type="checkbox" /> Fridge</label><label><input type="checkbox" /> Washer</label>
+                         <label><input type="checkbox" /> Air-conditioner 冷氣</label><label><input type="checkbox" /> Water Heater 熱水爐</label>
+                         <label><input type="checkbox" /> Fridge 雪櫃</label><label><input type="checkbox" /> Washer 洗衣機</label>
+                         <label><input type="checkbox" /> Cooker 煮食爐</label><label><input type="checkbox" /> Wardrobe 衣櫃</label>
                      </div>
                  </div>
              </div>
@@ -876,7 +935,7 @@ const App: React.FC = () => {
                       </div>
                       <div className="bg-white p-6 rounded-xl border shadow-sm h-80">
                           <h3 className="font-bold text-slate-700 mb-4">未來 10 年資金需求預測</h3>
-                          <ResponsiveContainer><BarChart data={eduForecast.data}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="year" /><YAxis tickFormatter={(v:any)=>`${v/1000}k`}/><Tooltip formatter={(v:any)=>`$${v.toLocaleString()}`} /><Legend /><Bar dataKey="vCost" name="Virginia" stackId="a" fill="#EC4899" /><Bar dataKey="jCost" name="Jason" stackId="a" fill="#3B82F6" /></BarChart></ResponsiveContainer>
+                          <ResponsiveContainer><AreaChart data={eduForecast.data}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="year" /><YAxis tickFormatter={v=>`${v/1000}k`}/><Tooltip formatter={v=>`$${v.toLocaleString()}`} /><Legend /><Area type="monotone" dataKey="vCost" name="Virginia" stackId="1" stroke="#8884d8" fill="#8884d8" /><Area type="monotone" dataKey="jCost" name="Jason" stackId="1" stroke="#82ca9d" fill="#82ca9d" /></AreaChart></ResponsiveContainer>
                       </div>
                    </div>
               )}

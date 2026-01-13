@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, 
-  Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell 
+  Tooltip, Legend, ResponsiveContainer 
 } from 'recharts';
 import { initializeApp } from "firebase/app";
 import { 
@@ -62,18 +62,18 @@ interface Property {
   currentValue: number; 
   
   // 買入流程詳情
-  purchasePrice: number; 
-  initialDeposit: number; 
-  furtherDeposit: number; 
-  balancePayment: number; 
-  mortgageLoan: number; 
+  purchasePrice: number; // 總價
+  initialDeposit: number; // 細訂
+  furtherDeposit: number; // 大訂
+  balancePayment: number; // 尾數
+  mortgageLoan: number; // 按揭貸款額
   
   // 按揭詳情
   bank: string;
-  interestRate: number; 
-  mortgageAmount: number; 
-  outstandingLoan: number; 
-  tenure: number;  
+  interestRate: number; // 利率 (%)
+  mortgageAmount: number; // 月供
+  outstandingLoan: number; // 尚餘欠款
+  tenure: number;  // 年期
   
   // 租務
   estRent: number; 
@@ -673,21 +673,11 @@ const App: React.FC = () => {
   const handleSaveProperty = async () => {
       if(!editingProp) return;
       try {
-        // Calculate monthly mortgage payment if data is available
-        let calcMortgage = editingProp.mortgageAmount || 0;
-        if (editingProp.mortgageLoan && editingProp.interestRate && editingProp.tenure) {
-            const r = editingProp.interestRate / 100 / 12;
-            const n = editingProp.tenure * 12;
-            if (r > 0 && n > 0) {
-                 calcMortgage = editingProp.mortgageLoan * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
-            }
-        }
-
         const pData = { 
             ...editingProp, 
             currentValue: Number(editingProp.currentValue), 
             purchasePrice: Number(editingProp.purchasePrice),
-            mortgageAmount: Number(calcMortgage),
+            mortgageAmount: Number(editingProp.mortgageAmount),
             estRent: Number(editingProp.estRent),
             tenure: Number(editingProp.tenure),
             managementFee: Number(editingProp.managementFee),
@@ -699,7 +689,7 @@ const App: React.FC = () => {
             mortgageLoan: Number(editingProp.mortgageLoan || 0),
             interestRate: Number(editingProp.interestRate || 0),
             outstandingLoan: Number(editingProp.outstandingLoan || 0),
-            bank: editingProp.bank || 'Standard Bank' 
+            bank: editingProp.bank || 'Standard Bank' // Add default bank to fix TS2345
         };
         // Auto-calculate Purchase Price if components are filled
         if (pData.initialDeposit || pData.furtherDeposit || pData.balancePayment) {
@@ -1073,7 +1063,7 @@ const App: React.FC = () => {
                                 <input type="file" className="hidden" onChange={handleFileUpload} accept=".json" />
                             </label>
                             <button onClick={handleExportJSON} className="px-3 py-1 bg-slate-600 text-white text-xs rounded hover:bg-slate-700 flex items-center gap-2">
-                                <ICONS.Download /> 導出 Export JSON
+                                <ICONS.FileText /> 導出 Export JSON
                             </button>
                         </div>
                       </div>

@@ -62,7 +62,7 @@ interface Property {
   currentValue: number; 
   
   // 買入流程詳情
-  purchasePrice: number; // 總價 (自動計算)
+  purchasePrice: number; // 總價
   initialDeposit: number; // 細訂
   furtherDeposit: number; // 大訂
   balancePayment: number; // 尾數 (Cash Balance)
@@ -514,11 +514,10 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [propertyViewId, setPropertyViewId] = useState<string | null>(null);
   const [modalMode, setModalMode] = useState<'none' | 'transaction' | 'property' | 'doc' | 'lease'>('none');
+  const [editingLease, setEditingLease] = useState<Lease | null>(null);
 
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [editingProp, setEditingProp] = useState<Property | null>(null);
-  const [editingLease, setEditingLease] = useState<Lease | null>(null);
-  
   const [docConfig, setDocConfig] = useState<DocConfig>({ 
       type: 'receipt', propId: '', tenant: '', tenantID: '', period: '', amount: 0, 
       deposit: 0, startDate: '', endDate: '', landlord: 'Charles Lam', 
@@ -683,29 +682,36 @@ const App: React.FC = () => {
                  calcMortgage = editingProp.mortgageLoan * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
             }
         }
+        
+        // Ensure values are numbers before calculation, use 0 if undefined/null
+        const initialDeposit = Number(editingProp.initialDeposit || 0);
+        const furtherDeposit = Number(editingProp.furtherDeposit || 0);
+        const balancePayment = Number(editingProp.balancePayment || 0);
+        const mortgageLoan = Number(editingProp.mortgageLoan || 0);
+
+        let purchasePrice = editingProp.purchasePrice;
+        if (initialDeposit || furtherDeposit || balancePayment || mortgageLoan) {
+             purchasePrice = initialDeposit + furtherDeposit + balancePayment + mortgageLoan;
+        }
 
         const pData = { 
             ...editingProp, 
-            currentValue: Number(editingProp.currentValue), 
-            purchasePrice: Number(editingProp.purchasePrice),
-            mortgageAmount: Number(calcMortgage),
-            estRent: Number(editingProp.estRent),
-            tenure: Number(editingProp.tenure),
-            managementFee: Number(editingProp.managementFee),
-            govtRates: Number(editingProp.govtRates),
-            govtRent: Number(editingProp.govtRent),
-            initialDeposit: Number(editingProp.initialDeposit || 0),
-            furtherDeposit: Number(editingProp.furtherDeposit || 0),
-            balancePayment: Number(editingProp.balancePayment || 0),
-            mortgageLoan: Number(editingProp.mortgageLoan || 0),
+            currentValue: Number(editingProp.currentValue || 0), 
+            purchasePrice: Number(purchasePrice || 0),
+            mortgageAmount: Number(calcMortgage || 0),
+            estRent: Number(editingProp.estRent || 0),
+            tenure: Number(editingProp.tenure || 0),
+            managementFee: Number(editingProp.managementFee || 0),
+            govtRates: Number(editingProp.govtRates || 0),
+            govtRent: Number(editingProp.govtRent || 0),
+            initialDeposit: initialDeposit,
+            furtherDeposit: furtherDeposit,
+            balancePayment: balancePayment,
+            mortgageLoan: mortgageLoan,
             interestRate: Number(editingProp.interestRate || 0),
             outstandingLoan: Number(editingProp.outstandingLoan || 0),
             bank: editingProp.bank || 'Standard Bank' 
         };
-        // Auto-calculate Purchase Price if components are filled
-        if (pData.initialDeposit || pData.furtherDeposit || pData.balancePayment) {
-            pData.purchasePrice = pData.initialDeposit + pData.furtherDeposit + pData.balancePayment + pData.mortgageLoan;
-        }
 
         if(editingProp.id) await setDoc(doc(db, "properties", editingProp.id), pData);
         else await addDoc(collection(db, "properties"), pData);
@@ -845,7 +851,7 @@ const App: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {propStats.map(p => (
-                  <div key={p.id} onClick={() => setPropertyViewId(p.id)} className="bg-white rounded-xl shadow-sm border hover:shadow-md transition cursor-pointer overflow-hidden group relative">
+                  <div key={p.id} onClick={() => setPropertyViewId(p.id)} className="bg-white rounded-xl shadow-sm border hover:shadow-md transition cursor-pointer overflow-hidden group relative cursor-pointer">
                       <div className={`h-2 w-full ${p.status==='Occupied' ? (p.isLate ? 'bg-orange-500' : 'bg-emerald-500') : 'bg-red-500'}`} />
                       <div className="p-5">
                           <div className="flex justify-between items-start mb-2">
@@ -858,6 +864,7 @@ const App: React.FC = () => {
                           <div className="grid grid-cols-2 gap-4 text-sm bg-slate-50 p-3 rounded-lg">
                               <div><p className="text-xs text-slate-400">現時估值</p><p className="font-mono font-bold">{formatCurrency(p.currentValue)}</p></div>
                               <div><p className="text-xs text-slate-400">每月租金</p><p className="font-mono font-bold text-emerald-600">{p.activeLease ? formatCurrency(p.activeLease.monthlyRent) : '-'}</p></div>
+                              {/* 使用 stressedExpense */}
                               <div><p className="text-xs text-slate-400">壓力支出</p><p className="font-mono text-red-400">-{formatCurrency(p.stressedExpense)}</p></div>
                           </div>
                       </div>

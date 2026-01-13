@@ -534,42 +534,68 @@ const PropertyDashboard = ({
             {propStats.map((p: any) => (
                 <div 
                   key={p.id} 
+                  // 1. Container Click Handler for Navigation
                   onClick={() => onSelectProperty(p.id)} 
-                  className="bg-white rounded-xl shadow-sm border hover:shadow-md transition cursor-pointer overflow-hidden group relative z-10 cursor-pointer"
+                  className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer group relative overflow-hidden"
                 >
-                    <div className={`h-2 w-full ${p.status==='Occupied' ? (p.isLate ? 'bg-orange-500' : 'bg-emerald-500') : 'bg-red-500'}`} />
-                    
-                    <button 
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onDeleteProperty(p.id);
-                        }}
-                        className="absolute top-4 right-4 z-20 p-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-full transition opacity-0 group-hover:opacity-100"
-                        title="Delete Property"
-                    >
-                        <ICONS.Trash />
-                    </button>
+                    {/* 2. Gradient Header (New Trendy Design) */}
+                    <div className="h-24 bg-gradient-to-r from-blue-500 to-indigo-600 relative">
+                        {/* Status Badge */}
+                        <span className={`absolute top-4 left-4 px-3 py-1 text-xs rounded-full font-bold shadow-sm ${
+                            p.status === 'Occupied' 
+                                ? (p.isLate ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700') 
+                                : 'bg-red-100 text-red-700'
+                        }`}>
+                            {p.status === 'Occupied' ? (p.isLate ? '欠租 Arrears' : '出租 Occupied') : '空置 Vacant'}
+                        </span>
 
-                    <div className="p-5">
-                        <div className="flex justify-between items-start mb-2">
-                            <h3 className="font-bold text-lg text-slate-800 group-hover:text-blue-600 transition truncate">{p.name}</h3>
-                            <span className={`px-2 py-1 text-xs rounded-full font-bold whitespace-nowrap ${p.status==='Occupied' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                {p.status === 'Occupied' ? (p.isLate ? '欠租 Arrears' : '出租 Occupied') : '空置 Vacant'}
-                            </span>
+                        {/* 3. Delete Button (Isolated with stopPropagation) */}
+                        <button 
+                            onClick={(e) => {
+                                e.stopPropagation(); // Prevents triggering card click
+                                onDeleteProperty(p.id);
+                            }}
+                            className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-red-500 text-white rounded-full transition-all duration-200 z-50 backdrop-blur-sm"
+                            title="刪除物業 Delete Property"
+                        >
+                            <ICONS.Trash />
+                        </button>
+                    </div>
+                    
+                    {/* Content Section */}
+                    <div className="p-5 pt-2">
+                        <div className="flex justify-between items-end mb-4">
+                            <div>
+                                <h3 className="font-bold text-xl text-slate-800 mb-1">{p.name}</h3>
+                                <p className="text-xs text-slate-500 truncate max-w-[200px]">{p.address || 'No Address'}</p>
+                            </div>
                         </div>
-                        <p className="text-sm text-slate-500 mb-4 truncate">{p.address || 'No Address'}</p>
-                        <div className="grid grid-cols-2 gap-4 text-sm bg-slate-50 p-3 rounded-lg">
-                            <div><p className="text-xs text-slate-400">現時估值</p><p className="font-mono font-bold">{formatCurrency(p.currentValue)}</p></div>
-                            <div><p className="text-xs text-slate-400">每月租金</p><p className="font-mono font-bold text-emerald-600">{p.activeLease ? formatCurrency(p.activeLease.monthlyRent) : '-'}</p></div>
-                            <div><p className="text-xs text-slate-400">壓力支出</p><p className="font-mono text-red-400">-{formatCurrency(p.stressedExpense)}</p></div>
+                        
+                        <div className="grid grid-cols-2 gap-3 text-sm bg-slate-50 p-3 rounded-xl border border-slate-100">
+                            <div>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Valuation</p>
+                                <p className="font-mono font-bold text-slate-700">{formatCurrency(p.currentValue)}</p>
+                            </div>
+                            <div>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Rent</p>
+                                <p className="font-mono font-bold text-emerald-600">{p.activeLease ? formatCurrency(p.activeLease.monthlyRent) : '-'}</p>
+                            </div>
+                             <div>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Net Income</p>
+                                <p className={`font-mono font-bold ${p.net >= 0 ? 'text-blue-600' : 'text-red-500'}`}>{formatCurrency(p.net)}</p>
+                            </div>
+                            <div>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Expense (Stress)</p>
+                                <p className="font-mono text-red-400">-{formatCurrency(p.stressedExpense)}</p>
+                            </div>
                         </div>
                     </div>
                 </div>
             ))}
             
-             <button onClick={onAddProperty} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-xl hover:bg-slate-50 transition text-slate-400 hover:text-slate-600 cursor-pointer z-10"><ICONS.Plus /><span className="mt-2 font-bold">新增物業 Add Property</span></button>
+             <button onClick={onAddProperty} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-2xl hover:bg-slate-50 transition text-slate-400 hover:text-slate-600 cursor-pointer z-10 min-h-[240px]"><ICONS.Plus /><span className="mt-2 font-bold">新增物業 Add Property</span></button>
              {properties.length === 0 && (
-                <button onClick={onInitializeDefaults} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-blue-300 bg-blue-50 rounded-xl hover:bg-blue-100 transition text-blue-500 cursor-pointer z-10"><ICONS.Plus /><span className="mt-2 font-bold">初始化預設物業</span></button>
+                <button onClick={onInitializeDefaults} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-blue-300 bg-blue-50 rounded-2xl hover:bg-blue-100 transition text-blue-500 cursor-pointer z-10 min-h-[240px]"><ICONS.Plus /><span className="mt-2 font-bold">初始化預設物業</span></button>
             )}
         </div>
     </div>
@@ -861,16 +887,16 @@ const App: React.FC = () => {
         setModalMode('none');
       } catch(e) { alert(e); }
   }
-
-  const deleteItem = async (col: string, id: string) => {
-      if(window.confirm('確定刪除?')) await deleteDoc(doc(db, col, id));
-  };
-
+  
   // Implement delete property handler
   const handleDeleteProperty = async (id: string) => {
       if(window.confirm('確定刪除此物業？ (此操作無法復原)')) {
           await deleteDoc(doc(db, "properties", id));
       }
+  };
+
+  const deleteItem = async (col: string, id: string) => {
+      if(window.confirm('確定刪除?')) await deleteDoc(doc(db, col, id));
   };
 
   const handleClearData = async () => {

@@ -503,7 +503,7 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
     );
 };
 
-// --- 6. 獨立組件: PropertyDashboard (Extract for Click Stability) ---
+// --- 6. 獨立組件: PropertyDashboard (Extracted for stability) ---
 const PropertyDashboard = ({ 
     properties, totalValuation, totalMonthlyRent, propStats, 
     stressRate, setStressRate, rentDrop, setRentDrop, 

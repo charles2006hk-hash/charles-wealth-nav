@@ -1141,10 +1141,10 @@ const App: React.FC = () => {
                           </button>
                       ))}
                   </nav>
-              </div>
-          )}
+// 在 App 組件的 return (...) 內部
 
           <div className="flex-1 p-8 overflow-y-auto print-container">
+              {/* 修復：正確傳遞 onDeleteProperty 解決 TS6133 錯誤 */}
               {activeTab === 'dashboard' && !propertyViewId && (
                   <PropertyDashboard 
                       properties={properties}
@@ -1159,222 +1159,14 @@ const App: React.FC = () => {
                       setEditingProp={setEditingProp}
                       setModalMode={setModalMode}
                       initializeDefaults={initializeDefaults}
-                      onDeleteProperty={handleDeleteProperty}
+                      onDeleteProperty={handleDeleteProperty} // 必須傳遞此函數
                       onAddProperty={() => { setEditingProp({ id: '', name: '', address: '', type: 'Investment', status: 'Vacant', currentValue: 0, purchasePrice: 0, initialDeposit: 0, furtherDeposit: 0, balancePayment: 0, mortgageLoan: 0, mortgageAmount: 0, outstandingLoan: 0, managementFee: 0, govtRates: 0, govtRent: 0, estRent: 0, tenure: 0, interestRate: 0, bank: '' } as Property); setModalMode('property'); }}
                       onInitializeDefaults={initializeDefaults}
                   />
               )}
 
-              {/* Property Detail View */}
-              {activeTab === 'dashboard' && propertyViewId && (
-                  <PropertyDetailView 
-                      propId={propertyViewId}
-                      propStats={propStats}
-                      transactions={transactions}
-                      leases={leases}
-                      onBack={() => setPropertyViewId(null)}
-                      setDocConfig={setDocConfig}
-                      setModalMode={setModalMode}
-                      setEditingProp={setEditingProp}
-                      setEditingTx={setEditingTx}
-                      setEditingLease={setEditingLease}
-                      deleteItem={deleteItem}
-                      ledgerFilter={ledgerFilter}
-                      setLedgerFilter={setLedgerFilter}
-                      handleUpdateCategory={handleUpdateCategory}
-                  />
-              )}
+// ... 在 modalMode === 'property' 的區塊中，替換按揭輸入部分以啟用自動計算 ...
 
-              {activeTab === 'data' && (
-                  <div className="bg-white p-10 rounded-xl shadow animate-in fade-in">
-                      <h2 className="text-2xl font-bold mb-4">數據中心 Data Hub</h2>
-                      <div className="flex justify-between items-center mb-6">
-                        <p className="text-slate-500">所有交易紀錄一覽 Table of All Transactions</p>
-                        <div className="flex gap-2">
-                            <button onClick={handleClearData} className="px-3 py-1 bg-red-100 text-red-600 text-xs rounded hover:bg-red-200 flex items-center gap-2 border border-red-200">
-                                <ICONS.Trash /> 清空所有數據 Reset Data
-                            </button>
-                            <label className="flex items-center gap-2 px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 cursor-pointer">
-                                <ICONS.Upload /> 匯入 Import JSON
-                                <input type="file" className="hidden" onChange={handleFileUpload} accept=".json" />
-                            </label>
-                            <button onClick={handleExportJSON} className="px-3 py-1 bg-slate-600 text-white text-xs rounded hover:bg-slate-700 flex items-center gap-2">
-                                <ICONS.Download /> 導出 Export JSON
-                            </button>
-                        </div>
-                      </div>
-                      <div className="flex gap-4 mb-4">
-                        <input type="text" placeholder="Search..." className="border rounded px-2 py-1 text-sm" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-                        <select className="border rounded px-2 py-1" value={filterCategory} onChange={e=>setFilterCategory(e.target.value)}><option value="All">All Categories</option>{CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select>
-                        <select className="border rounded px-2 py-1" value={filterMember} onChange={e=>setFilterMember(e.target.value)}><option value="All">All Members</option>{MEMBERS.map(m=><option key={m} value={m}>{m}</option>)}</select>
-                        <select className="border rounded px-2 py-1" value={filterYear} onChange={e=>setFilterYear(e.target.value)}><option value="All">All Years</option>{[2024,2025,2026].map(y=><option key={y} value={y}>{y}</option>)}</select>
-                      </div>
-                      <table className="w-full text-sm text-left">
-                          <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0"><tr><th className="p-3">Date</th><th className="p-3">Merchant</th><th className="p-3">Amount</th><th className="p-3">Category</th><th className="p-3">Member</th></tr></thead>
-                          <tbody className="divide-y">
-                              {transactions
-                                .filter(t => (filterCategory==='All'||t.category===filterCategory) && (searchTerm===''||(t.merchant || '').toLowerCase().includes(searchTerm.toLowerCase())))
-                                .slice(0, 50).map(t => (
-                                  <tr key={t.id} className="hover:bg-slate-50">
-                                      <td className="p-3">{t.date}</td>
-                                      <td className="p-3 font-medium">{t.merchant}</td>
-                                      <td className="p-3 font-mono">{formatCurrency(t.amount)}</td>
-                                      <td className="p-3"><span className="px-2 py-1 bg-gray-100 rounded text-xs">{t.category}</span></td>
-                                      <td className="p-3">{t.member}</td>
-                                  </tr>
-                              ))}
-                          </tbody>
-                      </table>
-                  </div>
-              )}
-              
-              {activeTab === 'insurance' && (
-                  <div className="space-y-6 animate-in fade-in">
-                      <div className="bg-indigo-50 p-6 rounded-xl border border-indigo-100 text-indigo-900 text-sm"><h3 className="font-bold text-lg mb-2 flex items-center gap-2"><ICONS.ShieldCheck /> 保險 AI 深度透視</h3>系統已自動分析您導入的 <code>payment_data.json</code> 中的 CSV 備註欄位。</div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          {Object.entries(stats.insuranceByMember).map(([member, policies]) => (
-                              <div key={member} className="bg-white border rounded-xl overflow-hidden shadow-sm">
-                                  <div className="bg-slate-50 px-4 py-3 border-b font-bold text-slate-700 flex justify-between"><span>{member}</span><span className="text-xs font-normal bg-white px-2 py-1 rounded border">總投入: ${(policies.reduce((a,b)=>a+b.totalPaid,0)/1000000).toFixed(2)}M</span></div>
-                                  <div className="overflow-x-auto">
-                                      <table className="w-full text-xs">
-                                          <thead><tr className="text-slate-400 bg-slate-50/50"><th className="p-2 text-left">計劃名稱</th><th className="p-2 text-right">已繳總額</th><th className="p-2 text-left">備註</th></tr></thead>
-                                          <tbody>{policies.map((p, idx) => (
-                                              <tr key={idx} className="border-t hover:bg-slate-50"><td className="p-2 font-medium text-slate-700">{p.name}</td><td className="p-2 text-right font-mono text-emerald-600">${p.totalPaid.toLocaleString()}</td><td className="p-2 text-slate-500 truncate max-w-xs text-[10px]">{p.note}</td></tr>
-                                          ))}</tbody>
-                                      </table>
-                                  </div>
-                              </div>
-                          ))}
-                      </div>
-                  </div>
-              )}
-              
-              {activeTab === 'education' && (
-                   <div className="space-y-6 animate-in fade-in">
-                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-4 rounded-xl border shadow-sm gap-4">
-                          <div><h2 className="text-xl font-bold text-slate-800">升學與職業導航</h2><p className="text-sm text-slate-500">針對「非學術型」學生的多元出路分析</p></div>
-                          <div className="flex gap-2 items-center bg-slate-100 p-1 rounded-lg">
-                              <button onClick={()=>setChildType('Standard')} className={`px-3 py-1 text-xs rounded-md transition ${childType==='Standard'?'bg-white shadow text-blue-600':'text-slate-500'}`}>傳統學術 (大學)</button>
-                              <button onClick={()=>setChildType('Vocational')} className={`px-3 py-1 text-xs rounded-md transition ${childType==='Vocational'?'bg-white shadow text-purple-600':'text-slate-500'}`}>職業導向 (專科)</button>
-                          </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-6">
-                          <div className="bg-white p-6 rounded-xl shadow-sm border">
-                              <div className="flex justify-between">
-                                <h3 className="font-bold text-lg mb-2">Virginia ({FAMILY_INFO.Virginia.age})</h3>
-                                <select className="text-xs border rounded p-1" value={eduRegionV} onChange={e=>setEduRegionV(e.target.value)}>{Object.keys(eduDB).map(r=><option key={r} value={r}>{eduDB[r].name}</option>)}</select>
-                              </div>
-                              <p>目標: {eduDB[eduRegionV].name}</p>
-                              <p>預算: {formatCurrency(eduDB[eduRegionV].tuition + eduDB[eduRegionV].living)} / year</p>
-                          </div>
-                          <div className="bg-white p-6 rounded-xl shadow-sm border">
-                              <div className="flex justify-between">
-                                <h3 className="font-bold text-lg mb-2">Jason ({FAMILY_INFO.Jason.age})</h3>
-                                <select className="text-xs border rounded p-1" value={eduRegionJ} onChange={e=>setEduRegionJ(e.target.value)}>{Object.keys(eduDB).map(r=><option key={r} value={r}>{eduDB[r].name}</option>)}</select>
-                              </div>
-                              <p>目標: {eduDB[eduRegionJ].name}</p>
-                              <p>預算: {formatCurrency(eduDB[eduRegionJ].tuition + eduDB[eduRegionJ].living)} / year</p>
-                          </div>
-                      </div>
-                      <div className="bg-slate-100 p-4 rounded-xl">
-                          <h4 className="font-bold text-slate-700 mb-2 text-sm flex items-center gap-2"><ICONS.Edit2 /> 調整預算參數 (AI Research 基準)</h4>
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-                              {Object.keys(eduDB).map(region => (
-                                  <div key={region} className="bg-white p-3 rounded border">
-                                      <div className="font-bold mb-1">{eduDB[region].name}</div>
-                                      <div className="flex justify-between items-center mb-1"><span>學費/年:</span><input type="number" value={eduDB[region].tuition} onChange={(e)=>updateEduDB({...eduDB, [region]: {...eduDB[region], tuition: Number(e.target.value)}})} className="w-16 border rounded px-1 text-right"/></div>
-                                      <div className="flex justify-between items-center"><span>生活費/年:</span><input type="number" value={eduDB[region].living} onChange={(e)=>updateEduDB({...eduDB, [region]: {...eduDB[region], living: Number(e.target.value)}})} className="w-16 border rounded px-1 text-right"/></div>
-                                  </div>
-                              ))}
-                          </div>
-                      </div>
-                      <div className="bg-white p-6 rounded-xl border shadow-sm h-80">
-                          <h3 className="font-bold text-slate-700 mb-4">未來 10 年資金需求預測</h3>
-                          <ResponsiveContainer><AreaChart data={eduForecast.data}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="year" /><YAxis tickFormatter={v=>`${v/1000}k`}/><Tooltip formatter={v=>`$${v.toLocaleString()}`} /><Legend /><Area type="monotone" dataKey="vCost" name="Virginia" stackId="1" stroke="#8884d8" fill="#8884d8" /><Area type="monotone" dataKey="jCost" name="Jason" stackId="1" stroke="#82ca9d" fill="#82ca9d" /></AreaChart></ResponsiveContainer>
-                      </div>
-                   </div>
-              )}
-          </div>
-
-          {/* Modals */}
-          {modalMode === 'doc' && <DocModal isOpen={modalMode === 'doc'} onClose={() => setModalMode('none')} docConfig={docConfig} setDocConfig={setDocConfig} handlePrint={handlePrint} properties={properties} transactions={transactions} />}
-          
-          {modalMode === 'transaction' && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
-                  <div className="bg-white rounded-xl shadow-2xl p-6 w-96 animate-in fade-in zoom-in duration-200">
-                        <h3 className="text-lg font-bold mb-4">新增交易 Record</h3>
-                        <div className="space-y-3">
-                            <input type="date" className="w-full border rounded p-2" value={editingTx?.date} onChange={e=>setEditingTx({...editingTx, date: e.target.value} as any)} />
-                            <input type="text" placeholder="Detail/Merchant" className="w-full border rounded p-2" value={editingTx?.merchant} onChange={e=>setEditingTx({...editingTx, merchant: e.target.value} as any)} />
-                            <input type="number" placeholder="Amount" className="w-full border rounded p-2" value={editingTx?.amount} onChange={e=>setEditingTx({...editingTx, amount: Number(e.target.value)} as any)} />
-                            <select className="w-full border rounded p-2" value={editingTx?.category} onChange={e=>setEditingTx({...editingTx, category: e.target.value} as any)}>{CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select>
-                            <select className="w-full border rounded p-2" value={editingTx?.member} onChange={e=>setEditingTx({...editingTx, member: e.target.value} as any)}>{MEMBERS.map(m=><option key={m} value={m}>{m}</option>)}</select>
-                        </div>
-                        <div className="flex gap-2 mt-6">
-                            <button onClick={handleSaveTransaction} className="flex-1 bg-blue-600 text-white py-2 rounded font-bold hover:bg-blue-700">Save</button>
-                            <button onClick={()=>setModalMode('none')} className="flex-1 bg-gray-200 py-2 rounded hover:bg-gray-300">Cancel</button>
-                        </div>
-                    </div>
-              </div>
-          )}
-
-          {modalMode === 'property' && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
-                  <div className="bg-white rounded-xl shadow-2xl p-6 w-[600px] max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in duration-200">
-                      <h3 className="font-bold text-xl mb-6">Edit Property</h3>
-                      <div className="space-y-6">
-                          <div className="space-y-2">
-                              <label className="text-xs font-bold text-slate-500 uppercase">Basic Info</label>
-                              <input className="border w-full p-2 rounded" placeholder="Property Name" value={editingProp?.name || ''} onChange={e => setEditingProp({...editingProp, name: e.target.value} as any)} />
-                              <input className="border w-full p-2 rounded" placeholder="Full Address" value={editingProp?.address || ''} onChange={e => setEditingProp({...editingProp, address: e.target.value} as any)} />
-                              <select className="border w-full p-2 rounded" value={editingProp?.status} onChange={e => setEditingProp({...editingProp, status: e.target.value} as any)}><option value="Occupied">Occupied</option><option value="Vacant">Vacant</option></select>
-                          </div>
-                          
-                          <div className="space-y-2">
-                              <label className="text-xs font-bold text-slate-500 uppercase">Purchase Detail 買入詳情</label>
-                              <div className="p-4 bg-blue-50 rounded-lg border border-blue-100 grid grid-cols-2 gap-4">
-                                  <div>
-                                      <label className="text-xs text-slate-500 block mb-1">Initial Deposit (細訂)</label>
-                                      <div className="flex items-center gap-2">
-                                          <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.initialDeposit || ''} onChange={e => setEditingProp({...editingProp, initialDeposit: Number(e.target.value)} as any)} />
-                                      </div>
-                                      <span className="text-xs text-blue-600 font-mono">{formatCurrency(editingProp?.initialDeposit)}</span>
-                                  </div>
-                                  <div>
-                                      <label className="text-xs text-slate-500 block mb-1">Further Deposit (大訂)</label>
-                                      <div className="flex items-center gap-2">
-                                          <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.furtherDeposit || ''} onChange={e => setEditingProp({...editingProp, furtherDeposit: Number(e.target.value)} as any)} />
-                                      </div>
-                                      <span className="text-xs text-blue-600 font-mono">{formatCurrency(editingProp?.furtherDeposit)}</span>
-                                  </div>
-                                  <div>
-                                      <label className="text-xs text-slate-500 block mb-1">Balance (尾數)</label>
-                                      <div className="flex items-center gap-2">
-                                          <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.balancePayment || ''} onChange={e => setEditingProp({...editingProp, balancePayment: Number(e.target.value)} as any)} />
-                                      </div>
-                                      <span className="text-xs text-blue-600 font-mono">{formatCurrency(editingProp?.balancePayment)}</span>
-                                  </div>
-                                  <div>
-                                      <label className="text-xs text-slate-500 block mb-1">Mortgage Loan (按揭)</label>
-                                      <div className="flex items-center gap-2">
-                                          <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.mortgageLoan || ''} onChange={e => {
-                                              // Auto-calculate total price on change
-                                              const loan = Number(e.target.value);
-                                              const price = (editingProp?.initialDeposit || 0) + (editingProp?.furtherDeposit || 0) + (editingProp?.balancePayment || 0) + loan;
-                                              setEditingProp({...editingProp, mortgageLoan: loan, purchasePrice: price} as any);
-                                          }} />
-                                      </div>
-                                      <span className="text-xs text-blue-600 font-mono">{formatCurrency(editingProp?.mortgageLoan)}</span>
-                                  </div>
-                                  <div className="col-span-2 border-t pt-2 mt-2 flex justify-between items-center">
-                                      <span className="font-bold text-sm text-slate-700">Total Purchase Price 買入價:</span>
-                                      <span className="font-bold text-lg text-blue-800 font-mono">
-                                          {formatCurrency((editingProp?.initialDeposit||0) + (editingProp?.furtherDeposit||0) + (editingProp?.balancePayment||0) + (editingProp?.mortgageLoan||0))}
-                                      </span>
-                                  </div>
-                              </div>
-                          </div>
-                          
                           <div className="space-y-2">
                                <label className="text-xs font-bold text-slate-500 uppercase">Mortgage & Loan 按揭與貸款</label>
                                <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-100 grid grid-cols-2 gap-4">
@@ -1384,53 +1176,67 @@ const App: React.FC = () => {
                                    </div>
                                    <div>
                                        <label className="text-xs text-slate-500 block mb-1">Outstanding Loan 尚餘按揭</label>
-                                       <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.outstandingLoan || ''} onChange={e => {
-                                           const loan = Number(e.target.value);
-                                           let payment = editingProp?.mortgageAmount || 0;
-                                            if (loan && editingProp?.interestRate && editingProp?.tenure) {
-                                               const r = editingProp.interestRate / 100 / 12;
-                                               const n = editingProp.tenure * 12;
-                                               payment = loan * (r * Math.pow(1+r, n)) / (Math.pow(1+r, n) - 1);
-                                           }
-                                           setEditingProp({...editingProp, outstandingLoan: loan, mortgageAmount: Math.round(payment)} as any)
-                                       }} />
+                                       <input 
+                                           className="border w-full p-2 rounded text-sm" 
+                                           type="number" 
+                                           value={editingProp?.outstandingLoan || ''} 
+                                           onChange={e => {
+                                               const loan = Number(e.target.value);
+                                               // 自動計算邏輯
+                                               let payment = editingProp?.mortgageAmount || 0;
+                                               if (loan && editingProp?.interestRate && editingProp?.tenure) {
+                                                   const r = editingProp.interestRate / 100 / 12;
+                                                   const n = editingProp.tenure * 12;
+                                                   payment = loan * (r * Math.pow(1+r, n)) / (Math.pow(1+r, n) - 1);
+                                               }
+                                               setEditingProp({...editingProp, outstandingLoan: loan, mortgageAmount: Math.round(payment)} as any)
+                                           }} 
+                                        />
                                        <span className="text-xs text-blue-600 font-mono block mt-1">{formatCurrency(editingProp?.outstandingLoan)}</span>
                                    </div>
                                    <div>
                                        <label className="text-xs text-slate-500 block mb-1">Interest Rate 按揭利率 (%)</label>
-                                       <input className="border w-full p-2 rounded text-sm" type="number" step="0.1" value={editingProp?.interestRate || ''} onChange={e => {
-                                           const rate = Number(e.target.value);
-                                           // Auto calc monthly repayment
-                                           let payment = editingProp?.mortgageAmount || 0;
-                                           if (editingProp?.outstandingLoan && editingProp?.tenure && rate) {
-                                               const r = rate / 100 / 12;
-                                               const n = editingProp.tenure * 12;
-                                               payment = editingProp.outstandingLoan * (r * Math.pow(1+r, n)) / (Math.pow(1+r, n) - 1);
-                                           }
-                                           setEditingProp({...editingProp, interestRate: rate, mortgageAmount: Math.round(payment)} as any);
-                                       }} />
+                                       <input 
+                                           className="border w-full p-2 rounded text-sm" 
+                                           type="number" 
+                                           step="0.1" 
+                                           value={editingProp?.interestRate || ''} 
+                                           onChange={e => {
+                                               const rate = Number(e.target.value);
+                                               // 自動計算邏輯
+                                               let payment = editingProp?.mortgageAmount || 0;
+                                               if (editingProp?.outstandingLoan && editingProp?.tenure && rate) {
+                                                   const r = rate / 100 / 12;
+                                                   const n = editingProp.tenure * 12;
+                                                   payment = editingProp.outstandingLoan * (r * Math.pow(1+r, n)) / (Math.pow(1+r, n) - 1);
+                                               }
+                                               setEditingProp({...editingProp, interestRate: rate, mortgageAmount: Math.round(payment)} as any);
+                                           }} 
+                                        />
                                    </div>
                                     <div>
                                        <label className="text-xs text-slate-500 block mb-1">Tenure 年期 (Years)</label>
-                                       <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.tenure || ''} onChange={e => {
-                                           const tenure = Number(e.target.value);
-                                           // Auto calc monthly repayment
-                                           let payment = editingProp?.mortgageAmount || 0;
-                                           if (editingProp?.outstandingLoan && editingProp?.interestRate && tenure) {
-                                               const r = editingProp.interestRate / 100 / 12;
-                                               const n = tenure * 12;
-                                               payment = editingProp.outstandingLoan * (r * Math.pow(1+r, n)) / (Math.pow(1+r, n) - 1);
-                                           }
-                                           setEditingProp({...editingProp, tenure: tenure, mortgageAmount: Math.round(payment)} as any);
-                                       }} />
+                                       <input 
+                                           className="border w-full p-2 rounded text-sm" 
+                                           type="number" 
+                                           value={editingProp?.tenure || ''} 
+                                           onChange={e => {
+                                               const tenure = Number(e.target.value);
+                                               // 自動計算邏輯
+                                               let payment = editingProp?.mortgageAmount || 0;
+                                               if (editingProp?.outstandingLoan && editingProp?.interestRate && tenure) {
+                                                   const r = editingProp.interestRate / 100 / 12;
+                                                   const n = tenure * 12;
+                                                   payment = editingProp.outstandingLoan * (r * Math.pow(1+r, n)) / (Math.pow(1+r, n) - 1);
+                                               }
+                                               setEditingProp({...editingProp, tenure: tenure, mortgageAmount: Math.round(payment)} as any);
+                                           }} 
+                                        />
                                    </div>
                                    <div>
                                        <label className="text-xs text-slate-500 block mb-1">Monthly Repayment 每月供款</label>
                                        <input className="border w-full p-2 rounded text-sm bg-white font-bold text-red-600" type="number" value={editingProp?.mortgageAmount || ''} onChange={e => setEditingProp({...editingProp, mortgageAmount: Number(e.target.value)} as any)} />
                                        <span className="text-xs text-blue-600 font-mono block mt-1">{formatCurrency(editingProp?.mortgageAmount)}</span>
-                                   </div>
-                                   <div className="col-span-2 text-xs text-gray-400 italic">
-                                       如需轉按 (Refinancing)，直接修改上方資料即可，系統會重新計算供款。
                                    </div>
                                </div>
                           </div>

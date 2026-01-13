@@ -503,7 +503,7 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
     );
 };
 
-// --- 6. 獨立組件: PropertyDashboard (Extracted for stability) ---
+// --- 6. 獨立組件: PropertyDashboard (Extracted for Click Stability) ---
 const PropertyDashboard = ({ 
     properties, totalValuation, totalMonthlyRent, propStats, 
     stressRate, setStressRate, rentDrop, setRentDrop, 
@@ -562,7 +562,7 @@ const PropertyDashboard = ({
     </div>
 );
 
-// --- 7. 獨立組件: DocModal (移至 App 外部) ---
+// --- 7. 獨立組件: DocModal (移至 App 外部以解決 TS 錯誤) ---
 interface DocModalProps {
     isOpen: boolean;
     onClose: () => void;

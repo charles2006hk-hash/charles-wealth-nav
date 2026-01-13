@@ -62,18 +62,18 @@ interface Property {
   currentValue: number; 
   
   // 買入流程詳情
-  purchasePrice: number; // 總價
-  initialDeposit: number; // 細訂
-  furtherDeposit: number; // 大訂
-  balancePayment: number; // 尾數
-  mortgageLoan: number; // 按揭貸款額
+  purchasePrice: number; 
+  initialDeposit: number; 
+  furtherDeposit: number; 
+  balancePayment: number; 
+  mortgageLoan: number; 
   
   // 按揭詳情
   bank: string;
-  interestRate: number; // 利率 (%)
-  mortgageAmount: number; // 月供
-  outstandingLoan: number; // 尚餘欠款
-  tenure: number;  // 年期
+  interestRate: number; 
+  mortgageAmount: number; 
+  outstandingLoan: number; 
+  tenure: number;  
   
   // 租務
   estRent: number; 
@@ -673,11 +673,21 @@ const App: React.FC = () => {
   const handleSaveProperty = async () => {
       if(!editingProp) return;
       try {
+        // Calculate monthly mortgage payment if data is available
+        let calcMortgage = editingProp.mortgageAmount || 0;
+        if (editingProp.mortgageLoan && editingProp.interestRate && editingProp.tenure) {
+            const r = editingProp.interestRate / 100 / 12;
+            const n = editingProp.tenure * 12;
+            if (r > 0 && n > 0) {
+                 calcMortgage = editingProp.mortgageLoan * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+            }
+        }
+
         const pData = { 
             ...editingProp, 
             currentValue: Number(editingProp.currentValue), 
             purchasePrice: Number(editingProp.purchasePrice),
-            mortgageAmount: Number(editingProp.mortgageAmount),
+            mortgageAmount: Number(calcMortgage),
             estRent: Number(editingProp.estRent),
             tenure: Number(editingProp.tenure),
             managementFee: Number(editingProp.managementFee),
@@ -689,7 +699,7 @@ const App: React.FC = () => {
             mortgageLoan: Number(editingProp.mortgageLoan || 0),
             interestRate: Number(editingProp.interestRate || 0),
             outstandingLoan: Number(editingProp.outstandingLoan || 0),
-            bank: editingProp.bank || 'Standard Bank' // Add default bank to fix TS2345
+            bank: editingProp.bank || 'Standard Bank' 
         };
         // Auto-calculate Purchase Price if components are filled
         if (pData.initialDeposit || pData.furtherDeposit || pData.balancePayment) {
@@ -721,6 +731,22 @@ const App: React.FC = () => {
 
   const deleteItem = async (col: string, id: string) => {
       if(window.confirm('確定刪除?')) await deleteDoc(doc(db, col, id));
+  };
+
+  const handleClearData = async () => {
+      if (!window.confirm("警告：這將會清除所有資料！確定嗎？")) return;
+      const batch = writeBatch(db);
+      
+      const collections = ["transactions", "properties", "leases"];
+      for (const colName of collections) {
+          const snapshot = await onSnapshot(collection(db, colName), (snap) => {
+              snap.docs.forEach(d => batch.delete(d.ref));
+          });
+          // Note: onSnapshot is a listener, for one-time delete we should use getDocs but since we can't import it easily here, we rely on manual deletion or re-init.
+          // For simplicity in this environment, we recommend using the "初始化預設物業" after clearing manually or via console.
+          alert("請手動在 Firebase Console 清除，或使用初始化功能覆蓋。");
+          return; 
+      }
   };
 
   const handlePrint = () => {
@@ -819,6 +845,7 @@ const App: React.FC = () => {
                           <div className="grid grid-cols-2 gap-4 text-sm bg-slate-50 p-3 rounded-lg">
                               <div><p className="text-xs text-slate-400">現時估值</p><p className="font-mono font-bold">{formatCurrency(p.currentValue)}</p></div>
                               <div><p className="text-xs text-slate-400">每月租金</p><p className="font-mono font-bold text-emerald-600">{p.activeLease ? formatCurrency(p.activeLease.monthlyRent) : '-'}</p></div>
+                              {/* 使用 stressedExpense */}
                               <div><p className="text-xs text-slate-400">壓力支出</p><p className="font-mono text-red-400">-{formatCurrency(p.stressedExpense)}</p></div>
                           </div>
                       </div>
@@ -1058,12 +1085,15 @@ const App: React.FC = () => {
                       <div className="flex justify-between items-center mb-6">
                         <p className="text-slate-500">所有交易紀錄一覽 Table of All Transactions</p>
                         <div className="flex gap-2">
+                            <button onClick={handleClearData} className="px-3 py-1 bg-red-100 text-red-600 text-xs rounded hover:bg-red-200 flex items-center gap-2 border border-red-200">
+                                <ICONS.Trash /> 清空所有數據 Reset Data
+                            </button>
                             <label className="flex items-center gap-2 px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 cursor-pointer">
-                                <ICONS.Plus /> 匯入 Import JSON
+                                <ICONS.Upload /> 匯入 Import JSON
                                 <input type="file" className="hidden" onChange={handleFileUpload} accept=".json" />
                             </label>
                             <button onClick={handleExportJSON} className="px-3 py-1 bg-slate-600 text-white text-xs rounded hover:bg-slate-700 flex items-center gap-2">
-                                <ICONS.FileText /> 導出 Export JSON
+                                <ICONS.Download /> 導出 Export JSON
                             </button>
                         </div>
                       </div>

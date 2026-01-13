@@ -535,30 +535,31 @@ const PropertyDashboard = ({
                 <div 
                   key={p.id} 
                   onClick={() => onSelectProperty(p.id)} 
-                  className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer group relative overflow-hidden active:scale-95 z-10"
+                  className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer group relative overflow-hidden active:scale-95 border border-transparent hover:border-blue-200"
+                  style={{ cursor: 'pointer' }} // 強制指定游標
                 >
-                    <div className="h-24 bg-gradient-to-r from-blue-500 to-indigo-600 relative">
-                        <span className={`absolute top-4 left-4 px-3 py-1 text-xs rounded-full font-bold shadow-sm ${
-                            p.status === 'Occupied' 
-                                ? (p.isLate ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700') 
-                                : 'bg-red-100 text-red-700'
-                        }`}>
+                    {/* Gradient Header */}
+                    <div className="h-24 bg-gradient-to-r from-blue-500 to-indigo-600 relative pointer-events-none"> 
+                         {/* pointer-events-none 確保點擊header也能穿透到外層div觸發onClick */}
+                        <span className="absolute top-4 left-4 px-3 py-1 text-xs rounded-full font-bold shadow-sm bg-white/90 text-slate-800">
                             {p.status === 'Occupied' ? (p.isLate ? '欠租 Arrears' : '出租 Occupied') : '空置 Vacant'}
                         </span>
-
-                        <button 
-                            onClick={(e) => {
-                                e.stopPropagation(); 
-                                onDeleteProperty(p.id);
-                            }}
-                            className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-red-500 text-white rounded-full transition-all duration-200 z-50 backdrop-blur-sm"
-                            title="刪除物業 Delete Property"
-                        >
-                            <ICONS.Trash />
-                        </button>
                     </div>
+
+                    {/* Delete Button - 恢復 pointer-events 以允許點擊 */}
+                    <button 
+                        onClick={(e) => {
+                            e.stopPropagation(); // 阻止冒泡，防止觸發卡片點擊
+                            onDeleteProperty(p.id);
+                        }}
+                        className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-red-500 text-white rounded-full transition-all duration-200 z-50 backdrop-blur-sm pointer-events-auto"
+                        title="刪除物業 Delete Property"
+                    >
+                        <ICONS.Trash />
+                    </button>
                     
-                    <div className="p-5 pt-2">
+                    <div className="p-5 pt-2 pointer-events-none"> 
+                        {/* pointer-events-none 確保點擊內容也能穿透到外層div */}
                         <div className="flex justify-between items-end mb-4">
                             <div>
                                 <h3 className="font-bold text-xl text-slate-800 mb-1">{p.name}</h3>
@@ -588,9 +589,9 @@ const PropertyDashboard = ({
                 </div>
             ))}
             
-             <button onClick={onAddProperty} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-2xl hover:bg-slate-50 transition text-slate-400 hover:text-slate-600 cursor-pointer z-10 min-h-[240px]"><ICONS.Plus /><span className="mt-2 font-bold">新增物業 Add Property</span></button>
+             <button onClick={onAddProperty} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-2xl hover:bg-slate-50 transition text-slate-400 hover:text-slate-600 cursor-pointer min-h-[240px]"><ICONS.Plus /><span className="mt-2 font-bold">新增物業 Add Property</span></button>
              {properties.length === 0 && (
-                <button onClick={onInitializeDefaults} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-blue-300 bg-blue-50 rounded-2xl hover:bg-blue-100 transition text-blue-500 cursor-pointer z-10 min-h-[240px]"><ICONS.Plus /><span className="mt-2 font-bold">初始化預設物業</span></button>
+                <button onClick={onInitializeDefaults} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-blue-300 bg-blue-50 rounded-2xl hover:bg-blue-100 transition text-blue-500 cursor-pointer min-h-[240px]"><ICONS.Plus /><span className="mt-2 font-bold">初始化預設物業</span></button>
             )}
         </div>
     </div>
@@ -632,7 +633,6 @@ const DocModal: React.FC<DocModalProps> = ({
                         
                         <div><label className="block text-xs font-bold text-slate-500">Property</label><select className="w-full border rounded p-1" value={docConfig.propId} onChange={e=>{
                              const p = properties.find(x=>x.id===e.target.value);
-                             // 這裡簡化邏輯，實際應用中可以更細緻
                              if(p) setDocConfig({...docConfig, propId: p.id }); 
                         }}>{properties.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
                         
@@ -663,7 +663,8 @@ const DocModal: React.FC<DocModalProps> = ({
     );
 }
 
-// --- 8. 獨立組件: PropertyDetailView ---
+// --- 8. 獨立組件: PropertyDetailView (Extract to fix missing dependencies if inline) ---
+// Note: In the previous version PropertyDetailView was inside render. Let's extract it properly.
 const PropertyDetailView = ({ 
     propId, propStats, transactions, leases, 
     onBack, setDocConfig, setModalMode, setEditingProp, setEditingTx, 
@@ -966,37 +967,30 @@ const App: React.FC = () => {
                  calcMortgage = editingProp.mortgageLoan * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
             }
         }
-        
-        // Ensure values are numbers before calculation, use 0 if undefined/null
-        const initialDeposit = Number(editingProp.initialDeposit || 0);
-        const furtherDeposit = Number(editingProp.furtherDeposit || 0);
-        const balancePayment = Number(editingProp.balancePayment || 0);
-        const mortgageLoan = Number(editingProp.mortgageLoan || 0);
-
-        let purchasePrice = editingProp.purchasePrice;
-        // Auto-calculate Purchase Price if components are filled
-        if (initialDeposit || furtherDeposit || balancePayment || mortgageLoan) {
-             purchasePrice = initialDeposit + furtherDeposit + balancePayment + mortgageLoan;
-        }
 
         const pData = { 
             ...editingProp, 
             currentValue: Number(editingProp.currentValue || 0), 
-            purchasePrice: Number(purchasePrice || 0),
+            purchasePrice: Number(editingProp.purchasePrice || 0),
             mortgageAmount: Number(calcMortgage || 0),
             estRent: Number(editingProp.estRent || 0),
             tenure: Number(editingProp.tenure || 0),
             managementFee: Number(editingProp.managementFee || 0),
             govtRates: Number(editingProp.govtRates || 0),
             govtRent: Number(editingProp.govtRent || 0),
-            initialDeposit: initialDeposit,
-            furtherDeposit: furtherDeposit,
-            balancePayment: balancePayment,
-            mortgageLoan: mortgageLoan,
+            initialDeposit: Number(editingProp.initialDeposit || 0),
+            furtherDeposit: Number(editingProp.furtherDeposit || 0),
+            balancePayment: Number(editingProp.balancePayment || 0),
+            mortgageLoan: Number(editingProp.mortgageLoan || 0),
             interestRate: Number(editingProp.interestRate || 0),
             outstandingLoan: Number(editingProp.outstandingLoan || 0),
             bank: editingProp.bank || 'Standard Bank' 
         };
+        
+        // Ensure purchase price is set if not manually overridden or just calculated
+        if (!pData.purchasePrice) {
+             pData.purchasePrice = pData.initialDeposit + pData.furtherDeposit + pData.balancePayment + pData.mortgageLoan;
+        }
 
         if(editingProp.id) await setDoc(doc(db, "properties", editingProp.id), pData);
         else await addDoc(collection(db, "properties"), pData);
@@ -1176,6 +1170,8 @@ const App: React.FC = () => {
                       setModalMode={setModalMode}
                       initializeDefaults={initializeDefaults}
                       onDeleteProperty={handleDeleteProperty}
+                      onAddProperty={() => { setEditingProp({ id: '', name: '', address: '', type: 'Investment', status: 'Vacant', currentValue: 0, purchasePrice: 0, initialDeposit: 0, furtherDeposit: 0, balancePayment: 0, mortgageLoan: 0, mortgageAmount: 0, outstandingLoan: 0, managementFee: 0, govtRates: 0, govtRent: 0, estRent: 0, tenure: 0, interestRate: 0, bank: '' } as Property); setModalMode('property'); }}
+                      onInitializeDefaults={initializeDefaults}
                   />
               )}
 

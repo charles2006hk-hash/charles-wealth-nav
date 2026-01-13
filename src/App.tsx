@@ -57,28 +57,12 @@ interface Property {
   address: string;
   type: 'Investment' | 'Self-use';
   status: 'Occupied' | 'Vacant' | 'Renovation';
-  
-  // 財務數據 (估值)
   currentValue: number; 
-  
-  // 買入流程詳情
-  purchasePrice: number; // 總價 (自動計算)
-  initialDeposit: number; // 細訂
-  furtherDeposit: number; // 大訂
-  balancePayment: number; // 尾數 (Cash Balance)
-  mortgageLoan: number; // 按揭貸款額
-  
-  // 按揭詳情
-  bank: string;
-  interestRate: number; // 利率 (%)
-  mortgageAmount: number; // 月供
-  outstandingLoan: number; // 尚餘欠款
-  tenure: number;  // 年期
-  
-  // 租務
+  purchasePrice: number; 
+  mortgageAmount: number; 
+  outstandingLoan: number; 
   estRent: number; 
-
-  // 支出設定
+  tenure: number;  
   managementFee: number;
   govtRates: number;
   govtRent: number;
@@ -148,8 +132,6 @@ const ICONS = {
   GraduationCap: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>,
   ShieldCheck: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>,
   Edit2: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>,
-  Upload: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
-  Download: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>,
 };
 
 // --- Constants ---
@@ -162,7 +144,11 @@ const CATEGORIES = [
 const MEMBERS = ['Charles', 'Carmen', 'Virginia', 'Jason', 'Family'];
 
 const INITIAL_PROPERTIES_DATA: Property[] = [
-    { id: 'p1', name: '京瑞二期 16E', address: '沙田安群街1號京瑞廣場二期16樓E室', type: 'Investment', status: 'Occupied', currentValue: 8000000, purchasePrice: 6000000, initialDeposit: 300000, furtherDeposit: 300000, balancePayment: 5400000, mortgageLoan: 3000000, mortgageAmount: 15000, outstandingLoan: 3000000, managementFee: 1200, govtRates: 1500, govtRent: 900, estRent: 25000, tenure: 15, interestRate: 3.5, bank: 'BOC' },
+    { id: 'p1', name: '京瑞二期 16E', address: '沙田安群街1號京瑞廣場二期16樓E室', type: 'Investment', status: 'Occupied', currentValue: 8000000, purchasePrice: 6000000, mortgageAmount: 15000, outstandingLoan: 3000000, managementFee: 1200, govtRates: 1500, govtRent: 900, estRent: 25000, tenure: 15 },
+    { id: 'p2', name: '京瑞二期 16F', address: '沙田安群街1號京瑞廣場二期16樓F室', type: 'Investment', status: 'Occupied', currentValue: 8000000, purchasePrice: 6000000, mortgageAmount: 15000, outstandingLoan: 3000000, managementFee: 1200, govtRates: 1500, govtRent: 900, estRent: 25000, tenure: 15 },
+    { id: 'p3', name: '帝欣苑 (Parc Versailles)', address: '大埔梅樹坑路8號帝欣苑', type: 'Investment', status: 'Occupied', currentValue: 12000000, purchasePrice: 9000000, mortgageAmount: 0, outstandingLoan: 0, managementFee: 2500, govtRates: 3000, govtRent: 1800, estRent: 38000, tenure: 0 },
+    { id: 'p4', name: '太湖花園 (Serenity Park)', address: '大埔大逸街太湖花園', type: 'Investment', status: 'Occupied', currentValue: 6500000, purchasePrice: 4000000, mortgageAmount: 0, outstandingLoan: 0, managementFee: 1500, govtRates: 1200, govtRent: 700, estRent: 18000, tenure: 0 },
+    { id: 'p5', name: '農圃道18號 (18 Farm Road)', address: '土瓜灣農圃道18號', type: 'Self-use', status: 'Occupied', currentValue: 15000000, purchasePrice: 13000000, mortgageAmount: 25000, outstandingLoan: 6000000, managementFee: 3000, govtRates: 4000, govtRent: 2400, estRent: 0, tenure: 10 },
 ];
 
 const INITIAL_EDUCATION_DB: Record<string, EduConfig> = {
@@ -178,12 +164,7 @@ const FAMILY_INFO = {
 };
 
 const convertNumberToEnglish = (n: any) => (Number(n) || 0).toString(); 
-// 安全的格式化函數，防止白屏
-const formatCurrency = (val: any) => {
-    const num = Number(val);
-    if (isNaN(num)) return '$0';
-    return `$${num.toLocaleString()}`;
-};
+const formatCurrency = (val: any) => `$${(Number(val) || 0).toLocaleString()}`;
 
 // --- 4. 輔助組件 ---
 const StatCard = ({ title, value, subtext, color, iconName }: any) => {
@@ -239,9 +220,9 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
                         {filteredTxs.map(t => (
                             <tr key={t.id}>
                                 <td className="border border-black p-2">{t.date}</td>
-                                <td className="border border-black p-2">{(t.category || '')} - {t.note}</td>
-                                <td className="border border-black p-2 text-right">{(t.category || '').includes('Income') ? '' : formatCurrency(t.amount)}</td>
-                                <td className="border border-black p-2 text-right">{(t.category || '').includes('Income') ? formatCurrency(t.amount) : ''}</td>
+                                <td className="border border-black p-2">{t.category} - {t.note}</td>
+                                <td className="border border-black p-2 text-right">{t.category.includes('Income') ? '' : formatCurrency(t.amount)}</td>
+                                <td className="border border-black p-2 text-right">{t.category.includes('Income') ? formatCurrency(t.amount) : ''}</td>
                             </tr>
                         ))}
                     </tbody>
@@ -503,7 +484,7 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
     );
 };
 
-// --- 6. 主應用程式 ---
+// --- 5. 主應用程式 ---
 const App: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
@@ -513,8 +494,7 @@ const App: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState('dashboard');
   const [propertyViewId, setPropertyViewId] = useState<string | null>(null);
-  const [modalMode, setModalMode] = useState<'none' | 'transaction' | 'property' | 'doc' | 'lease'>('none');
-  const [editingLease, setEditingLease] = useState<Lease | null>(null);
+  const [modalMode, setModalMode] = useState<'none' | 'transaction' | 'property' | 'doc'>('none');
 
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [editingProp, setEditingProp] = useState<Property | null>(null);
@@ -564,14 +544,14 @@ const App: React.FC = () => {
   const propStats = useMemo(() => {
     return properties.map(p => {
         const pTxs = transactions.filter(t => t.propertyId === p.id);
-        const income = pTxs.filter(t => (t.category || '').includes('Income')).reduce((sum, t) => sum + (t.amount || 0), 0);
-        const expense = pTxs.filter(t => !(t.category || '').includes('Income')).reduce((sum, t) => sum + (t.amount || 0), 0);
+        const income = pTxs.filter(t => t.category.includes('Income')).reduce((sum, t) => sum + t.amount, 0);
+        const expense = pTxs.filter(t => !t.category.includes('Income')).reduce((sum, t) => sum + t.amount, 0);
         const activeLease = leases.find(l => l.propertyId === p.id && l.status === 'Active');
         
         let isLate = false;
         if (activeLease && p.status === 'Occupied') {
             const lastRentTx = pTxs
-                .filter(t => (t.category || '').includes('Rental Income'))
+                .filter(t => t.category.includes('Rental Income'))
                 .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
             if (lastRentTx) {
                 const daysSince = (new Date().getTime() - new Date(lastRentTx.date).getTime()) / (1000 * 3600 * 24);
@@ -593,16 +573,16 @@ const App: React.FC = () => {
     if(filterYear !== 'All') filtered = filtered.filter(d => d.year === parseInt(filterYear));
     if(filterMember !== 'All') filtered = filtered.filter(d => d.member === filterMember);
     if(filterCategory !== 'All') filtered = filtered.filter(d => d.category === filterCategory);
-    if(searchTerm) filtered = filtered.filter(d => (d.merchant || '').toLowerCase().includes(searchTerm.toLowerCase()));
+    if(searchTerm) filtered = filtered.filter(d => d.merchant.toLowerCase().includes(searchTerm.toLowerCase()));
     
-    const total = filtered.reduce((a,b) => a + (b.amount || 0), 0);
+    const total = filtered.reduce((a,b) => a + b.amount, 0);
     const byYear: Record<string, number> = {}; 
     const byCat: Record<string, number> = {}; 
     const insuranceByMember: Record<string, InsurancePolicy[]> = {};
 
     filtered.forEach(d => {
-        if(!byYear[d.year]) byYear[d.year] = 0; byYear[d.year] += (d.amount || 0);
-        const cat = d.category || 'Other'; if(!byCat[cat]) byCat[cat] = 0; byCat[cat] += (d.amount || 0);
+        if(!byYear[d.year]) byYear[d.year] = 0; byYear[d.year] += d.amount;
+        const cat = d.category || 'Other'; if(!byCat[cat]) byCat[cat] = 0; byCat[cat] += d.amount;
         
         if (cat.includes('Insurance')) {
             let memberKey = d.member === 'Family (公用)' ? 'Charles' : d.member;
@@ -682,42 +662,13 @@ const App: React.FC = () => {
             tenure: Number(editingProp.tenure),
             managementFee: Number(editingProp.managementFee),
             govtRates: Number(editingProp.govtRates),
-            govtRent: Number(editingProp.govtRent),
-            initialDeposit: Number(editingProp.initialDeposit || 0),
-            furtherDeposit: Number(editingProp.furtherDeposit || 0),
-            balancePayment: Number(editingProp.balancePayment || 0),
-            mortgageLoan: Number(editingProp.mortgageLoan || 0),
-            interestRate: Number(editingProp.interestRate || 0),
-            outstandingLoan: Number(editingProp.outstandingLoan || 0),
-            bank: editingProp.bank || 'Standard Bank' // Add default bank to fix TS2345
+            govtRent: Number(editingProp.govtRent)
         };
-        // Auto-calculate Purchase Price if components are filled
-        if (pData.initialDeposit || pData.furtherDeposit || pData.balancePayment) {
-            pData.purchasePrice = pData.initialDeposit + pData.furtherDeposit + pData.balancePayment + pData.mortgageLoan;
-        }
-
         if(editingProp.id) await setDoc(doc(db, "properties", editingProp.id), pData);
         else await addDoc(collection(db, "properties"), pData);
         setModalMode('none');
       } catch(e) { alert(e); }
   };
-
-  const handleSaveLease = async () => {
-      if (!editingLease) return;
-      try {
-        const leaseData = {
-             ...editingLease,
-             monthlyRent: Number(editingLease.monthlyRent),
-             deposit: Number(editingLease.deposit)
-        };
-        if (editingLease.id) {
-             await setDoc(doc(db, "leases", editingLease.id), leaseData);
-        } else {
-             await addDoc(collection(db, "leases"), leaseData);
-        }
-        setModalMode('none');
-      } catch(e) { alert(e); }
-  }
 
   const deleteItem = async (col: string, id: string) => {
       if(window.confirm('確定刪除?')) await deleteDoc(doc(db, col, id));
@@ -731,31 +682,6 @@ const App: React.FC = () => {
       }, 100);
   };
   
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if(!window.confirm("確定要將此 JSON 檔案匯入？")) return;
-
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-        try {
-            const result = ev.target?.result;
-            if (typeof result !== 'string') return;
-            const json = JSON.parse(result);
-            const list = Array.isArray(json) ? json : (json.data || []);
-            
-            const batch = writeBatch(db);
-            list.forEach((item: any) => {
-                const docRef = doc(collection(db, "transactions"));
-                batch.set(docRef, item);
-            });
-            await batch.commit();
-            alert(`成功匯入 ${list.length} 筆記錄！`);
-        } catch (err) { alert("匯入失敗: " + err); }
-    };
-    reader.readAsText(file);
-  };
-
   const handleExportJSON = () => {
       const jsonString = JSON.stringify({ meta: { generated: new Date() }, data: transactions }, null, 2);
       const blob = new Blob([jsonString], { type: 'application/json' });
@@ -826,7 +752,7 @@ const App: React.FC = () => {
                   </div>
               ))}
               
-               <button onClick={() => { setEditingProp({ id: '', name: '', address: '', type: 'Investment', status: 'Vacant', currentValue: 0, purchasePrice: 0, initialDeposit: 0, furtherDeposit: 0, balancePayment: 0, mortgageLoan: 0, mortgageAmount: 0, outstandingLoan: 0, managementFee: 0, govtRates: 0, govtRent: 0, estRent: 0, tenure: 0, interestRate: 0, bank: '' }); setModalMode('property'); }} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-xl hover:bg-slate-50 transition text-slate-400 hover:text-slate-600"><ICONS.Plus /><span className="mt-2 font-bold">新增物業 Add Property</span></button>
+               <button onClick={() => { setEditingProp({ id: '', name: '', address: '', type: 'Investment', status: 'Vacant', currentValue: 0, purchasePrice: 0, mortgageAmount: 0, outstandingLoan: 0, managementFee: 0, govtRates: 0, govtRent: 0, estRent: 0, tenure: 0 }); setModalMode('property'); }} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-xl hover:bg-slate-50 transition text-slate-400 hover:text-slate-600"><ICONS.Plus /><span className="mt-2 font-bold">新增物業 Add Property</span></button>
                {properties.length === 0 && (
                   <button onClick={initializeDefaults} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-blue-300 bg-blue-50 rounded-xl hover:bg-blue-100 transition text-blue-500"><ICONS.Plus /><span className="mt-2 font-bold">初始化預設物業</span></button>
               )}
@@ -861,7 +787,7 @@ const App: React.FC = () => {
 
             <div className="flex gap-4 border-b border-slate-200">
                 {['overview', 'ledger', 'tenants'].map(t => (
-                    <button key={t} onClick={() => setViewTab(t as any)} className={`pb-2 px-1 text-sm font-bold capitalize ${viewTab === t ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500'}`}>{t === 'overview' ? '物業總覽 Overview' : t === 'ledger' ? '流水帳 Ledger' : '租客 Tenants'}</button>
+                    <button key={t} onClick={() => setViewTab(t as any)} className={`pb-2 px-1 text-sm font-bold capitalize ${viewTab === t ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500'}`}>{t}</button>
                 ))}
             </div>
 
@@ -904,12 +830,9 @@ const App: React.FC = () => {
                                         <td className="p-3">{t.date}</td>
                                         <td className="p-3"><select className="bg-transparent border-none" value={t.category} onChange={e => handleUpdateCategory(t.id, e.target.value)}>{CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select></td>
                                         <td className="p-3 font-medium">{t.merchant} <span className="text-slate-400 text-xs">{t.note}</span></td>
-                                        <td className={`p-3 font-mono font-bold ${t.category?.includes('Income') ? 'text-emerald-600' : 'text-red-500'}`}>{t.category?.includes('Income') ? '+' : '-'}{formatCurrency(t.amount)}</td>
+                                        <td className={`p-3 font-mono font-bold ${t.category.includes('Income') ? 'text-emerald-600' : 'text-red-500'}`}>{t.category.includes('Income') ? '+' : '-'}{formatCurrency(t.amount)}</td>
                                         <td className="p-3 flex gap-1">{t.tags?.map(tag => <span key={tag} className="text-xs bg-yellow-100 text-yellow-800 px-1 rounded">#{tag}</span>)}</td>
-                                        <td className="p-3">
-                                            <button onClick={() => { setEditingTx(t); setModalMode('transaction'); }} className="text-blue-400 hover:text-blue-600 mr-2"><ICONS.Edit /></button>
-                                            <button onClick={() => deleteItem('transactions', t.id)} className="text-red-400 hover:text-red-600"><ICONS.Trash /></button>
-                                        </td>
+                                        <td className="p-3"><button onClick={() => deleteItem('transactions', t.id)} className="text-red-400 hover:text-red-600"><ICONS.Trash /></button></td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -923,9 +846,9 @@ const App: React.FC = () => {
                      <div className="flex justify-between items-center">
                         <h3 className="font-bold">租約紀錄 Lease History</h3>
                         <button onClick={()=>{
-                            setEditingLease({ propertyId: p.id, tenantName: '', tenantID: '', startDate: '', endDate: '', monthlyRent: 0, deposit: 0, status: 'Active' } as Lease);
-                            setModalMode('lease');
-                        }} className="text-sm text-blue-600 hover:underline">+ Register New Lease</button>
+                            const newLease = { propertyId: p.id, tenantName: 'New Tenant', status: 'Active', startDate: '2026-01-01', endDate: '2027-01-01', monthlyRent: 15000 };
+                            addDoc(collection(db, "leases"), newLease);
+                        }} className="text-sm text-blue-600 hover:underline">+ Register New Lease (Demo)</button>
                      </div>
                      {pLeases.map(l => (
                          <div key={l.id} className={`p-4 rounded-xl border ${l.status === 'Active' ? 'bg-green-50 border-green-200' : 'bg-gray-50'}`}>
@@ -936,10 +859,7 @@ const App: React.FC = () => {
                                  </div>
                                  <div className="text-right">
                                      <p className="font-bold font-mono">{formatCurrency(l.monthlyRent)}/mo</p>
-                                     <div className="flex gap-2 justify-end mt-1">
-                                         {l.status === 'Active' && <span className="text-xs bg-green-200 text-green-800 px-2 py-0.5 rounded">Active</span>}
-                                         <button onClick={() => { setEditingLease(l); setModalMode('lease'); }} className="text-xs text-blue-600 hover:underline">Edit</button>
-                                     </div>
+                                     {l.status === 'Active' && <span className="text-xs bg-green-200 text-green-800 px-2 py-0.5 rounded">Active</span>}
                                  </div>
                              </div>
                          </div>
@@ -1055,29 +975,19 @@ const App: React.FC = () => {
               {activeTab === 'data' && (
                   <div className="bg-white p-10 rounded-xl shadow animate-in fade-in">
                       <h2 className="text-2xl font-bold mb-4">數據中心 Data Hub</h2>
-                      <div className="flex justify-between items-center mb-6">
-                        <p className="text-slate-500">所有交易紀錄一覽 Table of All Transactions</p>
-                        <div className="flex gap-2">
-                            <label className="flex items-center gap-2 px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 cursor-pointer">
-                                <ICONS.Plus /> 匯入 Import JSON
-                                <input type="file" className="hidden" onChange={handleFileUpload} accept=".json" />
-                            </label>
-                            <button onClick={handleExportJSON} className="px-3 py-1 bg-slate-600 text-white text-xs rounded hover:bg-slate-700 flex items-center gap-2">
-                                <ICONS.FileText /> 導出 Export JSON
-                            </button>
-                        </div>
-                      </div>
+                      <p className="text-slate-500 mb-6">所有交易紀錄一覽 Table of All Transactions</p>
                       <div className="flex gap-4 mb-4">
                         <input type="text" placeholder="Search..." className="border rounded px-2 py-1 text-sm" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                         <select className="border rounded px-2 py-1" value={filterCategory} onChange={e=>setFilterCategory(e.target.value)}><option value="All">All Categories</option>{CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select>
                         <select className="border rounded px-2 py-1" value={filterMember} onChange={e=>setFilterMember(e.target.value)}><option value="All">All Members</option>{MEMBERS.map(m=><option key={m} value={m}>{m}</option>)}</select>
                         <select className="border rounded px-2 py-1" value={filterYear} onChange={e=>setFilterYear(e.target.value)}><option value="All">All Years</option>{[2024,2025,2026].map(y=><option key={y} value={y}>{y}</option>)}</select>
+                        <button onClick={handleExportJSON} className="px-3 py-1 bg-slate-600 text-white text-xs rounded hover:bg-slate-700">Export JSON</button>
                       </div>
                       <table className="w-full text-sm text-left">
                           <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0"><tr><th className="p-3">Date</th><th className="p-3">Merchant</th><th className="p-3">Amount</th><th className="p-3">Category</th><th className="p-3">Member</th></tr></thead>
                           <tbody className="divide-y">
                               {transactions
-                                .filter(t => (filterCategory==='All'||t.category===filterCategory) && (searchTerm===''||(t.merchant || '').toLowerCase().includes(searchTerm.toLowerCase())))
+                                .filter(t => (filterCategory==='All'||t.category===filterCategory) && (searchTerm===''||t.merchant.includes(searchTerm)))
                                 .slice(0, 50).map(t => (
                                   <tr key={t.id} className="hover:bg-slate-50">
                                       <td className="p-3">{t.date}</td>
@@ -1184,99 +1094,27 @@ const App: React.FC = () => {
 
           {modalMode === 'property' && (
               <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
-                  <div className="bg-white rounded-xl shadow-2xl p-6 w-[600px] max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in duration-200">
-                      <h3 className="font-bold text-xl mb-6">Edit Property</h3>
-                      <div className="space-y-6">
-                          <div className="space-y-2">
-                              <label className="text-xs font-bold text-slate-500 uppercase">Basic Info</label>
-                              <input className="border w-full p-2 rounded" placeholder="Property Name" value={editingProp?.name} onChange={e => setEditingProp({...editingProp, name: e.target.value} as any)} />
-                              <input className="border w-full p-2 rounded" placeholder="Full Address" value={editingProp?.address} onChange={e => setEditingProp({...editingProp, address: e.target.value} as any)} />
-                              <select className="border w-full p-2 rounded" value={editingProp?.status} onChange={e => setEditingProp({...editingProp, status: e.target.value} as any)}><option value="Occupied">Occupied</option><option value="Vacant">Vacant</option></select>
+                  <div className="bg-white rounded-xl shadow-2xl p-6 w-[500px] animate-in fade-in zoom-in duration-200">
+                      <h3 className="font-bold mb-4">Edit Property</h3>
+                      <div className="space-y-3">
+                          <input className="border w-full p-2" placeholder="Name" value={editingProp?.name} onChange={e => setEditingProp({...editingProp, name: e.target.value} as any)} />
+                          <input className="border w-full p-2" placeholder="Address" value={editingProp?.address} onChange={e => setEditingProp({...editingProp, address: e.target.value} as any)} />
+                          <select className="border w-full p-2" value={editingProp?.status} onChange={e => setEditingProp({...editingProp, status: e.target.value} as any)}><option value="Occupied">Occupied</option><option value="Vacant">Vacant</option></select>
+                          <div className="grid grid-cols-2 gap-2">
+                               <input className="border p-2" type="number" placeholder="Value" value={editingProp?.currentValue} onChange={e => setEditingProp({...editingProp, currentValue: Number(e.target.value)} as any)} />
+                               <input className="border p-2" type="number" placeholder="Rent Est." value={editingProp?.estRent} onChange={e => setEditingProp({...editingProp, estRent: Number(e.target.value)} as any)} />
                           </div>
-                          
-                          <div className="space-y-2">
-                              <label className="text-xs font-bold text-slate-500 uppercase">Purchase Detail 買入詳情</label>
-                              <div className="p-4 bg-blue-50 rounded-lg border border-blue-100 grid grid-cols-2 gap-4">
-                                  <div>
-                                      <label className="text-xs text-slate-500 block mb-1">Initial Deposit (細訂)</label>
-                                      <div className="flex items-center gap-2">
-                                          <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.initialDeposit || 0} onChange={e => setEditingProp({...editingProp, initialDeposit: Number(e.target.value)} as any)} />
-                                      </div>
-                                      <span className="text-xs text-blue-600 font-mono">{formatCurrency(editingProp?.initialDeposit)}</span>
-                                  </div>
-                                  <div>
-                                      <label className="text-xs text-slate-500 block mb-1">Further Deposit (大訂)</label>
-                                      <div className="flex items-center gap-2">
-                                          <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.furtherDeposit || 0} onChange={e => setEditingProp({...editingProp, furtherDeposit: Number(e.target.value)} as any)} />
-                                      </div>
-                                      <span className="text-xs text-blue-600 font-mono">{formatCurrency(editingProp?.furtherDeposit)}</span>
-                                  </div>
-                                  <div>
-                                      <label className="text-xs text-slate-500 block mb-1">Balance (尾數)</label>
-                                      <div className="flex items-center gap-2">
-                                          <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.balancePayment || 0} onChange={e => setEditingProp({...editingProp, balancePayment: Number(e.target.value)} as any)} />
-                                      </div>
-                                      <span className="text-xs text-blue-600 font-mono">{formatCurrency(editingProp?.balancePayment)}</span>
-                                  </div>
-                                  <div>
-                                      <label className="text-xs text-slate-500 block mb-1">Mortgage Loan (按揭)</label>
-                                      <div className="flex items-center gap-2">
-                                          <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.mortgageLoan || 0} onChange={e => setEditingProp({...editingProp, mortgageLoan: Number(e.target.value)} as any)} />
-                                      </div>
-                                      <span className="text-xs text-blue-600 font-mono">{formatCurrency(editingProp?.mortgageLoan)}</span>
-                                  </div>
-                                  <div className="col-span-2 border-t pt-2 mt-2 flex justify-between items-center">
-                                      <span className="font-bold text-sm text-slate-700">Total Purchase Price 買入價:</span>
-                                      <span className="font-bold text-lg text-blue-800 font-mono">
-                                          {formatCurrency((editingProp?.initialDeposit||0) + (editingProp?.furtherDeposit||0) + (editingProp?.balancePayment||0) + (editingProp?.mortgageLoan||0))}
-                                      </span>
-                                  </div>
-                              </div>
-                          </div>
-
-                          <div className="space-y-2">
-                              <label className="text-xs font-bold text-slate-500 uppercase">Valuation & Rent</label>
-                              <div className="grid grid-cols-2 gap-3">
-                                   <div><label className="text-xs">Current Value</label><input className="border w-full p-2 rounded" type="number" value={editingProp?.currentValue} onChange={e => setEditingProp({...editingProp, currentValue: Number(e.target.value)} as any)} /></div>
-                                   <div><label className="text-xs">Est. Rent</label><input className="border w-full p-2 rounded" type="number" value={editingProp?.estRent} onChange={e => setEditingProp({...editingProp, estRent: Number(e.target.value)} as any)} /></div>
-                              </div>
-                          </div>
-
-                          <div className="space-y-2">
-                            <label className="text-xs font-bold text-slate-500 uppercase">Monthly Expenses</label>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-500">Expenses</label>
                             <div className="grid grid-cols-3 gap-2">
-                              <div><label className="text-xs">Mgt Fee</label><input className="border w-full p-2 rounded" type="number" value={editingProp?.managementFee} onChange={e=>setEditingProp({...editingProp, managementFee: Number(e.target.value)} as any)} /></div>
-                              <div><label className="text-xs">Rates (Qtr)</label><input className="border w-full p-2 rounded" type="number" value={editingProp?.govtRates} onChange={e=>setEditingProp({...editingProp, govtRates: Number(e.target.value)} as any)} /></div>
-                              <div><label className="text-xs">Govt Rent (Qtr)</label><input className="border w-full p-2 rounded" type="number" value={editingProp?.govtRent} onChange={e=>setEditingProp({...editingProp, govtRent: Number(e.target.value)} as any)} /></div>
+                              <input className="border p-1 text-sm" placeholder="Mgt Fee" value={editingProp?.managementFee} onChange={e=>setEditingProp({...editingProp, managementFee: Number(e.target.value)} as any)} />
+                              <input className="border p-1 text-sm" placeholder="Rates" value={editingProp?.govtRates} onChange={e=>setEditingProp({...editingProp, govtRates: Number(e.target.value)} as any)} />
+                              <input className="border p-1 text-sm" placeholder="Govt Rent" value={editingProp?.govtRent} onChange={e=>setEditingProp({...editingProp, govtRent: Number(e.target.value)} as any)} />
                             </div>
                           </div>
                       </div>
-                      <div className="flex gap-2 mt-8 pt-4 border-t">
-                          <button onClick={handleSaveProperty} className="flex-1 bg-blue-600 text-white p-3 rounded-lg font-bold hover:bg-blue-700">Save Property</button>
-                          <button onClick={() => setModalMode('none')} className="flex-1 bg-gray-100 text-slate-600 p-3 rounded-lg font-bold hover:bg-gray-200">Cancel</button>
-                      </div>
-                  </div>
-              </div>
-          )}
-          {modalMode === 'lease' && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
-                  <div className="bg-white rounded-xl shadow-2xl p-6 w-[500px] animate-in fade-in zoom-in duration-200">
-                      <h3 className="font-bold text-xl mb-6">Manage Lease</h3>
-                      <div className="space-y-4">
-                          <input className="border w-full p-2 rounded" placeholder="Tenant Name" value={editingLease?.tenantName} onChange={e => setEditingLease({...editingLease, tenantName: e.target.value} as any)} />
-                          <input className="border w-full p-2 rounded" placeholder="Tenant ID" value={editingLease?.tenantID} onChange={e => setEditingLease({...editingLease, tenantID: e.target.value} as any)} />
-                          <div className="grid grid-cols-2 gap-4">
-                              <div><label className="text-xs">Start Date</label><input type="date" className="border w-full p-2 rounded" value={editingLease?.startDate} onChange={e => setEditingLease({...editingLease, startDate: e.target.value} as any)} /></div>
-                              <div><label className="text-xs">End Date</label><input type="date" className="border w-full p-2 rounded" value={editingLease?.endDate} onChange={e => setEditingLease({...editingLease, endDate: e.target.value} as any)} /></div>
-                          </div>
-                          <div className="grid grid-cols-2 gap-4">
-                              <div><label className="text-xs">Monthly Rent</label><input type="number" className="border w-full p-2 rounded" value={editingLease?.monthlyRent} onChange={e => setEditingLease({...editingLease, monthlyRent: Number(e.target.value)} as any)} /></div>
-                              <div><label className="text-xs">Deposit</label><input type="number" className="border w-full p-2 rounded" value={editingLease?.deposit} onChange={e => setEditingLease({...editingLease, deposit: Number(e.target.value)} as any)} /></div>
-                          </div>
-                          <select className="border w-full p-2 rounded" value={editingLease?.status} onChange={e => setEditingLease({...editingLease, status: e.target.value} as any)}><option value="Active">Active</option><option value="Terminated">Terminated</option></select>
-                      </div>
                       <div className="flex gap-2 mt-6">
-                          <button onClick={handleSaveLease} className="flex-1 bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Save Lease</button>
+                          <button onClick={handleSaveProperty} className="flex-1 bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Save</button>
                           <button onClick={() => setModalMode('none')} className="flex-1 bg-gray-200 p-2 rounded hover:bg-gray-300">Cancel</button>
                       </div>
                   </div>

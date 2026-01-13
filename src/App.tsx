@@ -507,8 +507,8 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
 const PropertyDashboard = ({ 
     properties, totalValuation, totalMonthlyRent, propStats, 
     stressRate, setStressRate, rentDrop, setRentDrop, 
-    setPropertyViewId, setEditingProp, setModalMode, initializeDefaults,
-    handleDeleteProperty // Add delete handler prop
+    onSelectProperty, onAddProperty, onInitializeDefaults,
+    onDeleteProperty
 }: any) => (
     <div className="space-y-8 animate-in fade-in">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -534,16 +534,15 @@ const PropertyDashboard = ({
             {propStats.map((p: any) => (
                 <div 
                   key={p.id} 
-                  onClick={() => setPropertyViewId(p.id)} 
+                  onClick={() => onSelectProperty(p.id)} 
                   className="bg-white rounded-xl shadow-sm border hover:shadow-md transition cursor-pointer overflow-hidden group relative z-10 cursor-pointer"
                 >
                     <div className={`h-2 w-full ${p.status==='Occupied' ? (p.isLate ? 'bg-orange-500' : 'bg-emerald-500') : 'bg-red-500'}`} />
                     
-                    {/* Delete Button - Top Right */}
                     <button 
                         onClick={(e) => {
                             e.stopPropagation();
-                            handleDeleteProperty(p.id);
+                            onDeleteProperty(p.id);
                         }}
                         className="absolute top-4 right-4 z-20 p-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-full transition opacity-0 group-hover:opacity-100"
                         title="Delete Property"
@@ -568,9 +567,9 @@ const PropertyDashboard = ({
                 </div>
             ))}
             
-             <button onClick={() => { setEditingProp({ id: '', name: '', address: '', type: 'Investment', status: 'Vacant', currentValue: 0, purchasePrice: 0, initialDeposit: 0, furtherDeposit: 0, balancePayment: 0, mortgageLoan: 0, mortgageAmount: 0, outstandingLoan: 0, managementFee: 0, govtRates: 0, govtRent: 0, estRent: 0, tenure: 0, interestRate: 0, bank: '' }); setModalMode('property'); }} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-xl hover:bg-slate-50 transition text-slate-400 hover:text-slate-600 cursor-pointer z-10"><ICONS.Plus /><span className="mt-2 font-bold">新增物業 Add Property</span></button>
+             <button onClick={onAddProperty} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-xl hover:bg-slate-50 transition text-slate-400 hover:text-slate-600 cursor-pointer z-10"><ICONS.Plus /><span className="mt-2 font-bold">新增物業 Add Property</span></button>
              {properties.length === 0 && (
-                <button onClick={initializeDefaults} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-blue-300 bg-blue-50 rounded-xl hover:bg-blue-100 transition text-blue-500 cursor-pointer z-10"><ICONS.Plus /><span className="mt-2 font-bold">初始化預設物業</span></button>
+                <button onClick={onInitializeDefaults} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-blue-300 bg-blue-50 rounded-xl hover:bg-blue-100 transition text-blue-500 cursor-pointer z-10"><ICONS.Plus /><span className="mt-2 font-bold">初始化預設物業</span></button>
             )}
         </div>
     </div>
@@ -1013,11 +1012,11 @@ const App: React.FC = () => {
                       setStressRate={setStressRate}
                       rentDrop={rentDrop}
                       setRentDrop={setRentDrop}
-                      setPropertyViewId={setPropertyViewId}
+                      onSelectProperty={setPropertyViewId}
                       setEditingProp={setEditingProp}
                       setModalMode={setModalMode}
                       initializeDefaults={initializeDefaults}
-                      handleDeleteProperty={handleDeleteProperty}
+                      onDeleteProperty={handleDeleteProperty}
                   />
               )}
 

@@ -6,7 +6,7 @@ import {
 import { initializeApp } from "firebase/app";
 import { 
   getFirestore, collection, doc, addDoc, setDoc, deleteDoc, updateDoc, 
-  onSnapshot, query, orderBy, writeBatch
+  onSnapshot, query, orderBy, writeBatch, getDocs
 } from "firebase/firestore";
 
 // --- 1. Firebase 設定 ---
@@ -699,7 +699,7 @@ const App: React.FC = () => {
             mortgageLoan: Number(editingProp.mortgageLoan || 0),
             interestRate: Number(editingProp.interestRate || 0),
             outstandingLoan: Number(editingProp.outstandingLoan || 0),
-            bank: editingProp.bank || 'Standard Bank' 
+            bank: editingProp.bank || 'Standard Bank' // Add default bank to fix TS2345
         };
         // Auto-calculate Purchase Price if components are filled
         if (pData.initialDeposit || pData.furtherDeposit || pData.balancePayment) {
@@ -734,18 +734,30 @@ const App: React.FC = () => {
   };
 
   const handleClearData = async () => {
-      if (!window.confirm("警告：這將會清除所有資料！確定嗎？")) return;
-      const batch = writeBatch(db);
+      if (!window.confirm("警告：這將會清除所有資料！確定嗎？ (此操作無法復原)")) return;
       
-      const collections = ["transactions", "properties", "leases"];
-      for (const colName of collections) {
-          const snapshot = await onSnapshot(collection(db, colName), (snap) => {
-              snap.docs.forEach(d => batch.delete(d.ref));
-          });
-          // Note: onSnapshot is a listener, for one-time delete we should use getDocs but since we can't import it easily here, we rely on manual deletion or re-init.
-          // For simplicity in this environment, we recommend using the "初始化預設物業" after clearing manually or via console.
-          alert("請手動在 Firebase Console 清除，或使用初始化功能覆蓋。");
-          return; 
+      try {
+          const batch = writeBatch(db);
+          const collections = ["transactions", "properties", "leases"];
+          
+          for (const colName of collections) {
+              const q = query(collection(db, colName));
+              const querySnapshot = await getDocs(q);
+              querySnapshot.forEach((doc) => {
+                  batch.delete(doc.ref);
+              });
+          }
+          await batch.commit();
+          
+          // Clear local state as well to reflect changes immediately
+          setTransactions([]);
+          setProperties([]);
+          setLeases([]);
+          
+          alert("所有資料已成功清除。");
+      } catch (e) {
+          console.error("清除失敗:", e);
+          alert("清除資料時發生錯誤，請查看 Console。");
       }
   };
 
@@ -845,7 +857,6 @@ const App: React.FC = () => {
                           <div className="grid grid-cols-2 gap-4 text-sm bg-slate-50 p-3 rounded-lg">
                               <div><p className="text-xs text-slate-400">現時估值</p><p className="font-mono font-bold">{formatCurrency(p.currentValue)}</p></div>
                               <div><p className="text-xs text-slate-400">每月租金</p><p className="font-mono font-bold text-emerald-600">{p.activeLease ? formatCurrency(p.activeLease.monthlyRent) : '-'}</p></div>
-                              {/* 使用 stressedExpense */}
                               <div><p className="text-xs text-slate-400">壓力支出</p><p className="font-mono text-red-400">-{formatCurrency(p.stressedExpense)}</p></div>
                           </div>
                       </div>

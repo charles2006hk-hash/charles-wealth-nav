@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, 
-  Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell 
+  Tooltip, Legend, ResponsiveContainer 
 } from 'recharts';
 import { initializeApp } from "firebase/app";
 import { 
@@ -178,14 +178,13 @@ const FAMILY_INFO = {
 };
 
 const convertNumberToEnglish = (n: any) => (Number(n) || 0).toString(); 
-// 安全的格式化函數，防止白屏
 const formatCurrency = (val: any) => {
     const num = Number(val);
     if (isNaN(num)) return '$0';
     return `$${num.toLocaleString()}`;
 };
 
-// --- 4. 輔助組件 ---
+// --- 4. 輔助組件 (StatCard) ---
 const StatCard = ({ title, value, subtext, color, iconName }: any) => {
   const Icon = ICONS[iconName as keyof typeof ICONS] || ICONS.Tag;
   return (
@@ -503,7 +502,76 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
     );
 };
 
-// --- 6. 主應用程式 ---
+// --- 6. 獨立組件: DocModal (移至 App 外部) ---
+// 為了解決 TS2304 和嵌套定義問題，我們將 DocModal 定義在 App 外部，並通過 props 接收所有需要的數據和函數。
+
+interface DocModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    docConfig: DocConfig;
+    setDocConfig: (config: DocConfig) => void;
+    handlePrint: () => void;
+    properties: Property[];
+    transactions: Transaction[];
+}
+
+const DocModal: React.FC<DocModalProps> = ({ 
+    isOpen, onClose, docConfig, setDocConfig, handlePrint, properties, transactions 
+}) => {
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
+            <div className="bg-white rounded-xl shadow-2xl p-6 w-[1200px] h-[95vh] flex flex-col">
+                <div className="flex justify-between items-center mb-4 border-b pb-2">
+                    <h3 className="text-xl font-bold flex items-center gap-2"><ICONS.FileText /> 文書生成器</h3>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600">✕</button>
+                </div>
+                <div className="flex gap-6 flex-1 overflow-hidden">
+                    <div className="w-1/4 space-y-4 overflow-y-auto pr-2 border-r">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 mb-1">文件類型</label>
+                            <div className="flex rounded bg-slate-100 p-1">
+                                {['receipt', 'lease', 'statement'].map(t => (
+                                    <button key={t} onClick={() => setDocConfig({ ...docConfig, type: t as any })} className={`flex-1 text-xs py-1 rounded capitalize ${docConfig.type === t ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}>{t}</button>
+                                ))}
+                            </div>
+                        </div>
+                        
+                        <div><label className="block text-xs font-bold text-slate-500">Property</label><select className="w-full border rounded p-1" value={docConfig.propId} onChange={e=>{
+                             const p = properties.find(x=>x.id===e.target.value);
+                             // 這裡簡化邏輯，實際應用中可以更細緻
+                             if(p) setDocConfig({...docConfig, propId: p.id }); 
+                        }}>{properties.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+                        
+                        {docConfig.type === 'statement' && (
+                             <div className="p-3 bg-blue-50 rounded text-sm space-y-2">
+                                 <p className="font-bold text-blue-800">對數設定</p>
+                                 <div><label className="text-xs">Start Date</label><input type="date" className="w-full border rounded" value={docConfig.statementDateStart} onChange={e=>setDocConfig({...docConfig, statementDateStart: e.target.value})} /></div>
+                                 <div><label className="text-xs">End Date</label><input type="date" className="w-full border rounded" value={docConfig.statementDateEnd} onChange={e=>setDocConfig({...docConfig, statementDateEnd: e.target.value})} /></div>
+                             </div>
+                        )}
+                        
+                        <div className="space-y-2">
+                            <label className="block text-xs font-bold">Tenant Name</label><input type="text" className="w-full border rounded p-1" value={docConfig.tenant} onChange={e=>setDocConfig({...docConfig, tenant: e.target.value})} />
+                            <label className="block text-xs font-bold">Period / Date</label><input type="text" className="w-full border rounded p-1" value={docConfig.period} onChange={e=>setDocConfig({...docConfig, period: e.target.value})} />
+                            <label className="block text-xs font-bold">Amount ($)</label><input type="number" className="w-full border rounded p-1" value={docConfig.amount} onChange={e=>setDocConfig({...docConfig, amount: Number(e.target.value)})} />
+                        </div>
+
+                        <button onClick={handlePrint} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold shadow mt-4 flex justify-center items-center gap-2"><ICONS.Printer /> Print / Save PDF</button>
+                    </div>
+                    <div className="w-3/4 bg-slate-200 rounded-lg p-8 overflow-y-auto flex justify-center shadow-inner">
+                        <div className="doc-print-container">
+                            <DocPreviewContent docConfig={docConfig} properties={properties} transactions={transactions} />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// --- 7. 主應用程式 ---
 const App: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
@@ -673,20 +741,43 @@ const App: React.FC = () => {
   const handleSaveProperty = async () => {
       if(!editingProp) return;
       try {
+        // Calculate monthly mortgage payment if data is available
+        let calcMortgage = editingProp.mortgageAmount || 0;
+        if (editingProp.mortgageLoan && editingProp.interestRate && editingProp.tenure) {
+            const r = editingProp.interestRate / 100 / 12;
+            const n = editingProp.tenure * 12;
+            if (r > 0 && n > 0) {
+                 calcMortgage = editingProp.mortgageLoan * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+            }
+        }
+        
+        // Ensure values are numbers before calculation, use 0 if undefined/null
+        const initialDeposit = Number(editingProp.initialDeposit || 0);
+        const furtherDeposit = Number(editingProp.furtherDeposit || 0);
+        const balancePayment = Number(editingProp.balancePayment || 0);
+        const mortgageLoan = Number(editingProp.mortgageLoan || 0);
+
+        let purchasePrice = editingProp.purchasePrice;
+        // Auto-calculate Purchase Price if components are filled (and user didn't manually set it to something else, or just overwrite it)
+        // For simplicity, we overwrite it here based on components
+        if (initialDeposit || furtherDeposit || balancePayment || mortgageLoan) {
+             purchasePrice = initialDeposit + furtherDeposit + balancePayment + mortgageLoan;
+        }
+
         const pData = { 
             ...editingProp, 
             currentValue: Number(editingProp.currentValue || 0), 
-            purchasePrice: Number(editingProp.purchasePrice || 0),
-            mortgageAmount: Number(editingProp.mortgageAmount || 0),
+            purchasePrice: Number(purchasePrice || 0),
+            mortgageAmount: Number(calcMortgage || 0),
             estRent: Number(editingProp.estRent || 0),
             tenure: Number(editingProp.tenure || 0),
             managementFee: Number(editingProp.managementFee || 0),
             govtRates: Number(editingProp.govtRates || 0),
             govtRent: Number(editingProp.govtRent || 0),
-            initialDeposit: Number(editingProp.initialDeposit || 0),
-            furtherDeposit: Number(editingProp.furtherDeposit || 0),
-            balancePayment: Number(editingProp.balancePayment || 0),
-            mortgageLoan: Number(editingProp.mortgageLoan || 0),
+            initialDeposit: initialDeposit,
+            furtherDeposit: furtherDeposit,
+            balancePayment: balancePayment,
+            mortgageLoan: mortgageLoan,
             interestRate: Number(editingProp.interestRate || 0),
             outstandingLoan: Number(editingProp.outstandingLoan || 0),
             bank: editingProp.bank || 'Standard Bank' 
@@ -697,18 +788,6 @@ const App: React.FC = () => {
         setModalMode('none');
       } catch(e) { alert(e); }
   };
-  
-  // Re-calculate mortgage based on inputs
-  const recalcMortgage = (prop: Property, field: string, val: number) => {
-      let newProp = { ...prop, [field]: val };
-      if (newProp.outstandingLoan && newProp.interestRate && newProp.tenure) {
-          const r = newProp.interestRate / 100 / 12;
-          const n = newProp.tenure * 12;
-          const pmt = newProp.outstandingLoan * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
-          newProp.mortgageAmount = Math.round(pmt);
-      }
-      return newProp;
-  }
 
   const handleSaveLease = async () => {
       if (!editingLease) return;
@@ -747,7 +826,7 @@ const App: React.FC = () => {
           }
           await batch.commit();
           
-          // Clear local state as well to reflect changes immediately
+          // Clear local state
           setTransactions([]);
           setProperties([]);
           setLeases([]);
@@ -891,7 +970,7 @@ const App: React.FC = () => {
                               <div 
                                 key={p.id} 
                                 onClick={() => setPropertyViewId(p.id)} 
-                                className="bg-white rounded-xl shadow-sm border hover:shadow-md transition cursor-pointer overflow-hidden group relative z-10"
+                                className="bg-white rounded-xl shadow-sm border hover:shadow-md transition cursor-pointer overflow-hidden group relative z-10 cursor-pointer"
                               >
                                   <div className={`h-2 w-full ${p.status==='Occupied' ? (p.isLate ? 'bg-orange-500' : 'bg-emerald-500') : 'bg-red-500'}`} />
                                   <div className="p-5">
@@ -996,7 +1075,7 @@ const App: React.FC = () => {
                             </div>
                             <div className="max-h-[500px] overflow-y-auto">
                                 <table className="w-full text-sm text-left">
-                                    <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0"><tr><th className="p-3">Date</th><th className="p-3">Category</th><th className="p-3">Detail</th><th className="p-3">Amount</th><th className="p-3">Action</th></tr></thead>
+                                    <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0"><tr><th className="p-3">Date</th><th className="p-3">Category</th><th className="p-3">Detail</th><th className="p-3">Amount</th><th className="p-3">Tags</th><th className="p-3">Action</th></tr></thead>
                                     <tbody className="divide-y">
                                         {pTransactions.map(t => (
                                             <tr key={t.id} className="hover:bg-blue-50">
@@ -1130,7 +1209,7 @@ const App: React.FC = () => {
           </div>
 
           {/* Modals */}
-          {modalMode === 'doc' && <DocModal />}
+          {modalMode === 'doc' && <DocModal isOpen={modalMode === 'doc'} onClose={() => setModalMode('none')} docConfig={docConfig} setDocConfig={setDocConfig} handlePrint={handlePrint} properties={properties} transactions={transactions} />}
           
           {modalMode === 'transaction' && (
               <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
@@ -1217,16 +1296,7 @@ const App: React.FC = () => {
                                    </div>
                                    <div>
                                        <label className="text-xs text-slate-500 block mb-1">Outstanding Loan 尚餘按揭</label>
-                                       <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.outstandingLoan || ''} onChange={e => {
-                                           const loan = Number(e.target.value);
-                                           let payment = editingProp?.mortgageAmount || 0;
-                                            if (loan && editingProp?.interestRate && editingProp?.tenure) {
-                                               const r = editingProp.interestRate / 100 / 12;
-                                               const n = editingProp.tenure * 12;
-                                               payment = loan * (r * Math.pow(1+r, n)) / (Math.pow(1+r, n) - 1);
-                                           }
-                                           setEditingProp({...editingProp, outstandingLoan: loan, mortgageAmount: Math.round(payment)} as any)
-                                       }} />
+                                       <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.outstandingLoan || ''} onChange={e => setEditingProp({...editingProp, outstandingLoan: Number(e.target.value)} as any)} />
                                        <span className="text-xs text-blue-600 font-mono block mt-1">{formatCurrency(editingProp?.outstandingLoan)}</span>
                                    </div>
                                    <div>

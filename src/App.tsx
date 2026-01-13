@@ -62,10 +62,10 @@ interface Property {
   currentValue: number; 
   
   // 買入流程詳情
-  purchasePrice: number; // 總價
+  purchasePrice: number; // 總價 (自動計算)
   initialDeposit: number; // 細訂
   furtherDeposit: number; // 大訂
-  balancePayment: number; // 尾數
+  balancePayment: number; // 尾數 (Cash Balance)
   mortgageLoan: number; // 按揭貸款額
   
   // 按揭詳情
@@ -1242,28 +1242,28 @@ const App: React.FC = () => {
                                   <div>
                                       <label className="text-xs text-slate-500 block mb-1">Initial Deposit (細訂)</label>
                                       <div className="flex items-center gap-2">
-                                          <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.initialDeposit || 0} onChange={e => setEditingProp({...editingProp, initialDeposit: Number(e.target.value)} as any)} />
+                                          <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.initialDeposit || ''} onChange={e => setEditingProp({...editingProp, initialDeposit: Number(e.target.value)} as any)} />
                                       </div>
                                       <span className="text-xs text-blue-600 font-mono">{formatCurrency(editingProp?.initialDeposit)}</span>
                                   </div>
                                   <div>
                                       <label className="text-xs text-slate-500 block mb-1">Further Deposit (大訂)</label>
                                       <div className="flex items-center gap-2">
-                                          <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.furtherDeposit || 0} onChange={e => setEditingProp({...editingProp, furtherDeposit: Number(e.target.value)} as any)} />
+                                          <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.furtherDeposit || ''} onChange={e => setEditingProp({...editingProp, furtherDeposit: Number(e.target.value)} as any)} />
                                       </div>
                                       <span className="text-xs text-blue-600 font-mono">{formatCurrency(editingProp?.furtherDeposit)}</span>
                                   </div>
                                   <div>
                                       <label className="text-xs text-slate-500 block mb-1">Balance (尾數)</label>
                                       <div className="flex items-center gap-2">
-                                          <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.balancePayment || 0} onChange={e => setEditingProp({...editingProp, balancePayment: Number(e.target.value)} as any)} />
+                                          <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.balancePayment || ''} onChange={e => setEditingProp({...editingProp, balancePayment: Number(e.target.value)} as any)} />
                                       </div>
                                       <span className="text-xs text-blue-600 font-mono">{formatCurrency(editingProp?.balancePayment)}</span>
                                   </div>
                                   <div>
                                       <label className="text-xs text-slate-500 block mb-1">Mortgage Loan (按揭)</label>
                                       <div className="flex items-center gap-2">
-                                          <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.mortgageLoan || 0} onChange={e => setEditingProp({...editingProp, mortgageLoan: Number(e.target.value)} as any)} />
+                                          <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.mortgageLoan || ''} onChange={e => setEditingProp({...editingProp, mortgageLoan: Number(e.target.value)} as any)} />
                                       </div>
                                       <span className="text-xs text-blue-600 font-mono">{formatCurrency(editingProp?.mortgageLoan)}</span>
                                   </div>
@@ -1281,19 +1281,21 @@ const App: React.FC = () => {
                                <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-100 grid grid-cols-2 gap-4">
                                    <div>
                                        <label className="text-xs text-slate-500 block mb-1">Outstanding Loan 尚餘按揭</label>
-                                       <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.outstandingLoan || 0} onChange={e => setEditingProp({...editingProp, outstandingLoan: Number(e.target.value)} as any)} />
+                                       <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.outstandingLoan || ''} onChange={e => setEditingProp({...editingProp, outstandingLoan: Number(e.target.value)} as any)} />
+                                       <span className="text-xs text-blue-600 font-mono block mt-1">{formatCurrency(editingProp?.outstandingLoan)}</span>
                                    </div>
                                    <div>
                                        <label className="text-xs text-slate-500 block mb-1">Interest Rate 按揭利率 (%)</label>
-                                       <input className="border w-full p-2 rounded text-sm" type="number" step="0.1" value={editingProp?.interestRate || 0} onChange={e => setEditingProp({...editingProp, interestRate: Number(e.target.value)} as any)} />
+                                       <input className="border w-full p-2 rounded text-sm" type="number" step="0.1" value={editingProp?.interestRate || ''} onChange={e => setEditingProp({...editingProp, interestRate: Number(e.target.value)} as any)} />
                                    </div>
                                     <div>
                                        <label className="text-xs text-slate-500 block mb-1">Tenure 年期 (Years)</label>
-                                       <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.tenure || 0} onChange={e => setEditingProp({...editingProp, tenure: Number(e.target.value)} as any)} />
+                                       <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.tenure || ''} onChange={e => setEditingProp({...editingProp, tenure: Number(e.target.value)} as any)} />
                                    </div>
                                    <div>
                                        <label className="text-xs text-slate-500 block mb-1">Monthly Repayment 每月供款</label>
-                                       <input className="border w-full p-2 rounded text-sm bg-white font-bold text-red-600" type="number" value={editingProp?.mortgageAmount || 0} onChange={e => setEditingProp({...editingProp, mortgageAmount: Number(e.target.value)} as any)} />
+                                       <input className="border w-full p-2 rounded text-sm bg-white font-bold text-red-600" type="number" value={editingProp?.mortgageAmount || ''} onChange={e => setEditingProp({...editingProp, mortgageAmount: Number(e.target.value)} as any)} />
+                                       <span className="text-xs text-blue-600 font-mono block mt-1">{formatCurrency(editingProp?.mortgageAmount)}</span>
                                    </div>
                                </div>
                           </div>
@@ -1301,17 +1303,25 @@ const App: React.FC = () => {
                           <div className="space-y-2">
                               <label className="text-xs font-bold text-slate-500 uppercase">Valuation & Rent</label>
                               <div className="grid grid-cols-2 gap-3">
-                                   <div><label className="text-xs">Current Value</label><input className="border w-full p-2 rounded" type="number" value={editingProp?.currentValue} onChange={e => setEditingProp({...editingProp, currentValue: Number(e.target.value)} as any)} /></div>
-                                   <div><label className="text-xs">Est. Rent</label><input className="border w-full p-2 rounded" type="number" value={editingProp?.estRent} onChange={e => setEditingProp({...editingProp, estRent: Number(e.target.value)} as any)} /></div>
+                                   <div>
+                                       <label className="text-xs">Current Value</label>
+                                       <input className="border w-full p-2 rounded" type="number" value={editingProp?.currentValue || ''} onChange={e => setEditingProp({...editingProp, currentValue: Number(e.target.value)} as any)} />
+                                       <span className="text-xs text-blue-600 font-mono block mt-1">{formatCurrency(editingProp?.currentValue)}</span>
+                                   </div>
+                                   <div>
+                                       <label className="text-xs">Est. Rent</label>
+                                       <input className="border w-full p-2 rounded" type="number" value={editingProp?.estRent || ''} onChange={e => setEditingProp({...editingProp, estRent: Number(e.target.value)} as any)} />
+                                       <span className="text-xs text-blue-600 font-mono block mt-1">{formatCurrency(editingProp?.estRent)}</span>
+                                   </div>
                               </div>
                           </div>
 
                           <div className="space-y-2">
                             <label className="text-xs font-bold text-slate-500 uppercase">Monthly Expenses</label>
                             <div className="grid grid-cols-3 gap-2">
-                              <div><label className="text-xs">Mgt Fee</label><input className="border w-full p-2 rounded" type="number" value={editingProp?.managementFee} onChange={e=>setEditingProp({...editingProp, managementFee: Number(e.target.value)} as any)} /></div>
-                              <div><label className="text-xs">Rates (Qtr)</label><input className="border w-full p-2 rounded" type="number" value={editingProp?.govtRates} onChange={e=>setEditingProp({...editingProp, govtRates: Number(e.target.value)} as any)} /></div>
-                              <div><label className="text-xs">Govt Rent (Qtr)</label><input className="border w-full p-2 rounded" type="number" value={editingProp?.govtRent} onChange={e=>setEditingProp({...editingProp, govtRent: Number(e.target.value)} as any)} /></div>
+                              <div><label className="text-xs">Mgt Fee</label><input className="border p-1 text-sm w-full rounded" type="number" value={editingProp?.managementFee || ''} onChange={e=>setEditingProp({...editingProp, managementFee: Number(e.target.value)} as any)} /></div>
+                              <div><label className="text-xs">Rates (Qtr)</label><input className="border p-1 text-sm w-full rounded" type="number" value={editingProp?.govtRates || ''} onChange={e=>setEditingProp({...editingProp, govtRates: Number(e.target.value)} as any)} /></div>
+                              <div><label className="text-xs">Govt Rent (Qtr)</label><input className="border p-1 text-sm w-full rounded" type="number" value={editingProp?.govtRent || ''} onChange={e=>setEditingProp({...editingProp, govtRent: Number(e.target.value)} as any)} /></div>
                             </div>
                           </div>
                       </div>

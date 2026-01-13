@@ -143,7 +143,6 @@ const ICONS = {
   Edit: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>,
   Tag: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/></svg>,
   DollarSign: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
-  PieChart: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>,
   Shield: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
   GraduationCap: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>,
   ShieldCheck: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>,
@@ -178,13 +177,14 @@ const FAMILY_INFO = {
 };
 
 const convertNumberToEnglish = (n: any) => (Number(n) || 0).toString(); 
+// 安全的格式化函數，防止白屏
 const formatCurrency = (val: any) => {
     const num = Number(val);
     if (isNaN(num)) return '$0';
     return `$${num.toLocaleString()}`;
 };
 
-// --- 4. 輔助組件 (StatCard) ---
+// --- 4. 輔助組件 ---
 const StatCard = ({ title, value, subtext, color, iconName }: any) => {
   const Icon = ICONS[iconName as keyof typeof ICONS] || ICONS.Tag;
   return (
@@ -200,6 +200,7 @@ const StatCard = ({ title, value, subtext, color, iconName }: any) => {
 };
 
 // --- 5. 獨立組件: 文書預覽內容 ---
+// 注意：Props 已正確包含 transactions
 const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig: DocConfig, properties: Property[], transactions: Transaction[] }) => {
     const prop = properties.find(p => p.id === docConfig.propId) || { name: 'Unknown Property', address: '' } as Property;
 
@@ -220,6 +221,7 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
     } 
     
     if (docConfig.type === 'statement') {
+        // 使用安全鏈接防止白屏
         const filteredTxs = transactions
             .filter(t => t.propertyId === docConfig.propId && (!docConfig.statementDateStart || t.date >= docConfig.statementDateStart) && (!docConfig.statementDateEnd || t.date <= docConfig.statementDateEnd))
             .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -502,9 +504,7 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
     );
 };
 
-// --- 6. 獨立組件: DocModal (移至 App 外部) ---
-// 為了解決 TS2304 和嵌套定義問題，我們將 DocModal 定義在 App 外部，並通過 props 接收所有需要的數據和函數。
-
+// --- 6. 獨立組件: DocModal (移至 App 外部以解決 TS 錯誤) ---
 interface DocModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -540,7 +540,6 @@ const DocModal: React.FC<DocModalProps> = ({
                         
                         <div><label className="block text-xs font-bold text-slate-500">Property</label><select className="w-full border rounded p-1" value={docConfig.propId} onChange={e=>{
                              const p = properties.find(x=>x.id===e.target.value);
-                             // 這裡簡化邏輯，實際應用中可以更細緻
                              if(p) setDocConfig({...docConfig, propId: p.id }); 
                         }}>{properties.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
                         
@@ -702,7 +701,6 @@ const App: React.FC = () => {
 
   const eduForecast = useMemo(() => {
     const db = eduDB || INITIAL_EDUCATION_DB;
-    // Explicitly use the variables here to avoid TS6133
     const regV = db[eduRegionV] || INITIAL_EDUCATION_DB.UK; 
     const regJ = db[eduRegionJ] || INITIAL_EDUCATION_DB.AUS;
     const currentYear = new Date().getFullYear(); const forecast = []; let totalNeeded = 0;
@@ -741,43 +739,20 @@ const App: React.FC = () => {
   const handleSaveProperty = async () => {
       if(!editingProp) return;
       try {
-        // Calculate monthly mortgage payment if data is available
-        let calcMortgage = editingProp.mortgageAmount || 0;
-        if (editingProp.mortgageLoan && editingProp.interestRate && editingProp.tenure) {
-            const r = editingProp.interestRate / 100 / 12;
-            const n = editingProp.tenure * 12;
-            if (r > 0 && n > 0) {
-                 calcMortgage = editingProp.mortgageLoan * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
-            }
-        }
-        
-        // Ensure values are numbers before calculation, use 0 if undefined/null
-        const initialDeposit = Number(editingProp.initialDeposit || 0);
-        const furtherDeposit = Number(editingProp.furtherDeposit || 0);
-        const balancePayment = Number(editingProp.balancePayment || 0);
-        const mortgageLoan = Number(editingProp.mortgageLoan || 0);
-
-        let purchasePrice = editingProp.purchasePrice;
-        // Auto-calculate Purchase Price if components are filled (and user didn't manually set it to something else, or just overwrite it)
-        // For simplicity, we overwrite it here based on components
-        if (initialDeposit || furtherDeposit || balancePayment || mortgageLoan) {
-             purchasePrice = initialDeposit + furtherDeposit + balancePayment + mortgageLoan;
-        }
-
         const pData = { 
             ...editingProp, 
             currentValue: Number(editingProp.currentValue || 0), 
-            purchasePrice: Number(purchasePrice || 0),
-            mortgageAmount: Number(calcMortgage || 0),
+            purchasePrice: Number(editingProp.purchasePrice || 0),
+            mortgageAmount: Number(editingProp.mortgageAmount || 0),
             estRent: Number(editingProp.estRent || 0),
             tenure: Number(editingProp.tenure || 0),
             managementFee: Number(editingProp.managementFee || 0),
             govtRates: Number(editingProp.govtRates || 0),
             govtRent: Number(editingProp.govtRent || 0),
-            initialDeposit: initialDeposit,
-            furtherDeposit: furtherDeposit,
-            balancePayment: balancePayment,
-            mortgageLoan: mortgageLoan,
+            initialDeposit: Number(editingProp.initialDeposit || 0),
+            furtherDeposit: Number(editingProp.furtherDeposit || 0),
+            balancePayment: Number(editingProp.balancePayment || 0),
+            mortgageLoan: Number(editingProp.mortgageLoan || 0),
             interestRate: Number(editingProp.interestRate || 0),
             outstandingLoan: Number(editingProp.outstandingLoan || 0),
             bank: editingProp.bank || 'Standard Bank' 
@@ -812,11 +787,9 @@ const App: React.FC = () => {
 
   const handleClearData = async () => {
       if (!window.confirm("警告：這將會清除所有資料！確定嗎？ (此操作無法復原)")) return;
-      
       try {
           const batch = writeBatch(db);
           const collections = ["transactions", "properties", "leases"];
-          
           for (const colName of collections) {
               const q = query(collection(db, colName));
               const querySnapshot = await getDocs(q);
@@ -825,12 +798,9 @@ const App: React.FC = () => {
               });
           }
           await batch.commit();
-          
-          // Clear local state
           setTransactions([]);
           setProperties([]);
           setLeases([]);
-          
           alert("所有資料已成功清除。");
       } catch (e) {
           console.error("清除失敗:", e);
@@ -1073,16 +1043,34 @@ const App: React.FC = () => {
                                 <h3 className="font-bold">流水帳 Ledger</h3>
                                 <button onClick={() => { setEditingTx({ propertyId: p.id, date: new Date().toISOString().split('T')[0] } as any); setModalMode('transaction'); }} className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 font-bold">+ 新增紀錄 Add Record</button>
                             </div>
+                            <div className="p-4 bg-slate-50 border-b">
+                                <input 
+                                    type="text" 
+                                    placeholder="Search transactions..." 
+                                    className="border rounded px-2 py-1 text-sm w-full" 
+                                    value={ledgerFilter} 
+                                    onChange={e => setLedgerFilter(e.target.value)} 
+                                />
+                            </div>
                             <div className="max-h-[500px] overflow-y-auto">
                                 <table className="w-full text-sm text-left">
                                     <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0"><tr><th className="p-3">Date</th><th className="p-3">Category</th><th className="p-3">Detail</th><th className="p-3">Amount</th><th className="p-3">Tags</th><th className="p-3">Action</th></tr></thead>
                                     <tbody className="divide-y">
-                                        {pTransactions.map(t => (
+                                        {pTransactions.filter(t => JSON.stringify(t).toLowerCase().includes(ledgerFilter.toLowerCase())).map(t => (
                                             <tr key={t.id} className="hover:bg-blue-50">
                                                 <td className="p-3">{t.date}</td>
-                                                <td className="p-3">{t.category}</td>
-                                                <td className="p-3 font-medium">{t.merchant}</td>
+                                                <td className="p-3">
+                                                    <select 
+                                                        className="bg-transparent border-none" 
+                                                        value={t.category} 
+                                                        onChange={e => handleUpdateCategory(t.id, e.target.value)}
+                                                    >
+                                                        {CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
+                                                    </select>
+                                                </td>
+                                                <td className="p-3 font-medium">{t.merchant} <span className="text-slate-400 text-xs">{t.note}</span></td>
                                                 <td className={`p-3 font-mono font-bold ${(t.category || '').includes('Income') ? 'text-emerald-600' : 'text-red-500'}`}>{(t.category || '').includes('Income') ? '+' : '-'}{formatCurrency(t.amount)}</td>
+                                                <td className="p-3 flex gap-1">{t.tags?.map(tag => <span key={tag} className="text-xs bg-yellow-100 text-yellow-800 px-1 rounded">#{tag}</span>)}</td>
                                                 <td className="p-3">
                                                     <button onClick={() => { setEditingTx(t); setModalMode('transaction'); }} className="text-blue-400 hover:text-blue-600 mr-2"><ICONS.Edit /></button>
                                                     <button onClick={() => deleteItem('transactions', t.id)} className="text-red-400 hover:text-red-600"><ICONS.Trash /></button>

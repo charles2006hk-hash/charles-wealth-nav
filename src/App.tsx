@@ -65,7 +65,7 @@ interface Property {
   purchasePrice: number; // 總價
   initialDeposit: number; // 細訂
   furtherDeposit: number; // 大訂
-  balancePayment: number; // 尾數 (Cash Balance)
+  balancePayment: number; // 尾數
   mortgageLoan: number; // 按揭貸款額
   
   // 按揭詳情
@@ -514,10 +514,11 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [propertyViewId, setPropertyViewId] = useState<string | null>(null);
   const [modalMode, setModalMode] = useState<'none' | 'transaction' | 'property' | 'doc' | 'lease'>('none');
-  const [editingLease, setEditingLease] = useState<Lease | null>(null);
 
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [editingProp, setEditingProp] = useState<Property | null>(null);
+  const [editingLease, setEditingLease] = useState<Lease | null>(null);
+  
   const [docConfig, setDocConfig] = useState<DocConfig>({ 
       type: 'receipt', propId: '', tenant: '', tenantID: '', period: '', amount: 0, 
       deposit: 0, startDate: '', endDate: '', landlord: 'Charles Lam', 

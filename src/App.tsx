@@ -58,22 +58,22 @@ interface Property {
   type: 'Investment' | 'Self-use';
   status: 'Occupied' | 'Vacant' | 'Renovation';
   
-  // 財務數據
+  // 財務數據 (估值)
   currentValue: number; 
   
   // 買入流程詳情
-  purchasePrice: number; 
-  initialDeposit: number; 
-  furtherDeposit: number; 
-  balancePayment: number; 
-  mortgageLoan: number; 
+  purchasePrice: number; // 總價
+  initialDeposit: number; // 細訂
+  furtherDeposit: number; // 大訂
+  balancePayment: number; // 尾數 (Cash Balance)
+  mortgageLoan: number; // 按揭貸款額
   
   // 按揭詳情
-  bank: string;
-  interestRate: number; 
-  mortgageAmount: number; 
-  outstandingLoan: number; 
-  tenure: number;  
+  bank: string; // 承造銀行
+  interestRate: number; // 利率 (%)
+  mortgageAmount: number; // 月供
+  outstandingLoan: number; // 尚餘欠款
+  tenure: number;  // 年期 (Years)
   
   // 租務
   estRent: number; 
@@ -682,36 +682,29 @@ const App: React.FC = () => {
                  calcMortgage = editingProp.mortgageLoan * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
             }
         }
-        
-        // Ensure values are numbers before calculation, use 0 if undefined/null
-        const initialDeposit = Number(editingProp.initialDeposit || 0);
-        const furtherDeposit = Number(editingProp.furtherDeposit || 0);
-        const balancePayment = Number(editingProp.balancePayment || 0);
-        const mortgageLoan = Number(editingProp.mortgageLoan || 0);
-
-        let purchasePrice = editingProp.purchasePrice;
-        if (initialDeposit || furtherDeposit || balancePayment || mortgageLoan) {
-             purchasePrice = initialDeposit + furtherDeposit + balancePayment + mortgageLoan;
-        }
 
         const pData = { 
             ...editingProp, 
             currentValue: Number(editingProp.currentValue || 0), 
-            purchasePrice: Number(purchasePrice || 0),
+            purchasePrice: Number(editingProp.purchasePrice || 0),
             mortgageAmount: Number(calcMortgage || 0),
             estRent: Number(editingProp.estRent || 0),
             tenure: Number(editingProp.tenure || 0),
             managementFee: Number(editingProp.managementFee || 0),
             govtRates: Number(editingProp.govtRates || 0),
             govtRent: Number(editingProp.govtRent || 0),
-            initialDeposit: initialDeposit,
-            furtherDeposit: furtherDeposit,
-            balancePayment: balancePayment,
-            mortgageLoan: mortgageLoan,
+            initialDeposit: Number(editingProp.initialDeposit || 0),
+            furtherDeposit: Number(editingProp.furtherDeposit || 0),
+            balancePayment: Number(editingProp.balancePayment || 0),
+            mortgageLoan: Number(editingProp.mortgageLoan || 0),
             interestRate: Number(editingProp.interestRate || 0),
             outstandingLoan: Number(editingProp.outstandingLoan || 0),
             bank: editingProp.bank || 'Standard Bank' 
         };
+        // Auto-calculate Purchase Price if components are filled
+        if (pData.initialDeposit || pData.furtherDeposit || pData.balancePayment) {
+            pData.purchasePrice = pData.initialDeposit + pData.furtherDeposit + pData.balancePayment + pData.mortgageLoan;
+        }
 
         if(editingProp.id) await setDoc(doc(db, "properties", editingProp.id), pData);
         else await addDoc(collection(db, "properties"), pData);
@@ -851,7 +844,11 @@ const App: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {propStats.map(p => (
-                  <div key={p.id} onClick={() => setPropertyViewId(p.id)} className="bg-white rounded-xl shadow-sm border hover:shadow-md transition cursor-pointer overflow-hidden group relative cursor-pointer">
+                  <div 
+                    key={p.id} 
+                    onClick={() => setPropertyViewId(p.id)} 
+                    className="bg-white rounded-xl shadow-sm border hover:shadow-md transition cursor-pointer overflow-hidden group relative z-10"
+                  >
                       <div className={`h-2 w-full ${p.status==='Occupied' ? (p.isLate ? 'bg-orange-500' : 'bg-emerald-500') : 'bg-red-500'}`} />
                       <div className="p-5">
                           <div className="flex justify-between items-start mb-2">
@@ -870,9 +867,9 @@ const App: React.FC = () => {
                   </div>
               ))}
               
-               <button onClick={() => { setEditingProp({ id: '', name: '', address: '', type: 'Investment', status: 'Vacant', currentValue: 0, purchasePrice: 0, initialDeposit: 0, furtherDeposit: 0, balancePayment: 0, mortgageLoan: 0, mortgageAmount: 0, outstandingLoan: 0, managementFee: 0, govtRates: 0, govtRent: 0, estRent: 0, tenure: 0, interestRate: 0, bank: '' }); setModalMode('property'); }} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-xl hover:bg-slate-50 transition text-slate-400 hover:text-slate-600"><ICONS.Plus /><span className="mt-2 font-bold">新增物業 Add Property</span></button>
+               <button onClick={() => { setEditingProp({ id: '', name: '', address: '', type: 'Investment', status: 'Vacant', currentValue: 0, purchasePrice: 0, initialDeposit: 0, furtherDeposit: 0, balancePayment: 0, mortgageLoan: 0, mortgageAmount: 0, outstandingLoan: 0, managementFee: 0, govtRates: 0, govtRent: 0, estRent: 0, tenure: 0, interestRate: 0, bank: '' }); setModalMode('property'); }} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-xl hover:bg-slate-50 transition text-slate-400 hover:text-slate-600 cursor-pointer z-10"><ICONS.Plus /><span className="mt-2 font-bold">新增物業 Add Property</span></button>
                {properties.length === 0 && (
-                  <button onClick={initializeDefaults} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-blue-300 bg-blue-50 rounded-xl hover:bg-blue-100 transition text-blue-500"><ICONS.Plus /><span className="mt-2 font-bold">初始化預設物業</span></button>
+                  <button onClick={initializeDefaults} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-blue-300 bg-blue-50 rounded-xl hover:bg-blue-100 transition text-blue-500 cursor-pointer z-10"><ICONS.Plus /><span className="mt-2 font-bold">初始化預設物業</span></button>
               )}
           </div>
       </div>
@@ -1237,8 +1234,8 @@ const App: React.FC = () => {
                       <div className="space-y-6">
                           <div className="space-y-2">
                               <label className="text-xs font-bold text-slate-500 uppercase">Basic Info</label>
-                              <input className="border w-full p-2 rounded" placeholder="Property Name" value={editingProp?.name} onChange={e => setEditingProp({...editingProp, name: e.target.value} as any)} />
-                              <input className="border w-full p-2 rounded" placeholder="Full Address" value={editingProp?.address} onChange={e => setEditingProp({...editingProp, address: e.target.value} as any)} />
+                              <input className="border w-full p-2 rounded" placeholder="Property Name" value={editingProp?.name || ''} onChange={e => setEditingProp({...editingProp, name: e.target.value} as any)} />
+                              <input className="border w-full p-2 rounded" placeholder="Full Address" value={editingProp?.address || ''} onChange={e => setEditingProp({...editingProp, address: e.target.value} as any)} />
                               <select className="border w-full p-2 rounded" value={editingProp?.status} onChange={e => setEditingProp({...editingProp, status: e.target.value} as any)}><option value="Occupied">Occupied</option><option value="Vacant">Vacant</option></select>
                           </div>
                           
@@ -1334,15 +1331,11 @@ const App: React.FC = () => {
                           <div className="space-y-2">
                               <label className="text-xs font-bold text-slate-500 uppercase">Valuation & Rent</label>
                               <div className="grid grid-cols-2 gap-3">
-                                   <div>
-                                       <label className="text-xs">Current Value</label>
-                                       <input className="border w-full p-2 rounded" type="number" value={editingProp?.currentValue || ''} onChange={e => setEditingProp({...editingProp, currentValue: Number(e.target.value)} as any)} />
-                                       <span className="text-xs text-blue-600 font-mono block mt-1">{formatCurrency(editingProp?.currentValue)}</span>
+                                   <div><label className="text-xs">Current Value</label><input className="border w-full p-2 rounded" type="number" value={editingProp?.currentValue || ''} onChange={e => setEditingProp({...editingProp, currentValue: Number(e.target.value)} as any)} />
+                                   <span className="text-xs text-blue-600 font-mono block mt-1">{formatCurrency(editingProp?.currentValue)}</span>
                                    </div>
-                                   <div>
-                                       <label className="text-xs">Est. Rent</label>
-                                       <input className="border w-full p-2 rounded" type="number" value={editingProp?.estRent || ''} onChange={e => setEditingProp({...editingProp, estRent: Number(e.target.value)} as any)} />
-                                       <span className="text-xs text-blue-600 font-mono block mt-1">{formatCurrency(editingProp?.estRent)}</span>
+                                   <div><label className="text-xs">Est. Rent</label><input className="border w-full p-2 rounded" type="number" value={editingProp?.estRent || ''} onChange={e => setEditingProp({...editingProp, estRent: Number(e.target.value)} as any)} />
+                                   <span className="text-xs text-blue-600 font-mono block mt-1">{formatCurrency(editingProp?.estRent)}</span>
                                    </div>
                               </div>
                           </div>
@@ -1350,9 +1343,9 @@ const App: React.FC = () => {
                           <div className="space-y-2">
                             <label className="text-xs font-bold text-slate-500 uppercase">Monthly Expenses</label>
                             <div className="grid grid-cols-3 gap-2">
-                              <div><label className="text-xs">Mgt Fee</label><input className="border p-1 text-sm w-full rounded" type="number" value={editingProp?.managementFee || ''} onChange={e=>setEditingProp({...editingProp, managementFee: Number(e.target.value)} as any)} /></div>
-                              <div><label className="text-xs">Rates (Qtr)</label><input className="border p-1 text-sm w-full rounded" type="number" value={editingProp?.govtRates || ''} onChange={e=>setEditingProp({...editingProp, govtRates: Number(e.target.value)} as any)} /></div>
-                              <div><label className="text-xs">Govt Rent (Qtr)</label><input className="border p-1 text-sm w-full rounded" type="number" value={editingProp?.govtRent || ''} onChange={e=>setEditingProp({...editingProp, govtRent: Number(e.target.value)} as any)} /></div>
+                              <div><label className="text-xs">Mgt Fee</label><input className="border w-full p-2 rounded" type="number" value={editingProp?.managementFee || ''} onChange={e=>setEditingProp({...editingProp, managementFee: Number(e.target.value)} as any)} /></div>
+                              <div><label className="text-xs">Rates (Qtr)</label><input className="border w-full p-2 rounded" type="number" value={editingProp?.govtRates || ''} onChange={e=>setEditingProp({...editingProp, govtRates: Number(e.target.value)} as any)} /></div>
+                              <div><label className="text-xs">Govt Rent (Qtr)</label><input className="border w-full p-2 rounded" type="number" value={editingProp?.govtRent || ''} onChange={e=>setEditingProp({...editingProp, govtRent: Number(e.target.value)} as any)} /></div>
                             </div>
                           </div>
                       </div>
@@ -1368,15 +1361,19 @@ const App: React.FC = () => {
                   <div className="bg-white rounded-xl shadow-2xl p-6 w-[500px] animate-in fade-in zoom-in duration-200">
                       <h3 className="font-bold text-xl mb-6">Manage Lease</h3>
                       <div className="space-y-4">
-                          <input className="border w-full p-2 rounded" placeholder="Tenant Name" value={editingLease?.tenantName} onChange={e => setEditingLease({...editingLease, tenantName: e.target.value} as any)} />
-                          <input className="border w-full p-2 rounded" placeholder="Tenant ID" value={editingLease?.tenantID} onChange={e => setEditingLease({...editingLease, tenantID: e.target.value} as any)} />
+                          <input className="border w-full p-2 rounded" placeholder="Tenant Name" value={editingLease?.tenantName || ''} onChange={e => setEditingLease({...editingLease, tenantName: e.target.value} as any)} />
+                          <input className="border w-full p-2 rounded" placeholder="Tenant ID" value={editingLease?.tenantID || ''} onChange={e => setEditingLease({...editingLease, tenantID: e.target.value} as any)} />
                           <div className="grid grid-cols-2 gap-4">
-                              <div><label className="text-xs">Start Date</label><input type="date" className="border w-full p-2 rounded" value={editingLease?.startDate} onChange={e => setEditingLease({...editingLease, startDate: e.target.value} as any)} /></div>
-                              <div><label className="text-xs">End Date</label><input type="date" className="border w-full p-2 rounded" value={editingLease?.endDate} onChange={e => setEditingLease({...editingLease, endDate: e.target.value} as any)} /></div>
+                              <div><label className="text-xs">Start Date</label><input type="date" className="border w-full p-2 rounded" value={editingLease?.startDate || ''} onChange={e => setEditingLease({...editingLease, startDate: e.target.value} as any)} /></div>
+                              <div><label className="text-xs">End Date</label><input type="date" className="border w-full p-2 rounded" value={editingLease?.endDate || ''} onChange={e => setEditingLease({...editingLease, endDate: e.target.value} as any)} /></div>
                           </div>
                           <div className="grid grid-cols-2 gap-4">
-                              <div><label className="text-xs">Monthly Rent</label><input type="number" className="border w-full p-2 rounded" value={editingLease?.monthlyRent} onChange={e => setEditingLease({...editingLease, monthlyRent: Number(e.target.value)} as any)} /></div>
-                              <div><label className="text-xs">Deposit</label><input type="number" className="border w-full p-2 rounded" value={editingLease?.deposit} onChange={e => setEditingLease({...editingLease, deposit: Number(e.target.value)} as any)} /></div>
+                              <div><label className="text-xs">Monthly Rent</label><input type="number" className="border w-full p-2 rounded" value={editingLease?.monthlyRent || ''} onChange={e => setEditingLease({...editingLease, monthlyRent: Number(e.target.value)} as any)} />
+                              <span className="text-xs text-blue-600 font-mono block mt-1">{formatCurrency(editingLease?.monthlyRent)}</span>
+                              </div>
+                              <div><label className="text-xs">Deposit</label><input type="number" className="border w-full p-2 rounded" value={editingLease?.deposit || ''} onChange={e => setEditingLease({...editingLease, deposit: Number(e.target.value)} as any)} />
+                              <span className="text-xs text-blue-600 font-mono block mt-1">{formatCurrency(editingLease?.deposit)}</span>
+                              </div>
                           </div>
                           <select className="border w-full p-2 rounded" value={editingLease?.status} onChange={e => setEditingLease({...editingLease, status: e.target.value} as any)}><option value="Active">Active</option><option value="Terminated">Terminated</option></select>
                       </div>

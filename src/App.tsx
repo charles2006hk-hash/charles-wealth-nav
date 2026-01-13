@@ -58,22 +58,22 @@ interface Property {
   type: 'Investment' | 'Self-use';
   status: 'Occupied' | 'Vacant' | 'Renovation';
   
-  // 財務數據 (估值)
+  // 財務數據
   currentValue: number; 
   
   // 買入流程詳情
-  purchasePrice: number; // 總價
-  initialDeposit: number; // 細訂
-  furtherDeposit: number; // 大訂
-  balancePayment: number; // 尾數 (Cash Balance)
-  mortgageLoan: number; // 按揭貸款額
+  purchasePrice: number; 
+  initialDeposit: number; 
+  furtherDeposit: number; 
+  balancePayment: number; 
+  mortgageLoan: number; 
   
   // 按揭詳情
-  bank: string; // 承造銀行
-  interestRate: number; // 利率 (%)
-  mortgageAmount: number; // 月供
-  outstandingLoan: number; // 尚餘欠款
-  tenure: number;  // 年期 (Years)
+  bank: string;
+  interestRate: number; 
+  mortgageAmount: number; 
+  outstandingLoan: number; 
+  tenure: number;  
   
   // 租務
   estRent: number; 
@@ -864,7 +864,6 @@ const App: React.FC = () => {
                           <div className="grid grid-cols-2 gap-4 text-sm bg-slate-50 p-3 rounded-lg">
                               <div><p className="text-xs text-slate-400">現時估值</p><p className="font-mono font-bold">{formatCurrency(p.currentValue)}</p></div>
                               <div><p className="text-xs text-slate-400">每月租金</p><p className="font-mono font-bold text-emerald-600">{p.activeLease ? formatCurrency(p.activeLease.monthlyRent) : '-'}</p></div>
-                              {/* 使用 stressedExpense */}
                               <div><p className="text-xs text-slate-400">壓力支出</p><p className="font-mono text-red-400">-{formatCurrency(p.stressedExpense)}</p></div>
                           </div>
                       </div>
@@ -1270,7 +1269,12 @@ const App: React.FC = () => {
                                   <div>
                                       <label className="text-xs text-slate-500 block mb-1">Mortgage Loan (按揭)</label>
                                       <div className="flex items-center gap-2">
-                                          <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.mortgageLoan || ''} onChange={e => setEditingProp({...editingProp, mortgageLoan: Number(e.target.value)} as any)} />
+                                          <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.mortgageLoan || ''} onChange={e => {
+                                              // Auto-calculate total price on change
+                                              const loan = Number(e.target.value);
+                                              const price = (editingProp?.initialDeposit || 0) + (editingProp?.furtherDeposit || 0) + (editingProp?.balancePayment || 0) + loan;
+                                              setEditingProp({...editingProp, mortgageLoan: loan, purchasePrice: price} as any);
+                                          }} />
                                       </div>
                                       <span className="text-xs text-blue-600 font-mono">{formatCurrency(editingProp?.mortgageLoan)}</span>
                                   </div>
@@ -1293,11 +1297,31 @@ const App: React.FC = () => {
                                    </div>
                                    <div>
                                        <label className="text-xs text-slate-500 block mb-1">Interest Rate 按揭利率 (%)</label>
-                                       <input className="border w-full p-2 rounded text-sm" type="number" step="0.1" value={editingProp?.interestRate || ''} onChange={e => setEditingProp({...editingProp, interestRate: Number(e.target.value)} as any)} />
+                                       <input className="border w-full p-2 rounded text-sm" type="number" step="0.1" value={editingProp?.interestRate || ''} onChange={e => {
+                                           const rate = Number(e.target.value);
+                                           // Auto calc monthly repayment
+                                           let payment = editingProp?.mortgageAmount || 0;
+                                           if (editingProp?.outstandingLoan && editingProp?.tenure && rate) {
+                                               const r = rate / 100 / 12;
+                                               const n = editingProp.tenure * 12;
+                                               payment = editingProp.outstandingLoan * (r * Math.pow(1+r, n)) / (Math.pow(1+r, n) - 1);
+                                           }
+                                           setEditingProp({...editingProp, interestRate: rate, mortgageAmount: Math.round(payment)} as any);
+                                       }} />
                                    </div>
                                     <div>
                                        <label className="text-xs text-slate-500 block mb-1">Tenure 年期 (Years)</label>
-                                       <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.tenure || ''} onChange={e => setEditingProp({...editingProp, tenure: Number(e.target.value)} as any)} />
+                                       <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.tenure || ''} onChange={e => {
+                                           const tenure = Number(e.target.value);
+                                           // Auto calc monthly repayment
+                                           let payment = editingProp?.mortgageAmount || 0;
+                                           if (editingProp?.outstandingLoan && editingProp?.interestRate && tenure) {
+                                               const r = editingProp.interestRate / 100 / 12;
+                                               const n = tenure * 12;
+                                               payment = editingProp.outstandingLoan * (r * Math.pow(1+r, n)) / (Math.pow(1+r, n) - 1);
+                                           }
+                                           setEditingProp({...editingProp, tenure: tenure, mortgageAmount: Math.round(payment)} as any);
+                                       }} />
                                    </div>
                                    <div>
                                        <label className="text-xs text-slate-500 block mb-1">Monthly Repayment 每月供款</label>

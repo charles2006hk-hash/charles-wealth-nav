@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, 
-  Tooltip, Legend, ResponsiveContainer 
+  Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell 
 } from 'recharts';
 import { initializeApp } from "firebase/app";
 import { 
@@ -673,21 +673,11 @@ const App: React.FC = () => {
   const handleSaveProperty = async () => {
       if(!editingProp) return;
       try {
-        // Calculate monthly mortgage payment if data is available
-        let calcMortgage = editingProp.mortgageAmount || 0;
-        if (editingProp.mortgageLoan && editingProp.interestRate && editingProp.tenure) {
-            const r = editingProp.interestRate / 100 / 12;
-            const n = editingProp.tenure * 12;
-            if (r > 0 && n > 0) {
-                 calcMortgage = editingProp.mortgageLoan * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
-            }
-        }
-
         const pData = { 
             ...editingProp, 
             currentValue: Number(editingProp.currentValue || 0), 
             purchasePrice: Number(editingProp.purchasePrice || 0),
-            mortgageAmount: Number(calcMortgage || 0),
+            mortgageAmount: Number(editingProp.mortgageAmount || 0),
             estRent: Number(editingProp.estRent || 0),
             tenure: Number(editingProp.tenure || 0),
             managementFee: Number(editingProp.managementFee || 0),
@@ -701,17 +691,24 @@ const App: React.FC = () => {
             outstandingLoan: Number(editingProp.outstandingLoan || 0),
             bank: editingProp.bank || 'Standard Bank' 
         };
-        
-        // Ensure purchase price is set if not manually overridden or just calculated
-        if (!pData.purchasePrice) {
-             pData.purchasePrice = pData.initialDeposit + pData.furtherDeposit + pData.balancePayment + pData.mortgageLoan;
-        }
 
         if(editingProp.id) await setDoc(doc(db, "properties", editingProp.id), pData);
         else await addDoc(collection(db, "properties"), pData);
         setModalMode('none');
       } catch(e) { alert(e); }
   };
+  
+  // Re-calculate mortgage based on inputs
+  const recalcMortgage = (prop: Property, field: string, val: number) => {
+      let newProp = { ...prop, [field]: val };
+      if (newProp.outstandingLoan && newProp.interestRate && newProp.tenure) {
+          const r = newProp.interestRate / 100 / 12;
+          const n = newProp.tenure * 12;
+          const pmt = newProp.outstandingLoan * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+          newProp.mortgageAmount = Math.round(pmt);
+      }
+      return newProp;
+  }
 
   const handleSaveLease = async () => {
       if (!editingLease) return;
@@ -820,321 +817,9 @@ const App: React.FC = () => {
       await setDoc(doc(db, "settings", "education"), newConfig);
   };
 
-  // --- Render Functions (Moved outside App for stability) ---
-
-  const renderDashboard = (
-      properties: PropertyWithStats[], 
-      totalValuation: number, 
-      totalMonthlyRent: number, 
-      propStats: any,
-      stressRate: number,
-      setStressRate: any,
-      rentDrop: number,
-      setRentDrop: any,
-      setPropertyViewId: any,
-      setEditingProp: any,
-      setModalMode: any,
-      initializeDefaults: any
-  ) => (
-      <div className="space-y-8 animate-in fade-in">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              <StatCard title="物業總估值 Total Valuation" value={formatCurrency(totalValuation)} color="blue" iconName="Home" subtext={`${properties.length} Properties`} />
-              <StatCard title="每月租金收入 Monthly Rent" value={formatCurrency(totalMonthlyRent)} color="emerald" iconName="DollarSign" />
-              <StatCard title="整體出租率 Occupancy Rate" value={`${properties.length ? (properties.filter(p=>p.status==='Occupied').length / properties.length * 100).toFixed(0) : 0}%`} color="indigo" iconName="PieChart" />
-              <StatCard title="應收未收 Arrears" value={propStats.filter((p:any)=>p.isLate).length} color="red" iconName="Shield" subtext="Units Late" />
-          </div>
-
-          <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
-              <div className="font-bold text-slate-700">壓力測試 Stress Test:</div>
-              <div className="flex items-center gap-2">
-                  <span className="text-sm">Rate +{stressRate}%</span>
-                  <input type="range" min="0" max="5" step="0.5" value={stressRate} onChange={e=>setStressRate(Number(e.target.value))} className="w-24" />
-              </div>
-              <div className="flex items-center gap-2">
-                  <span className="text-sm">Rent Drop {rentDrop}%</span>
-                  <input type="range" min="0" max="30" step="5" value={rentDrop} onChange={e=>setRentDrop(Number(e.target.value))} className="w-24" />
-              </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {propStats.map((p: any) => (
-                  <div 
-                    key={p.id} 
-                    onClick={() => setPropertyViewId(p.id)} 
-                    className="bg-white rounded-xl shadow-sm border hover:shadow-md transition cursor-pointer overflow-hidden group relative z-10"
-                  >
-                      <div className={`h-2 w-full ${p.status==='Occupied' ? (p.isLate ? 'bg-orange-500' : 'bg-emerald-500') : 'bg-red-500'}`} />
-                      <div className="p-5">
-                          <div className="flex justify-between items-start mb-2">
-                              <h3 className="font-bold text-lg text-slate-800 group-hover:text-blue-600 transition truncate">{p.name}</h3>
-                              <span className={`px-2 py-1 text-xs rounded-full font-bold whitespace-nowrap ${p.status==='Occupied' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                  {p.status === 'Occupied' ? (p.isLate ? '欠租 Arrears' : '出租 Occupied') : '空置 Vacant'}
-                              </span>
-                          </div>
-                          <p className="text-sm text-slate-500 mb-4 truncate">{p.address || 'No Address'}</p>
-                          <div className="grid grid-cols-2 gap-4 text-sm bg-slate-50 p-3 rounded-lg">
-                              <div><p className="text-xs text-slate-400">現時估值</p><p className="font-mono font-bold">{formatCurrency(p.currentValue)}</p></div>
-                              <div><p className="text-xs text-slate-400">每月租金</p><p className="font-mono font-bold text-emerald-600">{p.activeLease ? formatCurrency(p.activeLease.monthlyRent) : '-'}</p></div>
-                              <div><p className="text-xs text-slate-400">壓力支出</p><p className="font-mono text-red-400">-{formatCurrency(p.stressedExpense)}</p></div>
-                          </div>
-                      </div>
-                  </div>
-              ))}
-              
-               <button onClick={() => { setEditingProp({ id: '', name: '', address: '', type: 'Investment', status: 'Vacant', currentValue: 0, purchasePrice: 0, initialDeposit: 0, furtherDeposit: 0, balancePayment: 0, mortgageLoan: 0, mortgageAmount: 0, outstandingLoan: 0, managementFee: 0, govtRates: 0, govtRent: 0, estRent: 0, tenure: 0, interestRate: 0, bank: '' }); setModalMode('property'); }} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-xl hover:bg-slate-50 transition text-slate-400 hover:text-slate-600 cursor-pointer z-10"><ICONS.Plus /><span className="mt-2 font-bold">新增物業 Add Property</span></button>
-               {properties.length === 0 && (
-                  <button onClick={initializeDefaults} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-blue-300 bg-blue-50 rounded-xl hover:bg-blue-100 transition text-blue-500 cursor-pointer z-10"><ICONS.Plus /><span className="mt-2 font-bold">初始化預設物業</span></button>
-              )}
-          </div>
-      </div>
-  );
-
-  // --- 6. 主應用程式 ---
-const App: React.FC = () => {
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [properties, setProperties] = useState<Property[]>([]);
-  const [leases, setLeases] = useState<Lease[]>([]);
-  const [eduDB, setEduDB] = useState<Record<string, EduConfig>>(INITIAL_EDUCATION_DB);
-  const [dataLoaded, setDataLoaded] = useState(false);
-
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [propertyViewId, setPropertyViewId] = useState<string | null>(null);
-  const [modalMode, setModalMode] = useState<'none' | 'transaction' | 'property' | 'doc' | 'lease'>('none');
-  const [editingLease, setEditingLease] = useState<Lease | null>(null);
-
-  const [editingTx, setEditingTx] = useState<Transaction | null>(null);
-  const [editingProp, setEditingProp] = useState<Property | null>(null);
-  const [docConfig, setDocConfig] = useState<DocConfig>({ 
-      type: 'receipt', propId: '', tenant: '', tenantID: '', period: '', amount: 0, 
-      deposit: 0, startDate: '', endDate: '', landlord: 'Charles Lam', 
-      paymentMethod: 'Cash', statementDateStart: '', statementDateEnd: '' 
-  });
-  
-  const [reportMode, setReportMode] = useState(false);
-
-  // Filters & Parameters
-  const [ledgerFilter, setLedgerFilter] = useState('');
-  const [filterYear, setFilterYear] = useState('All');
-  const [filterMember, setFilterMember] = useState('All');
-  const [filterCategory, setFilterCategory] = useState('All');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [eduRegionV, setEduRegionV] = useState('UK');
-  const [eduRegionJ, setEduRegionJ] = useState('AUS');
-  const [childType, setChildType] = useState('Vocational');
-  const [stressRate, setStressRate] = useState(0);
-  const [rentDrop, setRentDrop] = useState(0);
-
-  useEffect(() => {
-    const qTx = query(collection(db, "transactions"), orderBy("date", "desc"));
-    const unsubTx = onSnapshot(qTx, s => 
-        setTransactions(s.docs.map(d => ({id: d.id, ...d.data()} as Transaction))));
-    
-    const unsubProp = onSnapshot(collection(db, "properties"), s => 
-        setProperties(s.docs.map(d => ({id: d.id, ...d.data()} as Property))));
-    
-    const unsubLease = onSnapshot(collection(db, "leases"), s => 
-        setLeases(s.docs.map(d => ({id: d.id, ...d.data()} as Lease))));
-    
-    const unsubEdu = onSnapshot(doc(db, "settings", "education"), (docSnap) => {
-      if (docSnap.exists()) {
-        setEduDB(docSnap.data() as Record<string, EduConfig>);
-      } else {
-        setDoc(doc(db, "settings", "education"), INITIAL_EDUCATION_DB);
-      }
-    });
-
-    setDataLoaded(true);
-    return () => { unsubTx(); unsubProp(); unsubLease(); unsubEdu(); };
-  }, []);
-
-  const propStats = useMemo(() => {
-    return properties.map(p => {
-        const pTxs = transactions.filter(t => t.propertyId === p.id);
-        const income = pTxs.filter(t => (t.category || '').includes('Income')).reduce((sum, t) => sum + (t.amount || 0), 0);
-        const expense = pTxs.filter(t => !(t.category || '').includes('Income')).reduce((sum, t) => sum + (t.amount || 0), 0);
-        const activeLease = leases.find(l => l.propertyId === p.id && l.status === 'Active');
-        
-        let isLate = false;
-        if (activeLease && p.status === 'Occupied') {
-            const lastRentTx = pTxs
-                .filter(t => (t.category || '').includes('Rental Income'))
-                .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
-            if (lastRentTx) {
-                const daysSince = (new Date().getTime() - new Date(lastRentTx.date).getTime()) / (1000 * 3600 * 24);
-                if (daysSince > 35) isLate = true;
-            }
-        }
-        const estRent = activeLease ? activeLease.monthlyRent : (p.estRent || 0);
-        const stressedExpense = (p.managementFee + p.mortgageAmount) * (1 + stressRate * 0.01);
-
-        return { ...p, income, expense, net: income - expense, activeLease, isLate, estRent, stressedExpense } as PropertyWithStats;
-    });
-  }, [properties, transactions, leases, stressRate]);
-
-  const totalValuation = properties.reduce((sum, p) => sum + (p.currentValue || 0), 0);
-  const totalMonthlyRent = leases.filter(l => l.status === 'Active').reduce((sum, l) => sum + (l.monthlyRent || 0), 0);
-
-  const stats = useMemo(() => {
-    let filtered = transactions;
-    if(filterYear !== 'All') filtered = filtered.filter(d => d.year === parseInt(filterYear));
-    if(filterMember !== 'All') filtered = filtered.filter(d => d.member === filterMember);
-    if(filterCategory !== 'All') filtered = filtered.filter(d => d.category === filterCategory);
-    if(searchTerm) filtered = filtered.filter(d => (d.merchant || '').toLowerCase().includes(searchTerm.toLowerCase()));
-    
-    const total = filtered.reduce((a,b) => a + (b.amount || 0), 0);
-    const byYear: Record<string, number> = {}; 
-    const byCat: Record<string, number> = {}; 
-    const insuranceByMember: Record<string, InsurancePolicy[]> = {};
-
-    filtered.forEach(d => {
-        if(!byYear[d.year]) byYear[d.year] = 0; byYear[d.year] += (d.amount || 0);
-        const cat = d.category || 'Other'; if(!byCat[cat]) byCat[cat] = 0; byCat[cat] += (d.amount || 0);
-        
-        if ((cat || '').includes('Insurance')) {
-            let memberKey = d.member === 'Family (公用)' ? 'Charles' : d.member;
-            if(!insuranceByMember[memberKey]) insuranceByMember[memberKey] = [];
-            const existing = insuranceByMember[memberKey].find(p => p.name === d.merchant);
-            if(existing) {
-                 existing.totalPaid += d.amount;
-            } else {
-                 insuranceByMember[memberKey].push({ 
-                     name: d.merchant, 
-                     totalPaid: d.amount, 
-                     note: d.note || '',
-                     lastPaid: d.date,
-                     endYear: null,
-                     rawMerchant: d.merchant
-                 });
-            }
-        }
-    });
-    
-    return { 
-        total, 
-        count: filtered.length, 
-        byYear: Object.entries(byYear).map(([k,v])=>({year:k, amount:v})).sort((a:any,b:any)=>Number(a.year)-Number(b.year)), 
-        byCat: Object.entries(byCat).map(([k,v])=>({name:k, value:v})).sort((a:any,b:any)=>b.value-a.value), 
-        insuranceByMember
-    };
-  }, [transactions, filterYear, filterMember, filterCategory, searchTerm]);
-
-  // View Components defined inside to share state but declared as variables to avoid remounting issues
-  // To fix the click issue, we ensure that PropertyDashboard is just a render function or the JSX is directly used.
-  // We used a helper function renderDashboard above.
-
-  const renderPropertyDetail = () => {
-    const p = propStats.find(x => x.id === propertyViewId);
-    if (!p) return <div>Property not found</div>;
-    
-    // Simple internal state for tab
-    // Since we can't use useState inside a render function easily without extraction, 
-    // let's use a simple variable or state from App if needed. 
-    // Ideally PropertyDetail should be a separate component, but for single file constraint:
-    // We will use a state in App: detailViewTab
-    
-    const pTransactions = transactions.filter(t => t.propertyId === propertyViewId).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    const pLeases = leases.filter(l => l.propertyId === propertyViewId);
-    
-    // We need a state for the detail view tab. Let's add it to App state.
-    // For now, let's assume 'overview' is default or manage it via a new state in App.
-    // I'll add `detailViewTab` to App state.
-    
-    return (
-        <div className="space-y-6 animate-in fade-in">
-            <button onClick={() => setPropertyViewId(null)} className="text-sm text-slate-500 hover:text-blue-600 flex items-center gap-1">← 返回總覽 Back to Dashboard</button>
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex justify-between items-start">
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">{p.name} <span className={`text-sm px-2 py-1 rounded-full font-normal ${p.status==='Occupied'?'bg-green-100 text-green-800':'bg-red-100 text-red-800'}`}>{p.status}</span></h1>
-                    <p className="text-slate-500 mt-1">{p.address}</p>
-                </div>
-                <div className="flex gap-2">
-                    <button onClick={() => { setDocConfig({ ...docConfig, propId: p.id, type: 'lease', amount: p.activeLease?.monthlyRent || 0, tenant: p.activeLease?.tenantName || '' }); setModalMode('doc'); }} className="px-3 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-bold hover:bg-indigo-100">建立租約</button>
-                     <button onClick={() => { setDocConfig({ ...docConfig, propId: p.id, type: 'receipt', amount: p.activeLease?.monthlyRent || 0, tenant: p.activeLease?.tenantName || '' }); setModalMode('doc'); }} className="px-3 py-2 bg-emerald-50 text-emerald-700 rounded-lg text-sm font-bold hover:bg-emerald-100">開收據</button>
-                     <button onClick={() => { setDocConfig({ ...docConfig, propId: p.id, type: 'statement', amount: 0, tenant: p.activeLease?.tenantName || '' }); setModalMode('doc'); }} className="px-3 py-2 bg-blue-50 text-blue-700 rounded-lg text-sm font-bold hover:bg-blue-100">租務對數</button>
-                    <button onClick={() => { setEditingProp(p); setModalMode('property'); }} className="p-2 bg-gray-100 rounded-lg hover:bg-gray-200"><ICONS.Edit /></button>
-                </div>
-            </div>
-
-            <div className="flex gap-4 border-b border-slate-200">
-                <button className="pb-2 px-1 text-sm font-bold text-blue-600 border-b-2 border-blue-600">詳情 Details</button>
-                {/* Simplified tabs for now to avoid state complexity in one file, shows all sections */}
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-white p-6 rounded-xl border space-y-4">
-                    <h3 className="font-bold border-b pb-2">財務摘要 Financials</h3>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div><p className="text-slate-500">買入價 Purchase</p><p className="font-mono">{formatCurrency(p.purchasePrice)}</p></div>
-                        <div><p className="text-slate-500">現估值 Value</p><p className="font-mono font-bold text-blue-600">{formatCurrency(p.currentValue)}</p></div>
-                        <div><p className="text-slate-500">尚餘按揭 Loan</p><p className="font-mono">{formatCurrency(p.outstandingLoan)}</p></div>
-                        <div><p className="text-slate-500">月供款 Mortgage</p><p className="font-mono text-red-500">-{formatCurrency(p.mortgageAmount)}</p></div>
-                    </div>
-                </div>
-                <div className="bg-white p-6 rounded-xl border space-y-4">
-                    <h3 className="font-bold border-b pb-2">收支紀錄 Expenses</h3>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div><p className="text-slate-500">管理費 Mgt</p><p className="font-mono">{formatCurrency(p.managementFee)}/mo</p></div>
-                        <div><p className="text-slate-500">差餉 Rates</p><p className="font-mono">{formatCurrency(p.govtRates)}/qtr</p></div>
-                        <div><p className="text-slate-500">地租 Govt Rent</p><p className="font-mono">{formatCurrency(p.govtRent)}/qtr</p></div>
-                    </div>
-                </div>
-            </div>
-
-            <div className="space-y-4">
-                 <div className="flex justify-between items-center">
-                    <h3 className="font-bold">租約紀錄 Lease History</h3>
-                    <button onClick={()=>{
-                        setEditingLease({ propertyId: p.id, tenantName: '', tenantID: '', startDate: '', endDate: '', monthlyRent: 0, deposit: 0, status: 'Active' } as Lease);
-                        setModalMode('lease');
-                    }} className="text-sm text-blue-600 hover:underline">+ Register New Lease</button>
-                 </div>
-                 {pLeases.map(l => (
-                     <div key={l.id} className={`p-4 rounded-xl border ${l.status === 'Active' ? 'bg-green-50 border-green-200' : 'bg-gray-50'}`}>
-                         <div className="flex justify-between">
-                             <div>
-                                 <p className="font-bold text-slate-800">{l.tenantName} <span className="text-xs font-normal text-slate-500">({l.tenantID})</span></p>
-                                 <p className="text-sm">{l.startDate} to {l.endDate}</p>
-                             </div>
-                             <div className="text-right">
-                                 <p className="font-bold font-mono">{formatCurrency(l.monthlyRent)}/mo</p>
-                                 <div className="flex gap-2 justify-end mt-1">
-                                     {l.status === 'Active' && <span className="text-xs bg-green-200 text-green-800 px-2 py-0.5 rounded">Active</span>}
-                                     <button onClick={() => { setEditingLease(l); setModalMode('lease'); }} className="text-xs text-blue-600 hover:underline">Edit</button>
-                                 </div>
-                             </div>
-                         </div>
-                     </div>
-                 ))}
-            </div>
-
-            <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-                <div className="p-4 bg-slate-50 flex justify-between items-center border-b">
-                    <h3 className="font-bold">流水帳 Ledger</h3>
-                    <button onClick={() => { setEditingTx({ propertyId: p.id, date: new Date().toISOString().split('T')[0] } as any); setModalMode('transaction'); }} className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 font-bold">+ 新增紀錄 Add Record</button>
-                </div>
-                <div className="max-h-[500px] overflow-y-auto">
-                    <table className="w-full text-sm text-left">
-                        <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0"><tr><th className="p-3">Date</th><th className="p-3">Category</th><th className="p-3">Detail</th><th className="p-3">Amount</th><th className="p-3">Action</th></tr></thead>
-                        <tbody className="divide-y">
-                            {pTransactions.map(t => (
-                                <tr key={t.id} className="hover:bg-blue-50">
-                                    <td className="p-3">{t.date}</td>
-                                    <td className="p-3">{t.category}</td>
-                                    <td className="p-3 font-medium">{t.merchant}</td>
-                                    <td className={`p-3 font-mono font-bold ${(t.category || '').includes('Income') ? 'text-emerald-600' : 'text-red-500'}`}>{(t.category || '').includes('Income') ? '+' : '-'}{formatCurrency(t.amount)}</td>
-                                    <td className="p-3">
-                                        <button onClick={() => { setEditingTx(t); setModalMode('transaction'); }} className="text-blue-400 hover:text-blue-600 mr-2"><ICONS.Edit /></button>
-                                        <button onClick={() => deleteItem('transactions', t.id)} className="text-red-400 hover:text-red-600"><ICONS.Trash /></button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    );
-  };
+  if (!dataLoaded) {
+       return <div className="h-screen flex items-center justify-center text-slate-500 animate-pulse">正在連接到 Firebase 雲端資料庫...</div>;
+  }
 
   return (
       <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 text-slate-900 font-sans">
@@ -1180,9 +865,159 @@ const App: React.FC = () => {
           )}
 
           <div className="flex-1 p-8 overflow-y-auto print-container">
-              {activeTab === 'dashboard' && (
-                  propertyViewId ? PropertyDetailView({ propId: propertyViewId }) : renderDashboard(properties as PropertyWithStats[], totalValuation, totalMonthlyRent, propStats, stressRate, setStressRate, rentDrop, setRentDrop, setPropertyViewId, setEditingProp, setModalMode, initializeDefaults)
+              {activeTab === 'dashboard' && !propertyViewId && (
+                  <div className="space-y-8 animate-in fade-in">
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                          <StatCard title="物業總估值 Total Valuation" value={formatCurrency(totalValuation)} color="blue" iconName="Home" subtext={`${properties.length} Properties`} />
+                          <StatCard title="每月租金收入 Monthly Rent" value={formatCurrency(totalMonthlyRent)} color="emerald" iconName="DollarSign" />
+                          <StatCard title="整體出租率 Occupancy Rate" value={`${properties.length ? (properties.filter(p=>p.status==='Occupied').length / properties.length * 100).toFixed(0) : 0}%`} color="indigo" iconName="PieChart" />
+                          <StatCard title="應收未收 Arrears" value={propStats.filter(p=>p.isLate).length} color="red" iconName="Shield" subtext="Units Late" />
+                      </div>
+
+                      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
+                          <div className="font-bold text-slate-700">壓力測試 Stress Test:</div>
+                          <div className="flex items-center gap-2">
+                              <span className="text-sm">Rate +{stressRate}%</span>
+                              <input type="range" min="0" max="5" step="0.5" value={stressRate} onChange={e=>setStressRate(Number(e.target.value))} className="w-24" />
+                          </div>
+                          <div className="flex items-center gap-2">
+                              <span className="text-sm">Rent Drop {rentDrop}%</span>
+                              <input type="range" min="0" max="30" step="5" value={rentDrop} onChange={e=>setRentDrop(Number(e.target.value))} className="w-24" />
+                          </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                          {propStats.map(p => (
+                              <div 
+                                key={p.id} 
+                                onClick={() => setPropertyViewId(p.id)} 
+                                className="bg-white rounded-xl shadow-sm border hover:shadow-md transition cursor-pointer overflow-hidden group relative z-10"
+                              >
+                                  <div className={`h-2 w-full ${p.status==='Occupied' ? (p.isLate ? 'bg-orange-500' : 'bg-emerald-500') : 'bg-red-500'}`} />
+                                  <div className="p-5">
+                                      <div className="flex justify-between items-start mb-2">
+                                          <h3 className="font-bold text-lg text-slate-800 group-hover:text-blue-600 transition truncate">{p.name}</h3>
+                                          <span className={`px-2 py-1 text-xs rounded-full font-bold whitespace-nowrap ${p.status==='Occupied' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                              {p.status === 'Occupied' ? (p.isLate ? '欠租 Arrears' : '出租 Occupied') : '空置 Vacant'}
+                                          </span>
+                                      </div>
+                                      <p className="text-sm text-slate-500 mb-4 truncate">{p.address || 'No Address'}</p>
+                                      <div className="grid grid-cols-2 gap-4 text-sm bg-slate-50 p-3 rounded-lg">
+                                          <div><p className="text-xs text-slate-400">現時估值</p><p className="font-mono font-bold">{formatCurrency(p.currentValue)}</p></div>
+                                          <div><p className="text-xs text-slate-400">每月租金</p><p className="font-mono font-bold text-emerald-600">{p.activeLease ? formatCurrency(p.activeLease.monthlyRent) : '-'}</p></div>
+                                          <div><p className="text-xs text-slate-400">壓力支出</p><p className="font-mono text-red-400">-{formatCurrency(p.stressedExpense)}</p></div>
+                                      </div>
+                                  </div>
+                              </div>
+                          ))}
+                          
+                           <button onClick={() => { setEditingProp({ id: '', name: '', address: '', type: 'Investment', status: 'Vacant', currentValue: 0, purchasePrice: 0, initialDeposit: 0, furtherDeposit: 0, balancePayment: 0, mortgageLoan: 0, mortgageAmount: 0, outstandingLoan: 0, managementFee: 0, govtRates: 0, govtRent: 0, estRent: 0, tenure: 0, interestRate: 0, bank: '' }); setModalMode('property'); }} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-xl hover:bg-slate-50 transition text-slate-400 hover:text-slate-600 cursor-pointer z-10"><ICONS.Plus /><span className="mt-2 font-bold">新增物業 Add Property</span></button>
+                           {properties.length === 0 && (
+                              <button onClick={initializeDefaults} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-blue-300 bg-blue-50 rounded-xl hover:bg-blue-100 transition text-blue-500 cursor-pointer z-10"><ICONS.Plus /><span className="mt-2 font-bold">初始化預設物業</span></button>
+                          )}
+                      </div>
+                  </div>
               )}
+
+              {/* Property Detail View */}
+              {activeTab === 'dashboard' && propertyViewId && (() => {
+                const p = propStats.find(x => x.id === propertyViewId);
+                if (!p) return <div>Property not found</div>;
+                const pTransactions = transactions.filter(t => t.propertyId === propertyViewId).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                const pLeases = leases.filter(l => l.propertyId === propertyViewId);
+
+                return (
+                    <div className="space-y-6 animate-in fade-in">
+                        <button onClick={() => setPropertyViewId(null)} className="text-sm text-slate-500 hover:text-blue-600 flex items-center gap-1">← 返回總覽 Back to Dashboard</button>
+                        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex justify-between items-start">
+                            <div>
+                                <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">{p.name} <span className={`text-sm px-2 py-1 rounded-full font-normal ${p.status==='Occupied'?'bg-green-100 text-green-800':'bg-red-100 text-red-800'}`}>{p.status}</span></h1>
+                                <p className="text-slate-500 mt-1">{p.address}</p>
+                            </div>
+                            <div className="flex gap-2">
+                                <button onClick={() => { setDocConfig({ ...docConfig, propId: p.id, type: 'lease', amount: p.activeLease?.monthlyRent || 0, tenant: p.activeLease?.tenantName || '' }); setModalMode('doc'); }} className="px-3 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-bold hover:bg-indigo-100">建立租約</button>
+                                 <button onClick={() => { setDocConfig({ ...docConfig, propId: p.id, type: 'receipt', amount: p.activeLease?.monthlyRent || 0, tenant: p.activeLease?.tenantName || '' }); setModalMode('doc'); }} className="px-3 py-2 bg-emerald-50 text-emerald-700 rounded-lg text-sm font-bold hover:bg-emerald-100">開收據</button>
+                                 <button onClick={() => { setDocConfig({ ...docConfig, propId: p.id, type: 'statement', amount: 0, tenant: p.activeLease?.tenantName || '' }); setModalMode('doc'); }} className="px-3 py-2 bg-blue-50 text-blue-700 rounded-lg text-sm font-bold hover:bg-blue-100">租務對數</button>
+                                <button onClick={() => { setEditingProp(p); setModalMode('property'); }} className="p-2 bg-gray-100 rounded-lg hover:bg-gray-200"><ICONS.Edit /></button>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="bg-white p-6 rounded-xl border space-y-4">
+                                <h3 className="font-bold border-b pb-2">財務摘要 Financials</h3>
+                                <div className="grid grid-cols-2 gap-4 text-sm">
+                                    <div><p className="text-slate-500">買入價 Purchase</p><p className="font-mono">{formatCurrency(p.purchasePrice)}</p></div>
+                                    <div><p className="text-slate-500">現估值 Value</p><p className="font-mono font-bold text-blue-600">{formatCurrency(p.currentValue)}</p></div>
+                                    <div><p className="text-slate-500">尚餘按揭 Loan</p><p className="font-mono">{formatCurrency(p.outstandingLoan)}</p></div>
+                                    <div><p className="text-slate-500">月供款 Mortgage</p><p className="font-mono text-red-500">-{formatCurrency(p.mortgageAmount)}</p></div>
+                                </div>
+                            </div>
+                            <div className="bg-white p-6 rounded-xl border space-y-4">
+                                <h3 className="font-bold border-b pb-2">收支紀錄 Expenses</h3>
+                                <div className="grid grid-cols-2 gap-4 text-sm">
+                                    <div><p className="text-slate-500">管理費 Mgt</p><p className="font-mono">{formatCurrency(p.managementFee)}/mo</p></div>
+                                    <div><p className="text-slate-500">差餉 Rates</p><p className="font-mono">{formatCurrency(p.govtRates)}/qtr</p></div>
+                                    <div><p className="text-slate-500">地租 Govt Rent</p><p className="font-mono">{formatCurrency(p.govtRent)}/qtr</p></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="space-y-4">
+                             <div className="flex justify-between items-center">
+                                <h3 className="font-bold">租約紀錄 Lease History</h3>
+                                <button onClick={()=>{
+                                    setEditingLease({ propertyId: p.id, tenantName: '', tenantID: '', startDate: '', endDate: '', monthlyRent: 0, deposit: 0, status: 'Active' } as Lease);
+                                    setModalMode('lease');
+                                }} className="text-sm text-blue-600 hover:underline">+ Register New Lease</button>
+                             </div>
+                             {pLeases.map(l => (
+                                 <div key={l.id} className={`p-4 rounded-xl border ${l.status === 'Active' ? 'bg-green-50 border-green-200' : 'bg-gray-50'}`}>
+                                     <div className="flex justify-between">
+                                         <div>
+                                             <p className="font-bold text-slate-800">{l.tenantName} <span className="text-xs font-normal text-slate-500">({l.tenantID})</span></p>
+                                             <p className="text-sm">{l.startDate} to {l.endDate}</p>
+                                         </div>
+                                         <div className="text-right">
+                                             <p className="font-bold font-mono">{formatCurrency(l.monthlyRent)}/mo</p>
+                                             <div className="flex gap-2 justify-end mt-1">
+                                                 {l.status === 'Active' && <span className="text-xs bg-green-200 text-green-800 px-2 py-0.5 rounded">Active</span>}
+                                                 <button onClick={() => { setEditingLease(l); setModalMode('lease'); }} className="text-xs text-blue-600 hover:underline">Edit</button>
+                                             </div>
+                                         </div>
+                                     </div>
+                                 </div>
+                             ))}
+                        </div>
+
+                        <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+                            <div className="p-4 bg-slate-50 flex justify-between items-center border-b">
+                                <h3 className="font-bold">流水帳 Ledger</h3>
+                                <button onClick={() => { setEditingTx({ propertyId: p.id, date: new Date().toISOString().split('T')[0] } as any); setModalMode('transaction'); }} className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 font-bold">+ 新增紀錄 Add Record</button>
+                            </div>
+                            <div className="max-h-[500px] overflow-y-auto">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0"><tr><th className="p-3">Date</th><th className="p-3">Category</th><th className="p-3">Detail</th><th className="p-3">Amount</th><th className="p-3">Action</th></tr></thead>
+                                    <tbody className="divide-y">
+                                        {pTransactions.map(t => (
+                                            <tr key={t.id} className="hover:bg-blue-50">
+                                                <td className="p-3">{t.date}</td>
+                                                <td className="p-3">{t.category}</td>
+                                                <td className="p-3 font-medium">{t.merchant}</td>
+                                                <td className={`p-3 font-mono font-bold ${(t.category || '').includes('Income') ? 'text-emerald-600' : 'text-red-500'}`}>{(t.category || '').includes('Income') ? '+' : '-'}{formatCurrency(t.amount)}</td>
+                                                <td className="p-3">
+                                                    <button onClick={() => { setEditingTx(t); setModalMode('transaction'); }} className="text-blue-400 hover:text-blue-600 mr-2"><ICONS.Edit /></button>
+                                                    <button onClick={() => deleteItem('transactions', t.id)} className="text-red-400 hover:text-red-600"><ICONS.Trash /></button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                );
+              })()}
+
               {activeTab === 'data' && (
                   <div className="bg-white p-10 rounded-xl shadow animate-in fade-in">
                       <h2 className="text-2xl font-bold mb-4">數據中心 Data Hub</h2>
@@ -1382,7 +1217,16 @@ const App: React.FC = () => {
                                    </div>
                                    <div>
                                        <label className="text-xs text-slate-500 block mb-1">Outstanding Loan 尚餘按揭</label>
-                                       <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.outstandingLoan || ''} onChange={e => setEditingProp({...editingProp, outstandingLoan: Number(e.target.value)} as any)} />
+                                       <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.outstandingLoan || ''} onChange={e => {
+                                           const loan = Number(e.target.value);
+                                           let payment = editingProp?.mortgageAmount || 0;
+                                            if (loan && editingProp?.interestRate && editingProp?.tenure) {
+                                               const r = editingProp.interestRate / 100 / 12;
+                                               const n = editingProp.tenure * 12;
+                                               payment = loan * (r * Math.pow(1+r, n)) / (Math.pow(1+r, n) - 1);
+                                           }
+                                           setEditingProp({...editingProp, outstandingLoan: loan, mortgageAmount: Math.round(payment)} as any)
+                                       }} />
                                        <span className="text-xs text-blue-600 font-mono block mt-1">{formatCurrency(editingProp?.outstandingLoan)}</span>
                                    </div>
                                    <div>

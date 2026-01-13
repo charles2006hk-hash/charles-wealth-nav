@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, 
-  Tooltip, Legend, ResponsiveContainer 
+  Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell 
 } from 'recharts';
 import { initializeApp } from "firebase/app";
 import { 
@@ -58,22 +58,22 @@ interface Property {
   type: 'Investment' | 'Self-use';
   status: 'Occupied' | 'Vacant' | 'Renovation';
   
-  // 財務數據 (估值)
+  // 財務數據
   currentValue: number; 
   
   // 買入流程詳情
-  purchasePrice: number; // 總價
-  initialDeposit: number; // 細訂
-  furtherDeposit: number; // 大訂
-  balancePayment: number; // 尾數
-  mortgageLoan: number; // 按揭貸款額
+  purchasePrice: number; 
+  initialDeposit: number; 
+  furtherDeposit: number; 
+  balancePayment: number; 
+  mortgageLoan: number; 
   
   // 按揭詳情
   bank: string;
-  interestRate: number; // 利率
-  mortgageAmount: number; // 月供
-  outstandingLoan: number; // 尚餘欠款
-  tenure: number;  // 年期
+  interestRate: number; 
+  mortgageAmount: number; 
+  outstandingLoan: number; 
+  tenure: number;  
   
   // 租務
   estRent: number; 
@@ -604,7 +604,7 @@ const App: React.FC = () => {
         if(!byYear[d.year]) byYear[d.year] = 0; byYear[d.year] += (d.amount || 0);
         const cat = d.category || 'Other'; if(!byCat[cat]) byCat[cat] = 0; byCat[cat] += (d.amount || 0);
         
-        if (cat.includes('Insurance')) {
+        if ((cat || '').includes('Insurance')) {
             let memberKey = d.member === 'Family (公用)' ? 'Charles' : d.member;
             if(!insuranceByMember[memberKey]) insuranceByMember[memberKey] = [];
             const existing = insuranceByMember[memberKey].find(p => p.name === d.merchant);
@@ -799,6 +799,19 @@ const App: React.FC = () => {
               <StatCard title="每月租金收入 Monthly Rent" value={formatCurrency(totalMonthlyRent)} color="emerald" iconName="DollarSign" />
               <StatCard title="整體出租率 Occupancy Rate" value={`${properties.length ? (properties.filter(p=>p.status==='Occupied').length / properties.length * 100).toFixed(0) : 0}%`} color="indigo" iconName="PieChart" />
               <StatCard title="應收未收 Arrears" value={propStats.filter(p=>p.isLate).length} color="red" iconName="Shield" subtext="Units Late" />
+          </div>
+
+          {/* 壓力測試區塊 */}
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
+              <div className="font-bold text-slate-700">壓力測試 Stress Test:</div>
+              <div className="flex items-center gap-2">
+                  <span className="text-sm">Rate +{stressRate}%</span>
+                  <input type="range" min="0" max="5" step="0.5" value={stressRate} onChange={e=>setStressRate(Number(e.target.value))} className="w-24" />
+              </div>
+              <div className="flex items-center gap-2">
+                  <span className="text-sm">Rent Drop {rentDrop}%</span>
+                  <input type="range" min="0" max="30" step="5" value={rentDrop} onChange={e=>setRentDrop(Number(e.target.value))} className="w-24" />
+              </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -1056,7 +1069,7 @@ const App: React.FC = () => {
                         <p className="text-slate-500">所有交易紀錄一覽 Table of All Transactions</p>
                         <div className="flex gap-2">
                             <label className="flex items-center gap-2 px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 cursor-pointer">
-                                <ICONS.Upload /> 匯入 Import JSON
+                                <ICONS.Plus /> 匯入 Import JSON
                                 <input type="file" className="hidden" onChange={handleFileUpload} accept=".json" />
                             </label>
                             <button onClick={handleExportJSON} className="px-3 py-1 bg-slate-600 text-white text-xs rounded hover:bg-slate-700 flex items-center gap-2">

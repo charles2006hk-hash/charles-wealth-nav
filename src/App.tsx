@@ -575,7 +575,7 @@ const PropertyDashboard = ({
     </div>
 );
 
-// --- 7. 獨立組件: DocModal (移至 App 外部以解決 TS 錯誤) ---
+// --- 7. 獨立組件: DocModal (移至 App 外部) ---
 interface DocModalProps {
     isOpen: boolean;
     onClose: () => void;

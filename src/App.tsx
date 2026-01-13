@@ -58,22 +58,22 @@ interface Property {
   type: 'Investment' | 'Self-use';
   status: 'Occupied' | 'Vacant' | 'Renovation';
   
-  // 財務數據
+  // 財務數據 (估值)
   currentValue: number; 
   
   // 買入流程詳情
-  purchasePrice: number; 
-  initialDeposit: number; 
-  furtherDeposit: number; 
-  balancePayment: number; 
-  mortgageLoan: number; 
+  purchasePrice: number; // 總價
+  initialDeposit: number; // 細訂
+  furtherDeposit: number; // 大訂
+  balancePayment: number; // 尾數 (Cash Balance)
+  mortgageLoan: number; // 按揭貸款額
   
   // 按揭詳情
-  bank: string;
-  interestRate: number; 
-  mortgageAmount: number; 
-  outstandingLoan: number; 
-  tenure: number;  
+  bank: string; // 承造銀行
+  interestRate: number; // 利率 (%)
+  mortgageAmount: number; // 月供
+  outstandingLoan: number; // 尚餘欠款
+  tenure: number;  // 年期 (Years)
   
   // 租務
   estRent: number; 
@@ -699,7 +699,7 @@ const App: React.FC = () => {
             mortgageLoan: Number(editingProp.mortgageLoan || 0),
             interestRate: Number(editingProp.interestRate || 0),
             outstandingLoan: Number(editingProp.outstandingLoan || 0),
-            bank: editingProp.bank || 'Standard Bank' // Add default bank to fix TS2345
+            bank: editingProp.bank || 'Standard Bank' 
         };
         // Auto-calculate Purchase Price if components are filled
         if (pData.initialDeposit || pData.furtherDeposit || pData.balancePayment) {

@@ -535,7 +535,7 @@ const PropertyDashboard = ({
                 <div 
                   key={p.id} 
                   onClick={() => onSelectProperty(p.id)} 
-                  className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer group relative overflow-hidden"
+                  className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer group relative overflow-hidden active:scale-95 z-10"
                 >
                     <div className="h-24 bg-gradient-to-r from-blue-500 to-indigo-600 relative">
                         <span className={`absolute top-4 left-4 px-3 py-1 text-xs rounded-full font-bold shadow-sm ${
@@ -596,7 +596,74 @@ const PropertyDashboard = ({
     </div>
 );
 
-// --- 7. 獨立組件: PropertyDetailView ---
+// --- 7. 獨立組件: DocModal (移至 App 外部以解決 TS 錯誤) ---
+interface DocModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    docConfig: DocConfig;
+    setDocConfig: (config: DocConfig) => void;
+    handlePrint: () => void;
+    properties: Property[];
+    transactions: Transaction[];
+}
+
+const DocModal: React.FC<DocModalProps> = ({ 
+    isOpen, onClose, docConfig, setDocConfig, handlePrint, properties, transactions 
+}) => {
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
+            <div className="bg-white rounded-xl shadow-2xl p-6 w-[1200px] h-[95vh] flex flex-col">
+                <div className="flex justify-between items-center mb-4 border-b pb-2">
+                    <h3 className="text-xl font-bold flex items-center gap-2"><ICONS.FileText /> 文書生成器</h3>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600">✕</button>
+                </div>
+                <div className="flex gap-6 flex-1 overflow-hidden">
+                    <div className="w-1/4 space-y-4 overflow-y-auto pr-2 border-r">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 mb-1">文件類型</label>
+                            <div className="flex rounded bg-slate-100 p-1">
+                                {['receipt', 'lease', 'statement'].map(t => (
+                                    <button key={t} onClick={() => setDocConfig({ ...docConfig, type: t as any })} className={`flex-1 text-xs py-1 rounded capitalize ${docConfig.type === t ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}>{t}</button>
+                                ))}
+                            </div>
+                        </div>
+                        
+                        <div><label className="block text-xs font-bold text-slate-500">Property</label><select className="w-full border rounded p-1" value={docConfig.propId} onChange={e=>{
+                             const p = properties.find(x=>x.id===e.target.value);
+                             // 這裡簡化邏輯，實際應用中可以更細緻
+                             if(p) setDocConfig({...docConfig, propId: p.id }); 
+                        }}>{properties.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+                        
+                        {docConfig.type === 'statement' && (
+                             <div className="p-3 bg-blue-50 rounded text-sm space-y-2">
+                                 <p className="font-bold text-blue-800">對數設定</p>
+                                 <div><label className="text-xs">Start Date</label><input type="date" className="w-full border rounded" value={docConfig.statementDateStart} onChange={e=>setDocConfig({...docConfig, statementDateStart: e.target.value})} /></div>
+                                 <div><label className="text-xs">End Date</label><input type="date" className="w-full border rounded" value={docConfig.statementDateEnd} onChange={e=>setDocConfig({...docConfig, statementDateEnd: e.target.value})} /></div>
+                             </div>
+                        )}
+                        
+                        <div className="space-y-2">
+                            <label className="block text-xs font-bold">Tenant Name</label><input type="text" className="w-full border rounded p-1" value={docConfig.tenant} onChange={e=>setDocConfig({...docConfig, tenant: e.target.value})} />
+                            <label className="block text-xs font-bold">Period / Date</label><input type="text" className="w-full border rounded p-1" value={docConfig.period} onChange={e=>setDocConfig({...docConfig, period: e.target.value})} />
+                            <label className="block text-xs font-bold">Amount ($)</label><input type="number" className="w-full border rounded p-1" value={docConfig.amount} onChange={e=>setDocConfig({...docConfig, amount: Number(e.target.value)})} />
+                        </div>
+
+                        <button onClick={handlePrint} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold shadow mt-4 flex justify-center items-center gap-2"><ICONS.Printer /> Print / Save PDF</button>
+                    </div>
+                    <div className="w-3/4 bg-slate-200 rounded-lg p-8 overflow-y-auto flex justify-center shadow-inner">
+                        <div className="doc-print-container">
+                            <DocPreviewContent docConfig={docConfig} properties={properties} transactions={transactions} />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// --- 8. 獨立組件: PropertyDetailView ---
 const PropertyDetailView = ({ 
     propId, propStats, transactions, leases, 
     onBack, setDocConfig, setModalMode, setEditingProp, setEditingTx, 
@@ -605,7 +672,10 @@ const PropertyDetailView = ({
 }: any) => {
     const p = propStats.find((x: any) => x.id === propId);
     if (!p) return <div>Property not found</div>;
-    const pTransactions = transactions.filter((t: any) => t.propertyId === propId).sort((a: any,b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    // 安全過濾
+    const pTransactions = transactions
+        .filter((t: any) => t.propertyId === propId)
+        .sort((a: any,b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
     const pLeases = leases.filter((l: any) => l.propertyId === propId);
 
     return (
@@ -689,7 +759,7 @@ const PropertyDetailView = ({
                     <table className="w-full text-sm text-left">
                         <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0"><tr><th className="p-3">Date</th><th className="p-3">Category</th><th className="p-3">Detail</th><th className="p-3">Amount</th><th className="p-3">Tags</th><th className="p-3">Action</th></tr></thead>
                         <tbody className="divide-y">
-                            {pTransactions.filter((t: any) => JSON.stringify(t).toLowerCase().includes(ledgerFilter.toLowerCase())).map((t: any) => (
+                            {pTransactions.filter((t: any) => (JSON.stringify(t) || '').toLowerCase().includes(ledgerFilter.toLowerCase())).map((t: any) => (
                                 <tr key={t.id} className="hover:bg-blue-50">
                                     <td className="p-3">{t.date}</td>
                                     <td className="p-3">
@@ -717,72 +787,6 @@ const PropertyDetailView = ({
         </div>
     );
 };
-
-// --- 8. 獨立組件: DocModal (移至 App 外部) ---
-interface DocModalProps {
-    isOpen: boolean;
-    onClose: () => void;
-    docConfig: DocConfig;
-    setDocConfig: React.Dispatch<React.SetStateAction<DocConfig>>;
-    handlePrint: () => void;
-    properties: Property[];
-    transactions: Transaction[];
-}
-
-const DocModal: React.FC<DocModalProps> = ({ 
-    isOpen, onClose, docConfig, setDocConfig, handlePrint, properties, transactions 
-}) => {
-    if (!isOpen) return null;
-
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
-            <div className="bg-white rounded-xl shadow-2xl p-6 w-[1200px] h-[95vh] flex flex-col">
-                <div className="flex justify-between items-center mb-4 border-b pb-2">
-                    <h3 className="text-xl font-bold flex items-center gap-2"><ICONS.FileText /> 文書生成器</h3>
-                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600">✕</button>
-                </div>
-                <div className="flex gap-6 flex-1 overflow-hidden">
-                    <div className="w-1/4 space-y-4 overflow-y-auto pr-2 border-r">
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 mb-1">文件類型</label>
-                            <div className="flex rounded bg-slate-100 p-1">
-                                {['receipt', 'lease', 'statement'].map(t => (
-                                    <button key={t} onClick={() => setDocConfig({ ...docConfig, type: t as any })} className={`flex-1 text-xs py-1 rounded capitalize ${docConfig.type === t ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}>{t}</button>
-                                ))}
-                            </div>
-                        </div>
-                        
-                        <div><label className="block text-xs font-bold text-slate-500">Property</label><select className="w-full border rounded p-1" value={docConfig.propId} onChange={e=>{
-                             const p = properties.find(x=>x.id===e.target.value);
-                             if(p) setDocConfig({...docConfig, propId: p.id }); 
-                        }}>{properties.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
-                        
-                        {docConfig.type === 'statement' && (
-                             <div className="p-3 bg-blue-50 rounded text-sm space-y-2">
-                                 <p className="font-bold text-blue-800">對數設定</p>
-                                 <div><label className="text-xs">Start Date</label><input type="date" className="w-full border rounded" value={docConfig.statementDateStart} onChange={e=>setDocConfig({...docConfig, statementDateStart: e.target.value})} /></div>
-                                 <div><label className="text-xs">End Date</label><input type="date" className="w-full border rounded" value={docConfig.statementDateEnd} onChange={e=>setDocConfig({...docConfig, statementDateEnd: e.target.value})} /></div>
-                             </div>
-                        )}
-                        
-                        <div className="space-y-2">
-                            <label className="block text-xs font-bold">Tenant Name</label><input type="text" className="w-full border rounded p-1" value={docConfig.tenant} onChange={e=>setDocConfig({...docConfig, tenant: e.target.value})} />
-                            <label className="block text-xs font-bold">Period / Date</label><input type="text" className="w-full border rounded p-1" value={docConfig.period} onChange={e=>setDocConfig({...docConfig, period: e.target.value})} />
-                            <label className="block text-xs font-bold">Amount ($)</label><input type="number" className="w-full border rounded p-1" value={docConfig.amount} onChange={e=>setDocConfig({...docConfig, amount: Number(e.target.value)})} />
-                        </div>
-
-                        <button onClick={handlePrint} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold shadow mt-4 flex justify-center items-center gap-2"><ICONS.Printer /> Print / Save PDF</button>
-                    </div>
-                    <div className="w-3/4 bg-slate-200 rounded-lg p-8 overflow-y-auto flex justify-center shadow-inner">
-                        <div className="doc-print-container">
-                            <DocPreviewContent docConfig={docConfig} properties={properties} transactions={transactions} />
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-}
 
 // --- 9. 主應用程式 ---
 const App: React.FC = () => {
@@ -962,21 +966,33 @@ const App: React.FC = () => {
                  calcMortgage = editingProp.mortgageLoan * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
             }
         }
+        
+        // Ensure values are numbers before calculation, use 0 if undefined/null
+        const initialDeposit = Number(editingProp.initialDeposit || 0);
+        const furtherDeposit = Number(editingProp.furtherDeposit || 0);
+        const balancePayment = Number(editingProp.balancePayment || 0);
+        const mortgageLoan = Number(editingProp.mortgageLoan || 0);
+
+        let purchasePrice = editingProp.purchasePrice;
+        // Auto-calculate Purchase Price if components are filled
+        if (initialDeposit || furtherDeposit || balancePayment || mortgageLoan) {
+             purchasePrice = initialDeposit + furtherDeposit + balancePayment + mortgageLoan;
+        }
 
         const pData = { 
             ...editingProp, 
             currentValue: Number(editingProp.currentValue || 0), 
-            purchasePrice: Number(editingProp.purchasePrice || 0),
+            purchasePrice: Number(purchasePrice || 0),
             mortgageAmount: Number(calcMortgage || 0),
             estRent: Number(editingProp.estRent || 0),
             tenure: Number(editingProp.tenure || 0),
             managementFee: Number(editingProp.managementFee || 0),
             govtRates: Number(editingProp.govtRates || 0),
             govtRent: Number(editingProp.govtRent || 0),
-            initialDeposit: Number(editingProp.initialDeposit || 0),
-            furtherDeposit: Number(editingProp.furtherDeposit || 0),
-            balancePayment: Number(editingProp.balancePayment || 0),
-            mortgageLoan: Number(editingProp.mortgageLoan || 0),
+            initialDeposit: initialDeposit,
+            furtherDeposit: furtherDeposit,
+            balancePayment: balancePayment,
+            mortgageLoan: mortgageLoan,
             interestRate: Number(editingProp.interestRate || 0),
             outstandingLoan: Number(editingProp.outstandingLoan || 0),
             bank: editingProp.bank || 'Standard Bank' 

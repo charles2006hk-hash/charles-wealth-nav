@@ -535,31 +535,30 @@ const PropertyDashboard = ({
                 <div 
                   key={p.id} 
                   onClick={() => onSelectProperty(p.id)} 
-                  className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer group relative overflow-hidden active:scale-95 border border-transparent hover:border-blue-200"
-                  style={{ cursor: 'pointer' }} // 強制指定游標
+                  className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer group relative overflow-hidden active:scale-95 z-10"
                 >
-                    {/* Gradient Header */}
-                    <div className="h-24 bg-gradient-to-r from-blue-500 to-indigo-600 relative pointer-events-none"> 
-                         {/* pointer-events-none 確保點擊header也能穿透到外層div觸發onClick */}
-                        <span className="absolute top-4 left-4 px-3 py-1 text-xs rounded-full font-bold shadow-sm bg-white/90 text-slate-800">
+                    <div className="h-24 bg-gradient-to-r from-blue-500 to-indigo-600 relative">
+                        <span className={`absolute top-4 left-4 px-3 py-1 text-xs rounded-full font-bold shadow-sm ${
+                            p.status === 'Occupied' 
+                                ? (p.isLate ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700') 
+                                : 'bg-red-100 text-red-700'
+                        }`}>
                             {p.status === 'Occupied' ? (p.isLate ? '欠租 Arrears' : '出租 Occupied') : '空置 Vacant'}
                         </span>
-                    </div>
 
-                    {/* Delete Button - 恢復 pointer-events 以允許點擊 */}
-                    <button 
-                        onClick={(e) => {
-                            e.stopPropagation(); // 阻止冒泡，防止觸發卡片點擊
-                            onDeleteProperty(p.id);
-                        }}
-                        className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-red-500 text-white rounded-full transition-all duration-200 z-50 backdrop-blur-sm pointer-events-auto"
-                        title="刪除物業 Delete Property"
-                    >
-                        <ICONS.Trash />
-                    </button>
+                        <button 
+                            onClick={(e) => {
+                                e.stopPropagation(); 
+                                onDeleteProperty(p.id);
+                            }}
+                            className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-red-500 text-white rounded-full transition-all duration-200 z-50 backdrop-blur-sm"
+                            title="刪除物業 Delete Property"
+                        >
+                            <ICONS.Trash />
+                        </button>
+                    </div>
                     
-                    <div className="p-5 pt-2 pointer-events-none"> 
-                        {/* pointer-events-none 確保點擊內容也能穿透到外層div */}
+                    <div className="p-5 pt-2">
                         <div className="flex justify-between items-end mb-4">
                             <div>
                                 <h3 className="font-bold text-xl text-slate-800 mb-1">{p.name}</h3>
@@ -589,9 +588,9 @@ const PropertyDashboard = ({
                 </div>
             ))}
             
-             <button onClick={onAddProperty} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-2xl hover:bg-slate-50 transition text-slate-400 hover:text-slate-600 cursor-pointer min-h-[240px]"><ICONS.Plus /><span className="mt-2 font-bold">新增物業 Add Property</span></button>
+             <button onClick={onAddProperty} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-2xl hover:bg-slate-50 transition text-slate-400 hover:text-slate-600 cursor-pointer z-10 min-h-[240px]"><ICONS.Plus /><span className="mt-2 font-bold">新增物業 Add Property</span></button>
              {properties.length === 0 && (
-                <button onClick={onInitializeDefaults} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-blue-300 bg-blue-50 rounded-2xl hover:bg-blue-100 transition text-blue-500 cursor-pointer min-h-[240px]"><ICONS.Plus /><span className="mt-2 font-bold">初始化預設物業</span></button>
+                <button onClick={onInitializeDefaults} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-blue-300 bg-blue-50 rounded-2xl hover:bg-blue-100 transition text-blue-500 cursor-pointer z-10 min-h-[240px]"><ICONS.Plus /><span className="mt-2 font-bold">初始化預設物業</span></button>
             )}
         </div>
     </div>
@@ -663,133 +662,7 @@ const DocModal: React.FC<DocModalProps> = ({
     );
 }
 
-// --- 8. 獨立組件: PropertyDetailView (Extract to fix missing dependencies if inline) ---
-// Note: In the previous version PropertyDetailView was inside render. Let's extract it properly.
-const PropertyDetailView = ({ 
-    propId, propStats, transactions, leases, 
-    onBack, setDocConfig, setModalMode, setEditingProp, setEditingTx, 
-    handleDeleteProperty, setEditingLease, deleteItem,
-    ledgerFilter, setLedgerFilter, handleUpdateCategory 
-}: any) => {
-    const p = propStats.find((x: any) => x.id === propId);
-    if (!p) return <div>Property not found</div>;
-    // 安全過濾
-    const pTransactions = transactions
-        .filter((t: any) => t.propertyId === propId)
-        .sort((a: any,b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    const pLeases = leases.filter((l: any) => l.propertyId === propId);
-
-    return (
-        <div className="space-y-6 animate-in fade-in">
-            <button onClick={onBack} className="text-sm text-slate-500 hover:text-blue-600 flex items-center gap-1">← 返回總覽 Back to Dashboard</button>
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex justify-between items-start">
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">{p.name} <span className={`text-sm px-2 py-1 rounded-full font-normal ${p.status==='Occupied'?'bg-green-100 text-green-800':'bg-red-100 text-red-800'}`}>{p.status}</span></h1>
-                    <p className="text-slate-500 mt-1">{p.address}</p>
-                </div>
-                <div className="flex gap-2">
-                    <button onClick={() => { setDocConfig((prev: any) => ({ ...prev, propId: p.id, type: 'lease', amount: p.activeLease?.monthlyRent || 0, tenant: p.activeLease?.tenantName || '' })); setModalMode('doc'); }} className="px-3 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-bold hover:bg-indigo-100">建立租約</button>
-                     <button onClick={() => { setDocConfig((prev: any) => ({ ...prev, propId: p.id, type: 'receipt', amount: p.activeLease?.monthlyRent || 0, tenant: p.activeLease?.tenantName || '' })); setModalMode('doc'); }} className="px-3 py-2 bg-emerald-50 text-emerald-700 rounded-lg text-sm font-bold hover:bg-emerald-100">開收據</button>
-                     <button onClick={() => { setDocConfig((prev: any) => ({ ...prev, propId: p.id, type: 'statement', amount: 0, tenant: p.activeLease?.tenantName || '' })); setModalMode('doc'); }} className="px-3 py-2 bg-blue-50 text-blue-700 rounded-lg text-sm font-bold hover:bg-blue-100">租務對數</button>
-                    <button onClick={() => { setEditingProp(p); setModalMode('property'); }} className="p-2 bg-gray-100 rounded-lg hover:bg-gray-200"><ICONS.Edit /></button>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-white p-6 rounded-xl border space-y-4">
-                    <h3 className="font-bold border-b pb-2">財務摘要 Financials</h3>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div><p className="text-slate-500">買入價 Purchase</p><p className="font-mono">{formatCurrency(p.purchasePrice)}</p></div>
-                        <div><p className="text-slate-500">現估值 Value</p><p className="font-mono font-bold text-blue-600">{formatCurrency(p.currentValue)}</p></div>
-                        <div><p className="text-slate-500">尚餘按揭 Loan</p><p className="font-mono">{formatCurrency(p.outstandingLoan)}</p></div>
-                        <div><p className="text-slate-500">月供款 Mortgage</p><p className="font-mono text-red-500">-{formatCurrency(p.mortgageAmount)}</p></div>
-                    </div>
-                </div>
-                <div className="bg-white p-6 rounded-xl border space-y-4">
-                    <h3 className="font-bold border-b pb-2">收支紀錄 Expenses</h3>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div><p className="text-slate-500">管理費 Mgt</p><p className="font-mono">{formatCurrency(p.managementFee)}/mo</p></div>
-                        <div><p className="text-slate-500">差餉 Rates</p><p className="font-mono">{formatCurrency(p.govtRates)}/qtr</p></div>
-                        <div><p className="text-slate-500">地租 Govt Rent</p><p className="font-mono">{formatCurrency(p.govtRent)}/qtr</p></div>
-                    </div>
-                </div>
-            </div>
-
-            <div className="space-y-4">
-                 <div className="flex justify-between items-center">
-                    <h3 className="font-bold">租約紀錄 Lease History</h3>
-                    <button onClick={()=>{
-                        setEditingLease({ propertyId: p.id, tenantName: '', tenantID: '', startDate: '', endDate: '', monthlyRent: 0, deposit: 0, status: 'Active' } as Lease);
-                        setModalMode('lease');
-                    }} className="text-sm text-blue-600 hover:underline">+ Register New Lease</button>
-                 </div>
-                 {pLeases.map((l: any) => (
-                     <div key={l.id} className={`p-4 rounded-xl border ${l.status === 'Active' ? 'bg-green-50 border-green-200' : 'bg-gray-50'}`}>
-                         <div className="flex justify-between">
-                             <div>
-                                 <p className="font-bold text-slate-800">{l.tenantName} <span className="text-xs font-normal text-slate-500">({l.tenantID})</span></p>
-                                 <p className="text-sm">{l.startDate} to {l.endDate}</p>
-                             </div>
-                             <div className="text-right">
-                                 <p className="font-bold font-mono">{formatCurrency(l.monthlyRent)}/mo</p>
-                                 <div className="flex gap-2 justify-end mt-1">
-                                     {l.status === 'Active' && <span className="text-xs bg-green-200 text-green-800 px-2 py-0.5 rounded">Active</span>}
-                                     <button onClick={() => { setEditingLease(l); setModalMode('lease'); }} className="text-xs text-blue-600 hover:underline">Edit</button>
-                                 </div>
-                             </div>
-                         </div>
-                     </div>
-                 ))}
-            </div>
-
-            <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-                <div className="p-4 bg-slate-50 flex justify-between items-center border-b">
-                    <h3 className="font-bold">流水帳 Ledger</h3>
-                    <button onClick={() => { setEditingTx({ propertyId: p.id, date: new Date().toISOString().split('T')[0] } as any); setModalMode('transaction'); }} className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 font-bold">+ 新增紀錄 Add Record</button>
-                </div>
-                <div className="p-4 bg-slate-50 border-b">
-                    <input 
-                        type="text" 
-                        placeholder="Search transactions..." 
-                        className="border rounded px-2 py-1 text-sm w-full" 
-                        value={ledgerFilter} 
-                        onChange={e => setLedgerFilter(e.target.value)} 
-                    />
-                </div>
-                <div className="max-h-[500px] overflow-y-auto">
-                    <table className="w-full text-sm text-left">
-                        <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0"><tr><th className="p-3">Date</th><th className="p-3">Category</th><th className="p-3">Detail</th><th className="p-3">Amount</th><th className="p-3">Tags</th><th className="p-3">Action</th></tr></thead>
-                        <tbody className="divide-y">
-                            {pTransactions.filter((t: any) => (JSON.stringify(t) || '').toLowerCase().includes(ledgerFilter.toLowerCase())).map((t: any) => (
-                                <tr key={t.id} className="hover:bg-blue-50">
-                                    <td className="p-3">{t.date}</td>
-                                    <td className="p-3">
-                                        <select 
-                                            className="bg-transparent border-none" 
-                                            value={t.category} 
-                                            onChange={e => handleUpdateCategory(t.id, e.target.value)}
-                                        >
-                                            {CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
-                                        </select>
-                                    </td>
-                                    <td className="p-3 font-medium">{t.merchant} <span className="text-slate-400 text-xs">{t.note}</span></td>
-                                    <td className={`p-3 font-mono font-bold ${(t.category || '').includes('Income') ? 'text-emerald-600' : 'text-red-500'}`}>{(t.category || '').includes('Income') ? '+' : '-'}{formatCurrency(t.amount)}</td>
-                                    <td className="p-3 flex gap-1">{t.tags?.map((tag: any) => <span key={tag} className="text-xs bg-yellow-100 text-yellow-800 px-1 rounded">#{tag}</span>)}</td>
-                                    <td className="p-3">
-                                        <button onClick={() => { setEditingTx(t); setModalMode('transaction'); }} className="text-blue-400 hover:text-blue-600 mr-2"><ICONS.Edit /></button>
-                                        <button onClick={() => deleteItem('transactions', t.id)} className="text-red-400 hover:text-red-600"><ICONS.Trash /></button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-// --- 9. 主應用程式 ---
+// --- 8. 主應用程式 ---
 const App: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
@@ -986,11 +859,6 @@ const App: React.FC = () => {
             outstandingLoan: Number(editingProp.outstandingLoan || 0),
             bank: editingProp.bank || 'Standard Bank' 
         };
-        
-        // Ensure purchase price is set if not manually overridden or just calculated
-        if (!pData.purchasePrice) {
-             pData.purchasePrice = pData.initialDeposit + pData.furtherDeposit + pData.balancePayment + pData.mortgageLoan;
-        }
 
         if(editingProp.id) await setDoc(doc(db, "properties", editingProp.id), pData);
         else await addDoc(collection(db, "properties"), pData);

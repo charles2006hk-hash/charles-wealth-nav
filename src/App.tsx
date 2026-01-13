@@ -143,6 +143,7 @@ const ICONS = {
   Edit: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>,
   Tag: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/></svg>,
   DollarSign: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
+  PieChart: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>,
   Shield: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
   GraduationCap: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>,
   ShieldCheck: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>,
@@ -200,7 +201,6 @@ const StatCard = ({ title, value, subtext, color, iconName }: any) => {
 };
 
 // --- 5. 獨立組件: 文書預覽內容 ---
-// 注意：Props 已正確包含 transactions
 const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig: DocConfig, properties: Property[], transactions: Transaction[] }) => {
     const prop = properties.find(p => p.id === docConfig.propId) || { name: 'Unknown Property', address: '' } as Property;
 
@@ -221,7 +221,6 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
     } 
     
     if (docConfig.type === 'statement') {
-        // 使用安全鏈接防止白屏
         const filteredTxs = transactions
             .filter(t => t.propertyId === docConfig.propId && (!docConfig.statementDateStart || t.date >= docConfig.statementDateStart) && (!docConfig.statementDateEnd || t.date <= docConfig.statementDateEnd))
             .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -504,7 +503,7 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
     );
 };
 
-// --- 6. 獨立組件: DocModal (移至 App 外部以解決 TS 錯誤) ---
+// --- 6. 獨立組件: DocModal (移至 App 外部) ---
 interface DocModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -739,20 +738,42 @@ const App: React.FC = () => {
   const handleSaveProperty = async () => {
       if(!editingProp) return;
       try {
+        // Calculate monthly mortgage payment if data is available
+        let calcMortgage = editingProp.mortgageAmount || 0;
+        if (editingProp.mortgageLoan && editingProp.interestRate && editingProp.tenure) {
+            const r = editingProp.interestRate / 100 / 12;
+            const n = editingProp.tenure * 12;
+            if (r > 0 && n > 0) {
+                 calcMortgage = editingProp.mortgageLoan * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+            }
+        }
+        
+        // Ensure values are numbers before calculation, use 0 if undefined/null
+        const initialDeposit = Number(editingProp.initialDeposit || 0);
+        const furtherDeposit = Number(editingProp.furtherDeposit || 0);
+        const balancePayment = Number(editingProp.balancePayment || 0);
+        const mortgageLoan = Number(editingProp.mortgageLoan || 0);
+
+        let purchasePrice = editingProp.purchasePrice;
+        // Auto-calculate Purchase Price if components are filled
+        if (initialDeposit || furtherDeposit || balancePayment || mortgageLoan) {
+             purchasePrice = initialDeposit + furtherDeposit + balancePayment + mortgageLoan;
+        }
+
         const pData = { 
             ...editingProp, 
             currentValue: Number(editingProp.currentValue || 0), 
-            purchasePrice: Number(editingProp.purchasePrice || 0),
-            mortgageAmount: Number(editingProp.mortgageAmount || 0),
+            purchasePrice: Number(purchasePrice || 0),
+            mortgageAmount: Number(calcMortgage || 0),
             estRent: Number(editingProp.estRent || 0),
             tenure: Number(editingProp.tenure || 0),
             managementFee: Number(editingProp.managementFee || 0),
             govtRates: Number(editingProp.govtRates || 0),
             govtRent: Number(editingProp.govtRent || 0),
-            initialDeposit: Number(editingProp.initialDeposit || 0),
-            furtherDeposit: Number(editingProp.furtherDeposit || 0),
-            balancePayment: Number(editingProp.balancePayment || 0),
-            mortgageLoan: Number(editingProp.mortgageLoan || 0),
+            initialDeposit: initialDeposit,
+            furtherDeposit: furtherDeposit,
+            balancePayment: balancePayment,
+            mortgageLoan: mortgageLoan,
             interestRate: Number(editingProp.interestRate || 0),
             outstandingLoan: Number(editingProp.outstandingLoan || 0),
             bank: editingProp.bank || 'Standard Bank' 
@@ -999,6 +1020,7 @@ const App: React.FC = () => {
                                     <div><p className="text-slate-500">現估值 Value</p><p className="font-mono font-bold text-blue-600">{formatCurrency(p.currentValue)}</p></div>
                                     <div><p className="text-slate-500">尚餘按揭 Loan</p><p className="font-mono">{formatCurrency(p.outstandingLoan)}</p></div>
                                     <div><p className="text-slate-500">月供款 Mortgage</p><p className="font-mono text-red-500">-{formatCurrency(p.mortgageAmount)}</p></div>
+                                    <div><p className="text-slate-500">利率 Interest Rate</p><p className="font-mono">{p.interestRate}%</p></div>
                                 </div>
                             </div>
                             <div className="bg-white p-6 rounded-xl border space-y-4">

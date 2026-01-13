@@ -62,15 +62,15 @@ interface Property {
   currentValue: number; 
   
   // 買入流程詳情
-  purchasePrice: number; // 總價 (自動計算)
+  purchasePrice: number; // 總價
   initialDeposit: number; // 細訂
   furtherDeposit: number; // 大訂
-  balancePayment: number; // 尾數 (Cash Balance)
+  balancePayment: number; // 尾數
   mortgageLoan: number; // 按揭貸款額
   
   // 按揭詳情
   bank: string;
-  interestRate: number; // 利率 (%)
+  interestRate: number; // 利率
   mortgageAmount: number; // 月供
   outstandingLoan: number; // 尚餘欠款
   tenure: number;  // 年期
@@ -240,8 +240,8 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
                             <tr key={t.id}>
                                 <td className="border border-black p-2">{t.date}</td>
                                 <td className="border border-black p-2">{(t.category || '')} - {t.note}</td>
-                                <td className="border border-black p-2 text-right">{(t.category || '').includes('Income') ? '' : formatCurrency(t.amount)}</td>
-                                <td className="border border-black p-2 text-right">{(t.category || '').includes('Income') ? formatCurrency(t.amount) : ''}</td>
+                                <td className="border border-black p-2 text-right">{(t.category || '').includes('Rental Income') ? '' : formatCurrency(t.amount)}</td>
+                                <td className="border border-black p-2 text-right">{(t.category || '').includes('Rental Income') ? formatCurrency(t.amount) : ''}</td>
                             </tr>
                         ))}
                     </tbody>
@@ -673,11 +673,21 @@ const App: React.FC = () => {
   const handleSaveProperty = async () => {
       if(!editingProp) return;
       try {
+        // Calculate monthly mortgage payment if data is available
+        let calcMortgage = editingProp.mortgageAmount || 0;
+        if (editingProp.mortgageLoan && editingProp.interestRate && editingProp.tenure) {
+            const r = editingProp.interestRate / 100 / 12;
+            const n = editingProp.tenure * 12;
+            if (r > 0 && n > 0) {
+                 calcMortgage = editingProp.mortgageLoan * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+            }
+        }
+
         const pData = { 
             ...editingProp, 
             currentValue: Number(editingProp.currentValue), 
             purchasePrice: Number(editingProp.purchasePrice),
-            mortgageAmount: Number(editingProp.mortgageAmount),
+            mortgageAmount: Number(calcMortgage),
             estRent: Number(editingProp.estRent),
             tenure: Number(editingProp.tenure),
             managementFee: Number(editingProp.managementFee),
@@ -689,7 +699,7 @@ const App: React.FC = () => {
             mortgageLoan: Number(editingProp.mortgageLoan || 0),
             interestRate: Number(editingProp.interestRate || 0),
             outstandingLoan: Number(editingProp.outstandingLoan || 0),
-            bank: editingProp.bank || 'Standard Bank' // Add default bank to fix TS2345
+            bank: editingProp.bank || 'Standard Bank' 
         };
         // Auto-calculate Purchase Price if components are filled
         if (pData.initialDeposit || pData.furtherDeposit || pData.balancePayment) {
@@ -791,19 +801,6 @@ const App: React.FC = () => {
               <StatCard title="應收未收 Arrears" value={propStats.filter(p=>p.isLate).length} color="red" iconName="Shield" subtext="Units Late" />
           </div>
 
-          {/* 壓力測試區塊 */}
-          <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
-              <div className="font-bold text-slate-700">壓力測試 Stress Test:</div>
-              <div className="flex items-center gap-2">
-                  <span className="text-sm">Rate +{stressRate}%</span>
-                  <input type="range" min="0" max="5" step="0.5" value={stressRate} onChange={e=>setStressRate(Number(e.target.value))} className="w-24" />
-              </div>
-              <div className="flex items-center gap-2">
-                  <span className="text-sm">Rent Drop {rentDrop}%</span>
-                  <input type="range" min="0" max="30" step="5" value={rentDrop} onChange={e=>setRentDrop(Number(e.target.value))} className="w-24" />
-              </div>
-          </div>
-
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {propStats.map(p => (
                   <div key={p.id} onClick={() => setPropertyViewId(p.id)} className="bg-white rounded-xl shadow-sm border hover:shadow-md transition cursor-pointer overflow-hidden group relative">
@@ -819,7 +816,6 @@ const App: React.FC = () => {
                           <div className="grid grid-cols-2 gap-4 text-sm bg-slate-50 p-3 rounded-lg">
                               <div><p className="text-xs text-slate-400">現時估值</p><p className="font-mono font-bold">{formatCurrency(p.currentValue)}</p></div>
                               <div><p className="text-xs text-slate-400">每月租金</p><p className="font-mono font-bold text-emerald-600">{p.activeLease ? formatCurrency(p.activeLease.monthlyRent) : '-'}</p></div>
-                              {/* 使用 stressedExpense */}
                               <div><p className="text-xs text-slate-400">壓力支出</p><p className="font-mono text-red-400">-{formatCurrency(p.stressedExpense)}</p></div>
                           </div>
                       </div>
@@ -872,8 +868,9 @@ const App: React.FC = () => {
                         <div className="grid grid-cols-2 gap-4 text-sm">
                             <div><p className="text-slate-500">買入價 Purchase</p><p className="font-mono">{formatCurrency(p.purchasePrice)}</p></div>
                             <div><p className="text-slate-500">現估值 Value</p><p className="font-mono font-bold text-blue-600">{formatCurrency(p.currentValue)}</p></div>
-                            <div><p className="text-slate-500">尚餘按揭 Loan</p><p className="font-mono">{formatCurrency(p.outstandingLoan)}</p></div>
-                            <div><p className="text-slate-500">月供款 Mortgage</p><p className="font-mono text-red-500">-{formatCurrency(p.mortgageAmount)}</p></div>
+                            <div><p className="text-slate-500">尚餘按揭 Outstanding Loan</p><p className="font-mono">{formatCurrency(p.outstandingLoan)}</p></div>
+                            <div><p className="text-slate-500">月供款 Monthly Repayment</p><p className="font-mono text-red-500">-{formatCurrency(p.mortgageAmount)}</p></div>
+                            <div><p className="text-slate-500">利率 Interest Rate</p><p className="font-mono">{p.interestRate}%</p></div>
                         </div>
                     </div>
                     <div className="bg-white p-6 rounded-xl border space-y-4">
@@ -904,7 +901,7 @@ const App: React.FC = () => {
                                         <td className="p-3">{t.date}</td>
                                         <td className="p-3"><select className="bg-transparent border-none" value={t.category} onChange={e => handleUpdateCategory(t.id, e.target.value)}>{CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select></td>
                                         <td className="p-3 font-medium">{t.merchant} <span className="text-slate-400 text-xs">{t.note}</span></td>
-                                        <td className={`p-3 font-mono font-bold ${t.category?.includes('Income') ? 'text-emerald-600' : 'text-red-500'}`}>{t.category?.includes('Income') ? '+' : '-'}{formatCurrency(t.amount)}</td>
+                                        <td className={`p-3 font-mono font-bold ${(t.category || '').includes('Income') ? 'text-emerald-600' : 'text-red-500'}`}>{(t.category || '').includes('Income') ? '+' : '-'}{formatCurrency(t.amount)}</td>
                                         <td className="p-3 flex gap-1">{t.tags?.map(tag => <span key={tag} className="text-xs bg-yellow-100 text-yellow-800 px-1 rounded">#{tag}</span>)}</td>
                                         <td className="p-3">
                                             <button onClick={() => { setEditingTx(t); setModalMode('transaction'); }} className="text-blue-400 hover:text-blue-600 mr-2"><ICONS.Edit /></button>
@@ -1059,11 +1056,11 @@ const App: React.FC = () => {
                         <p className="text-slate-500">所有交易紀錄一覽 Table of All Transactions</p>
                         <div className="flex gap-2">
                             <label className="flex items-center gap-2 px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 cursor-pointer">
-                                <ICONS.Plus /> 匯入 Import JSON
+                                <ICONS.Upload /> 匯入 Import JSON
                                 <input type="file" className="hidden" onChange={handleFileUpload} accept=".json" />
                             </label>
                             <button onClick={handleExportJSON} className="px-3 py-1 bg-slate-600 text-white text-xs rounded hover:bg-slate-700 flex items-center gap-2">
-                                <ICONS.FileText /> 導出 Export JSON
+                                <ICONS.Download /> 導出 Export JSON
                             </button>
                         </div>
                       </div>
@@ -1232,6 +1229,28 @@ const App: React.FC = () => {
                                       </span>
                                   </div>
                               </div>
+                          </div>
+                          
+                          <div className="space-y-2">
+                               <label className="text-xs font-bold text-slate-500 uppercase">Mortgage & Loan 按揭與貸款</label>
+                               <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-100 grid grid-cols-2 gap-4">
+                                   <div>
+                                       <label className="text-xs text-slate-500 block mb-1">Outstanding Loan 尚餘按揭</label>
+                                       <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.outstandingLoan || 0} onChange={e => setEditingProp({...editingProp, outstandingLoan: Number(e.target.value)} as any)} />
+                                   </div>
+                                   <div>
+                                       <label className="text-xs text-slate-500 block mb-1">Interest Rate 按揭利率 (%)</label>
+                                       <input className="border w-full p-2 rounded text-sm" type="number" step="0.1" value={editingProp?.interestRate || 0} onChange={e => setEditingProp({...editingProp, interestRate: Number(e.target.value)} as any)} />
+                                   </div>
+                                    <div>
+                                       <label className="text-xs text-slate-500 block mb-1">Tenure 年期 (Years)</label>
+                                       <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.tenure || 0} onChange={e => setEditingProp({...editingProp, tenure: Number(e.target.value)} as any)} />
+                                   </div>
+                                   <div>
+                                       <label className="text-xs text-slate-500 block mb-1">Monthly Repayment 每月供款</label>
+                                       <input className="border w-full p-2 rounded text-sm bg-white font-bold text-red-600" type="number" value={editingProp?.mortgageAmount || 0} onChange={e => setEditingProp({...editingProp, mortgageAmount: Number(e.target.value)} as any)} />
+                                   </div>
+                               </div>
                           </div>
 
                           <div className="space-y-2">

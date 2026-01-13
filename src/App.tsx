@@ -575,7 +575,7 @@ const PropertyDashboard = ({
     </div>
 );
 
-// --- 7. 獨立組件: DocModal (移至 App 外部) ---
+// --- 7. 獨立組件: DocModal (移至 App 外部以解決 TS 錯誤) ---
 interface DocModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -861,16 +861,16 @@ const App: React.FC = () => {
         setModalMode('none');
       } catch(e) { alert(e); }
   }
-  
+
+  const deleteItem = async (col: string, id: string) => {
+      if(window.confirm('確定刪除?')) await deleteDoc(doc(db, col, id));
+  };
+
   // Implement delete property handler
   const handleDeleteProperty = async (id: string) => {
       if(window.confirm('確定刪除此物業？ (此操作無法復原)')) {
           await deleteDoc(doc(db, "properties", id));
       }
-  };
-
-  const deleteItem = async (col: string, id: string) => {
-      if(window.confirm('確定刪除?')) await deleteDoc(doc(db, col, id));
   };
 
   const handleClearData = async () => {

@@ -185,7 +185,7 @@ const formatCurrency = (val: any) => {
     return `$${num.toLocaleString()}`;
 };
 
-// --- 4. 輔助組件 ---
+// --- 4. 輔助組件 (StatCard) ---
 const StatCard = ({ title, value, subtext, color, iconName }: any) => {
   const Icon = ICONS[iconName as keyof typeof ICONS] || ICONS.Tag;
   return (
@@ -503,7 +503,66 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
     );
 };
 
-// --- 6. 獨立組件: DocModal (移至 App 外部) ---
+// --- 6. 獨立組件: PropertyDashboard (Extract for Click Stability) ---
+const PropertyDashboard = ({ 
+    properties, totalValuation, totalMonthlyRent, propStats, 
+    stressRate, setStressRate, rentDrop, setRentDrop, 
+    setPropertyViewId, setEditingProp, setModalMode, initializeDefaults 
+}: any) => (
+    <div className="space-y-8 animate-in fade-in">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <StatCard title="物業總估值 Total Valuation" value={formatCurrency(totalValuation)} color="blue" iconName="Home" subtext={`${properties.length} Properties`} />
+            <StatCard title="每月租金收入 Monthly Rent" value={formatCurrency(totalMonthlyRent)} color="emerald" iconName="DollarSign" />
+            <StatCard title="整體出租率 Occupancy Rate" value={`${properties.length ? (properties.filter((p:any)=>p.status==='Occupied').length / properties.length * 100).toFixed(0) : 0}%`} color="indigo" iconName="PieChart" />
+            <StatCard title="應收未收 Arrears" value={propStats.filter((p:any)=>p.isLate).length} color="red" iconName="Shield" subtext="Units Late" />
+        </div>
+
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
+            <div className="font-bold text-slate-700">壓力測試 Stress Test:</div>
+            <div className="flex items-center gap-2">
+                <span className="text-sm">Rate +{stressRate}%</span>
+                <input type="range" min="0" max="5" step="0.5" value={stressRate} onChange={e=>setStressRate(Number(e.target.value))} className="w-24" />
+            </div>
+            <div className="flex items-center gap-2">
+                <span className="text-sm">Rent Drop {rentDrop}%</span>
+                <input type="range" min="0" max="30" step="5" value={rentDrop} onChange={e=>setRentDrop(Number(e.target.value))} className="w-24" />
+            </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {propStats.map((p: any) => (
+                <div 
+                  key={p.id} 
+                  onClick={() => setPropertyViewId(p.id)} 
+                  className="bg-white rounded-xl shadow-sm border hover:shadow-md transition cursor-pointer overflow-hidden group relative z-10 cursor-pointer"
+                >
+                    <div className={`h-2 w-full ${p.status==='Occupied' ? (p.isLate ? 'bg-orange-500' : 'bg-emerald-500') : 'bg-red-500'}`} />
+                    <div className="p-5">
+                        <div className="flex justify-between items-start mb-2">
+                            <h3 className="font-bold text-lg text-slate-800 group-hover:text-blue-600 transition truncate">{p.name}</h3>
+                            <span className={`px-2 py-1 text-xs rounded-full font-bold whitespace-nowrap ${p.status==='Occupied' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                {p.status === 'Occupied' ? (p.isLate ? '欠租 Arrears' : '出租 Occupied') : '空置 Vacant'}
+                            </span>
+                        </div>
+                        <p className="text-sm text-slate-500 mb-4 truncate">{p.address || 'No Address'}</p>
+                        <div className="grid grid-cols-2 gap-4 text-sm bg-slate-50 p-3 rounded-lg">
+                            <div><p className="text-xs text-slate-400">現時估值</p><p className="font-mono font-bold">{formatCurrency(p.currentValue)}</p></div>
+                            <div><p className="text-xs text-slate-400">每月租金</p><p className="font-mono font-bold text-emerald-600">{p.activeLease ? formatCurrency(p.activeLease.monthlyRent) : '-'}</p></div>
+                            <div><p className="text-xs text-slate-400">壓力支出</p><p className="font-mono text-red-400">-{formatCurrency(p.stressedExpense)}</p></div>
+                        </div>
+                    </div>
+                </div>
+            ))}
+            
+             <button onClick={() => { setEditingProp({ id: '', name: '', address: '', type: 'Investment', status: 'Vacant', currentValue: 0, purchasePrice: 0, initialDeposit: 0, furtherDeposit: 0, balancePayment: 0, mortgageLoan: 0, mortgageAmount: 0, outstandingLoan: 0, managementFee: 0, govtRates: 0, govtRent: 0, estRent: 0, tenure: 0, interestRate: 0, bank: '' }); setModalMode('property'); }} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-xl hover:bg-slate-50 transition text-slate-400 hover:text-slate-600 cursor-pointer z-10"><ICONS.Plus /><span className="mt-2 font-bold">新增物業 Add Property</span></button>
+             {properties.length === 0 && (
+                <button onClick={initializeDefaults} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-blue-300 bg-blue-50 rounded-xl hover:bg-blue-100 transition text-blue-500 cursor-pointer z-10"><ICONS.Plus /><span className="mt-2 font-bold">初始化預設物業</span></button>
+            )}
+        </div>
+    </div>
+);
+
+// --- 7. 獨立組件: DocModal (移至 App 外部) ---
 interface DocModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -569,7 +628,7 @@ const DocModal: React.FC<DocModalProps> = ({
     );
 }
 
-// --- 7. 主應用程式 ---
+// --- 8. 主應用程式 ---
 const App: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
@@ -747,33 +806,21 @@ const App: React.FC = () => {
                  calcMortgage = editingProp.mortgageLoan * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
             }
         }
-        
-        // Ensure values are numbers before calculation, use 0 if undefined/null
-        const initialDeposit = Number(editingProp.initialDeposit || 0);
-        const furtherDeposit = Number(editingProp.furtherDeposit || 0);
-        const balancePayment = Number(editingProp.balancePayment || 0);
-        const mortgageLoan = Number(editingProp.mortgageLoan || 0);
-
-        let purchasePrice = editingProp.purchasePrice;
-        // Auto-calculate Purchase Price if components are filled
-        if (initialDeposit || furtherDeposit || balancePayment || mortgageLoan) {
-             purchasePrice = initialDeposit + furtherDeposit + balancePayment + mortgageLoan;
-        }
 
         const pData = { 
             ...editingProp, 
             currentValue: Number(editingProp.currentValue || 0), 
-            purchasePrice: Number(purchasePrice || 0),
+            purchasePrice: Number(editingProp.purchasePrice || 0),
             mortgageAmount: Number(calcMortgage || 0),
             estRent: Number(editingProp.estRent || 0),
             tenure: Number(editingProp.tenure || 0),
             managementFee: Number(editingProp.managementFee || 0),
             govtRates: Number(editingProp.govtRates || 0),
             govtRent: Number(editingProp.govtRent || 0),
-            initialDeposit: initialDeposit,
-            furtherDeposit: furtherDeposit,
-            balancePayment: balancePayment,
-            mortgageLoan: mortgageLoan,
+            initialDeposit: Number(editingProp.initialDeposit || 0),
+            furtherDeposit: Number(editingProp.furtherDeposit || 0),
+            balancePayment: Number(editingProp.balancePayment || 0),
+            mortgageLoan: Number(editingProp.mortgageLoan || 0),
             interestRate: Number(editingProp.interestRate || 0),
             outstandingLoan: Number(editingProp.outstandingLoan || 0),
             bank: editingProp.bank || 'Standard Bank' 

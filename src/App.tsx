@@ -793,6 +793,7 @@ const App: React.FC = () => {
   // --- Views as Render Functions (Fix for click issue) ---
   const renderPropertyDashboard = () => (
       <div className="space-y-8 animate-in fade-in">
+          {/* 頂部統計卡片 */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <StatCard title="物業總估值 Total Valuation" value={formatCurrency(totalValuation)} color="blue" iconName="Home" subtext={`${properties.length} Properties`} />
               <StatCard title="每月租金收入 Monthly Rent" value={formatCurrency(totalMonthlyRent)} color="emerald" iconName="DollarSign" />
@@ -805,23 +806,37 @@ const App: React.FC = () => {
               <div className="font-bold text-slate-700">壓力測試 Stress Test:</div>
               <div className="flex items-center gap-2">
                   <span className="text-sm">Rate +{stressRate}%</span>
-                  <input type="range" min="0" max="5" step="0.5" value={stressRate} onChange={e=>setStressRate(Number(e.target.value))} className="w-24" />
+                  <input type="range" min="0" max="5" step="0.5" value={stressRate} onChange={e=>setStressRate(Number(e.target.value))} className="w-24 cursor-pointer" />
               </div>
               <div className="flex items-center gap-2">
                   <span className="text-sm">Rent Drop {rentDrop}%</span>
-                  <input type="range" min="0" max="30" step="5" value={rentDrop} onChange={e=>setRentDrop(Number(e.target.value))} className="w-24" />
+                  <input type="range" min="0" max="30" step="5" value={rentDrop} onChange={e=>setRentDrop(Number(e.target.value))} className="w-24 cursor-pointer" />
               </div>
           </div>
 
+          {/* 物業卡片列表 */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {propStats.map(p => (
-                  <button 
-                    key={p.id} 
-                    onClick={() => setPropertyViewId(p.id)} 
-                    className="w-full text-left bg-white rounded-xl shadow-sm border hover:shadow-md hover:border-blue-400 transition cursor-pointer overflow-hidden group relative focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  <div 
+                      key={p.id} 
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => {
+                          e.preventDefault(); // 防止任何默認行為干擾
+                          console.log("Navigating to property:", p.id); // 除錯用：請查看 Console 是否有顯示
+                          setPropertyViewId(p.id); 
+                      }}
+                      onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                              setPropertyViewId(p.id);
+                          }
+                      }}
+                      className="bg-white rounded-xl shadow-sm border hover:shadow-md hover:border-blue-400 transition-all duration-200 cursor-pointer overflow-hidden group relative z-0 hover:z-10 select-none"
                   >
+                      {/* 狀態條 */}
                       <div className={`h-2 w-full ${p.status==='Occupied' ? (p.isLate ? 'bg-orange-500' : 'bg-emerald-500') : 'bg-red-500'}`} />
-                      <div className="p-5">
+                      
+                      <div className="p-5 pointer-events-none"> {/* pointer-events-none 確保點擊穿透到外層 div */}
                           <div className="flex justify-between items-start mb-2">
                               <h3 className="font-bold text-lg text-slate-800 group-hover:text-blue-600 transition truncate">{p.name}</h3>
                               <span className={`px-2 py-1 text-xs rounded-full font-bold whitespace-nowrap ${p.status==='Occupied' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
@@ -832,16 +847,22 @@ const App: React.FC = () => {
                           <div className="grid grid-cols-2 gap-4 text-sm bg-slate-50 p-3 rounded-lg">
                               <div><p className="text-xs text-slate-400">現時估值</p><p className="font-mono font-bold">{formatCurrency(p.currentValue)}</p></div>
                               <div><p className="text-xs text-slate-400">每月租金</p><p className="font-mono font-bold text-emerald-600">{p.activeLease ? formatCurrency(p.activeLease.monthlyRent) : '-'}</p></div>
-                              {/* 使用 stressedExpense */}
                               <div><p className="text-xs text-slate-400">壓力支出</p><p className="font-mono text-red-400">-{formatCurrency(p.stressedExpense)}</p></div>
                           </div>
                       </div>
-                  </button>
+                  </div>
               ))}
               
-               <button onClick={() => { setEditingProp({ id: '', name: '', address: '', type: 'Investment', status: 'Vacant', currentValue: 0, purchasePrice: 0, initialDeposit: 0, furtherDeposit: 0, balancePayment: 0, mortgageLoan: 0, mortgageAmount: 0, outstandingLoan: 0, managementFee: 0, govtRates: 0, govtRent: 0, estRent: 0, tenure: 0, interestRate: 0, bank: '' }); setModalMode('property'); }} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-xl hover:bg-slate-50 transition text-slate-400 hover:text-slate-600"><ICONS.Plus /><span className="mt-2 font-bold">新增物業 Add Property</span></button>
+               <button onClick={() => { setEditingProp({ id: '', name: '', address: '', type: 'Investment', status: 'Vacant', currentValue: 0, purchasePrice: 0, initialDeposit: 0, furtherDeposit: 0, balancePayment: 0, mortgageLoan: 0, mortgageAmount: 0, outstandingLoan: 0, managementFee: 0, govtRates: 0, govtRent: 0, estRent: 0, tenure: 0, interestRate: 0, bank: '' }); setModalMode('property'); }} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-xl hover:bg-slate-50 transition text-slate-400 hover:text-slate-600 cursor-pointer z-10 relative">
+                   <ICONS.Plus />
+                   <span className="mt-2 font-bold">新增物業 Add Property</span>
+               </button>
+               
                {properties.length === 0 && (
-                  <button onClick={initializeDefaults} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-blue-300 bg-blue-50 rounded-xl hover:bg-blue-100 transition text-blue-500"><ICONS.Plus /><span className="mt-2 font-bold">初始化預設物業</span></button>
+                  <button onClick={initializeDefaults} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-blue-300 bg-blue-50 rounded-xl hover:bg-blue-100 transition text-blue-500 cursor-pointer z-10 relative">
+                      <ICONS.Plus />
+                      <span className="mt-2 font-bold">初始化預設物業</span>
+                  </button>
               )}
           </div>
       </div>

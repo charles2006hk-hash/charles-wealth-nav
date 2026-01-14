@@ -963,7 +963,7 @@ const App: React.FC = () => {
   const handleSaveProperty = async () => {
       if(!editingProp) return;
       try {
-        // Calculate monthly mortgage payment if data is available
+        // 1. 計算按揭供款 (保持原邏輯)
         let calcMortgage = editingProp.mortgageAmount || 0;
         if (editingProp.mortgageLoan && editingProp.interestRate && editingProp.tenure) {
             const r = editingProp.interestRate / 100 / 12;
@@ -973,29 +973,53 @@ const App: React.FC = () => {
             }
         }
 
+        // 2. 關鍵修正：從 editingProp 中分離出「UI 統計欄位」與「純資料庫欄位」
+        // 我們將 activeLease, income, net 等計算屬性分離出來，剩下的 (rawData) 才是要存入資料庫的
+        const { 
+            activeLease, 
+            income, 
+            expense, 
+            net, 
+            isLate, 
+            stressedExpense, 
+            estRent, // estRent 在介面上有輸入，但在 PropertyWithStats 也有計算，這裡先過濾掉，下面再明確指定
+            id,      // ID 不需要存入文件內容中
+            ...rawData 
+        } = editingProp as any;
+
+        // 3. 建構乾淨的儲存物件
         const pData = { 
-            ...editingProp, 
-            currentValue: Number(editingProp.currentValue || 0), 
-            purchasePrice: Number(editingProp.purchasePrice || 0),
+            ...rawData, 
+            // 確保所有數值欄位正確轉換，避免 NaN
+            currentValue: Number(rawData.currentValue || 0), 
+            purchasePrice: Number(rawData.purchasePrice || 0),
             mortgageAmount: Number(calcMortgage || 0),
-            estRent: Number(editingProp.estRent || 0),
-            tenure: Number(editingProp.tenure || 0),
-            managementFee: Number(editingProp.managementFee || 0),
-            govtRates: Number(editingProp.govtRates || 0),
-            govtRent: Number(editingProp.govtRent || 0),
-            initialDeposit: Number(editingProp.initialDeposit || 0),
-            furtherDeposit: Number(editingProp.furtherDeposit || 0),
-            balancePayment: Number(editingProp.balancePayment || 0),
-            mortgageLoan: Number(editingProp.mortgageLoan || 0),
-            interestRate: Number(editingProp.interestRate || 0),
-            outstandingLoan: Number(editingProp.outstandingLoan || 0),
-            bank: editingProp.bank || 'Standard Bank' 
+            estRent: Number(editingProp.estRent || 0), // 明確取用編輯器中的值
+            tenure: Number(rawData.tenure || 0),
+            managementFee: Number(rawData.managementFee || 0),
+            govtRates: Number(rawData.govtRates || 0),
+            govtRent: Number(rawData.govtRent || 0),
+            initialDeposit: Number(rawData.initialDeposit || 0),
+            furtherDeposit: Number(rawData.furtherDeposit || 0),
+            balancePayment: Number(rawData.balancePayment || 0),
+            mortgageLoan: Number(rawData.mortgageLoan || 0),
+            interestRate: Number(rawData.interestRate || 0),
+            outstandingLoan: Number(rawData.outstandingLoan || 0),
+            bank: rawData.bank || 'Standard Bank' 
         };
 
-        if(editingProp.id) await setDoc(doc(db, "properties", editingProp.id), pData);
-        else await addDoc(collection(db, "properties"), pData);
+        // 4. 寫入資料庫
+        if(editingProp.id) {
+            await setDoc(doc(db, "properties", editingProp.id), pData);
+        } else {
+            await addDoc(collection(db, "properties"), pData);
+        }
+        
         setModalMode('none');
-      } catch(e) { alert(e); }
+      } catch(e) { 
+          console.error("Save failed:", e);
+          alert("儲存失敗: " + e); 
+      }
   };
 
   const handleSaveLease = async () => {

@@ -815,7 +815,11 @@ const App: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {propStats.map(p => (
-                  <div key={p.id} onClick={() => { console.log("Clicked:", p.id); setPropertyViewId(p.id); }} className="bg-white rounded-xl shadow-sm border hover:shadow-md hover:border-blue-400 transition cursor-pointer overflow-hidden group relative">
+                  <button 
+                    key={p.id} 
+                    onClick={() => setPropertyViewId(p.id)} 
+                    className="w-full text-left bg-white rounded-xl shadow-sm border hover:shadow-md hover:border-blue-400 transition cursor-pointer overflow-hidden group relative focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
                       <div className={`h-2 w-full ${p.status==='Occupied' ? (p.isLate ? 'bg-orange-500' : 'bg-emerald-500') : 'bg-red-500'}`} />
                       <div className="p-5">
                           <div className="flex justify-between items-start mb-2">
@@ -832,7 +836,7 @@ const App: React.FC = () => {
                               <div><p className="text-xs text-slate-400">壓力支出</p><p className="font-mono text-red-400">-{formatCurrency(p.stressedExpense)}</p></div>
                           </div>
                       </div>
-                  </div>
+                  </button>
               ))}
               
                <button onClick={() => { setEditingProp({ id: '', name: '', address: '', type: 'Investment', status: 'Vacant', currentValue: 0, purchasePrice: 0, initialDeposit: 0, furtherDeposit: 0, balancePayment: 0, mortgageLoan: 0, mortgageAmount: 0, outstandingLoan: 0, managementFee: 0, govtRates: 0, govtRent: 0, estRent: 0, tenure: 0, interestRate: 0, bank: '' }); setModalMode('property'); }} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-xl hover:bg-slate-50 transition text-slate-400 hover:text-slate-600"><ICONS.Plus /><span className="mt-2 font-bold">新增物業 Add Property</span></button>

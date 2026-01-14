@@ -531,61 +531,72 @@ const PropertyDashboard = ({
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {propStats.map((p: any) => (
-                <div 
-                  key={p.id} 
-                  onClick={() => onSelectProperty(p.id)} 
-                  className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer group relative overflow-hidden active:scale-95 z-10"
-                >
-                    <div className="h-24 bg-gradient-to-r from-blue-500 to-indigo-600 relative">
-                        <span className={`absolute top-4 left-4 px-3 py-1 text-xs rounded-full font-bold shadow-sm ${
-                            p.status === 'Occupied' 
-                                ? (p.isLate ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700') 
-                                : 'bg-red-100 text-red-700'
-                        }`}>
-                            {p.status === 'Occupied' ? (p.isLate ? '欠租 Arrears' : '出租 Occupied') : '空置 Vacant'}
-                        </span>
+    <div 
+      key={p.id} 
+      role="button"
+      tabIndex={0}
+      onClick={(e) => {
+          e.preventDefault();
+          if (p.id) onSelectProperty(p.id);
+          else alert("Error: Property ID is missing. Please refresh.");
+      }}
+      onKeyDown={(e) => e.key === 'Enter' && onSelectProperty(p.id)}
+      className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer group relative overflow-hidden active:scale-95 z-0 hover:z-10"
+    >
+        {/* 卡片頂部漸變背景區 */}
+        <div className="h-24 bg-gradient-to-r from-blue-500 to-indigo-600 relative pointer-events-none">
+            {/* 狀態標籤 */}
+            <span className={`absolute top-4 left-4 px-3 py-1 text-xs rounded-full font-bold shadow-sm z-20 ${
+                p.status === 'Occupied' 
+                    ? (p.isLate ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700') 
+                    : 'bg-red-100 text-red-700'
+            }`}>
+                {p.status === 'Occupied' ? (p.isLate ? '欠租 Arrears' : '出租 Occupied') : '空置 Vacant'}
+            </span>
 
-                        <button 
-                            onClick={(e) => {
-                                e.stopPropagation(); 
-                                onDeleteProperty(p.id);
-                            }}
-                            className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-red-500 text-white rounded-full transition-all duration-200 z-50 backdrop-blur-sm"
-                            title="刪除物業 Delete Property"
-                        >
-                            <ICONS.Trash />
-                        </button>
-                    </div>
-                    
-                    <div className="p-5 pt-2">
-                        <div className="flex justify-between items-end mb-4">
-                            <div>
-                                <h3 className="font-bold text-xl text-slate-800 mb-1">{p.name}</h3>
-                                <p className="text-xs text-slate-500 truncate max-w-[200px]">{p.address || 'No Address'}</p>
-                            </div>
-                        </div>
-                        
-                        <div className="grid grid-cols-2 gap-3 text-sm bg-slate-50 p-3 rounded-xl border border-slate-100">
-                            <div>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Valuation</p>
-                                <p className="font-mono font-bold text-slate-700">{formatCurrency(p.currentValue)}</p>
-                            </div>
-                            <div>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Rent</p>
-                                <p className="font-mono font-bold text-emerald-600">{p.activeLease ? formatCurrency(p.activeLease.monthlyRent) : '-'}</p>
-                            </div>
-                             <div>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Net Income</p>
-                                <p className={`font-mono font-bold ${p.net >= 0 ? 'text-blue-600' : 'text-red-500'}`}>{formatCurrency(p.net)}</p>
-                            </div>
-                            <div>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Expense (Stress)</p>
-                                <p className="font-mono text-red-400">-{formatCurrency(p.stressedExpense)}</p>
-                            </div>
-                        </div>
-                    </div>
+            {/* 刪除按鈕 (需要 pointer-events-auto 因為父層設了 none) */}
+            <button 
+                onClick={(e) => {
+                    e.stopPropagation(); // 阻止冒泡，避免觸發卡片點擊
+                    onDeleteProperty(p.id);
+                }}
+                className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-red-500 text-white rounded-full transition-all duration-200 z-50 backdrop-blur-sm pointer-events-auto hover:scale-110"
+                title="刪除物業 Delete Property"
+            >
+                <ICONS.Trash />
+            </button>
+        </div>
+        
+        {/* 卡片內容區 */}
+        <div className="p-5 pt-2">
+            <div className="flex justify-between items-end mb-4">
+                <div>
+                    <h3 className="font-bold text-xl text-slate-800 mb-1">{p.name}</h3>
+                    <p className="text-xs text-slate-500 truncate max-w-[200px]">{p.address || 'No Address'}</p>
                 </div>
-            ))}
+            </div>
+            
+            <div className="grid grid-cols-2 gap-3 text-sm bg-slate-50 p-3 rounded-xl border border-slate-100">
+                <div>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Valuation</p>
+                    <p className="font-mono font-bold text-slate-700">{formatCurrency(p.currentValue)}</p>
+                </div>
+                <div>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Rent</p>
+                    <p className="font-mono font-bold text-emerald-600">{p.activeLease ? formatCurrency(p.activeLease.monthlyRent) : '-'}</p>
+                </div>
+                 <div>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Net Income</p>
+                    <p className={`font-mono font-bold ${p.net >= 0 ? 'text-blue-600' : 'text-red-500'}`}>{formatCurrency(p.net)}</p>
+                </div>
+                <div>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Expense (Stress)</p>
+                    <p className="font-mono text-red-400">-{formatCurrency(p.stressedExpense)}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+))}
             
              <button onClick={onAddProperty} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-2xl hover:bg-slate-50 transition text-slate-400 hover:text-slate-600 cursor-pointer z-10 min-h-[240px]"><ICONS.Plus /><span className="mt-2 font-bold">新增物業 Add Property</span></button>
              {properties.length === 0 && (
@@ -824,7 +835,7 @@ const App: React.FC = () => {
         setTransactions(s.docs.map(d => ({id: d.id, ...d.data()} as Transaction))));
     
     const unsubProp = onSnapshot(collection(db, "properties"), s => 
-        setProperties(s.docs.map(d => ({id: d.id, ...d.data()} as Property))));
+        setProperties(s.docs.map(d => ({ ...d.data(), id: d.id } as Property))));
     
     const unsubLease = onSnapshot(collection(db, "leases"), s => 
         setLeases(s.docs.map(d => ({id: d.id, ...d.data()} as Lease))));

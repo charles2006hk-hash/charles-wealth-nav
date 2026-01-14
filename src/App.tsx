@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, 
-  Tooltip, Legend, ResponsiveContainer, BarChart, Bar 
+  Tooltip, Legend, ResponsiveContainer 
 } from 'recharts';
 import { initializeApp } from "firebase/app";
 import { 
   getFirestore, collection, doc, addDoc, setDoc, deleteDoc, updateDoc, 
-  onSnapshot, query, orderBy, writeBatch, getDocs, QuerySnapshot, DocumentData, DocumentSnapshot
+  onSnapshot, query, orderBy, writeBatch, getDocs
 } from "firebase/firestore";
 
 // --- 1. Firebase 設定 ---
@@ -599,7 +599,7 @@ const PropertyDashboard = ({
 const PropertyDetailView = ({ 
     propId, propStats, transactions, leases, 
     onBack, setDocConfig, setModalMode, setEditingProp, setEditingTx, 
-    handleDeleteProperty, setEditingLease, deleteItem,
+    setEditingLease, deleteItem,
     ledgerFilter, setLedgerFilter, handleUpdateCategory 
 }: any) => {
     const p = propStats.find((x: any) => x.id === propId);

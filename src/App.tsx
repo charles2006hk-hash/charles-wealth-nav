@@ -553,7 +553,7 @@ const App: React.FC = () => {
         setTransactions(s.docs.map(d => ({id: d.id, ...d.data()} as Transaction))));
     
     const unsubProp = onSnapshot(collection(db, "properties"), s => 
-        setProperties(s.docs.map(d => ({id: d.id, ...d.data()} as Property))));
+        setProperties(s.docs.map(d => ({ ...d.data(), id: d.id } as Property))));
     
     const unsubLease = onSnapshot(collection(db, "leases"), s => 
         setLeases(s.docs.map(d => ({id: d.id, ...d.data()} as Lease))));
@@ -705,6 +705,8 @@ const App: React.FC = () => {
             pData.purchasePrice = pData.initialDeposit + pData.furtherDeposit + pData.balancePayment + pData.mortgageLoan;
         }
 
+        // @ts-ignore
+        const { id, ...dataToSave } = pData;
         if(editingProp.id) await setDoc(doc(db, "properties", editingProp.id), pData);
         else await addDoc(collection(db, "properties"), pData);
         setModalMode('none');

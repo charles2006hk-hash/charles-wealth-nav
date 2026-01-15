@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, 
   Tooltip, Legend, ResponsiveContainer, BarChart, Bar, 
-  LineChart, Line, PieChart, Pie, Cell 
+  PieChart, Pie, Cell 
 } from 'recharts';
 import { initializeApp } from "firebase/app";
 import { 
@@ -951,7 +951,8 @@ const OverviewDashboard = ({ transactions, properties, leases }: any) => {
                          <p className="text-slate-500 text-sm">歷年保險總投入</p>
                          <h3 className="text-2xl font-bold text-slate-800">{formatCurrency(totalInsurance)}</h3>
                          <div className="flex gap-1 mt-1">
-                            {Object.entries(insuranceByMember).slice(0,3).map(([m, v]:any) => (
+                            {/* 修正 TS6133 錯誤：移除未使用的 'v' 變數 */}
+                            {Object.entries(insuranceByMember).slice(0,3).map(([m]:any) => (
                                 <span key={m} className="text-[10px] bg-slate-100 px-1 rounded text-slate-500">{m}</span>
                             ))}
                          </div>
@@ -1011,7 +1012,8 @@ const OverviewDashboard = ({ transactions, properties, leases }: any) => {
                                     paddingAngle={5}
                                     dataKey="value"
                                 >
-                                    {categoryData.map((entry, index) => (
+                                    {/* 修正 TS6133 錯誤：將 entry 改為 _ */}
+                                    {categoryData.map((_, index) => (
                                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                     ))}
                                 </Pie>

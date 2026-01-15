@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, 
-  Tooltip, Legend, ResponsiveContainer 
+  Tooltip, Legend, ResponsiveContainer, BarChart, Bar, 
+  LineChart, Line, PieChart, Pie, Cell 
 } from 'recharts';
 import { initializeApp } from "firebase/app";
 import { 
@@ -794,6 +795,252 @@ const DocModal: React.FC<DocModalProps> = ({
     );
 }
 
+// --- 9. 新增組件: 總覽儀表板 (Overview) ---
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
+
+const OverviewDashboard = ({ transactions, properties, leases }: any) => {
+    // 1. 狀態管理：篩選器
+    const [dateRange, setDateRange] = useState({ 
+        start: new Date(new Date().setFullYear(new Date().getFullYear() - 1)).toISOString().split('T')[0], // 預設過去一年
+        end: new Date().toISOString().split('T')[0] 
+    });
+    const [selectedCats, setSelectedCats] = useState<string[]>(CATEGORIES);
+    const [isFilterOpen, setIsFilterOpen] = useState(false);
+
+    // 2. 數據計算邏輯
+    const filteredTxs = useMemo(() => {
+        return transactions.filter((t: any) => {
+            const tDate = t.date;
+            const inDate = tDate >= dateRange.start && tDate <= dateRange.end;
+            const inCat = selectedCats.includes(t.category);
+            return inDate && inCat;
+        });
+    }, [transactions, dateRange, selectedCats]);
+
+    // 卡片 1: 歷史支出 (排除收入類別)
+    const expenseTxs = filteredTxs.filter((t:any) => !(t.category || '').includes('Income'));
+    const totalExpense = expenseTxs.reduce((sum: number, t: any) => sum + (t.amount || 0), 0);
+    
+    // 卡片 2: 物業概況
+    const propValuation = properties.reduce((sum: number, p: any) => sum + (p.currentValue || 0), 0);
+    const propDebt = properties.reduce((sum: number, p: any) => sum + (p.outstandingLoan || 0), 0);
+    const activeMonthlyRent = leases.filter((l:any) => l.status === 'Active').reduce((sum:number, l:any) => sum + (l.monthlyRent || 0), 0);
+
+    // 卡片 3: 保險投入 (從所有交易中篩選 Insurance)
+    const insuranceTxs = transactions.filter((t:any) => (t.category || '').includes('Insurance'));
+    const totalInsurance = insuranceTxs.reduce((sum:number, t:any) => sum + (t.amount || 0), 0);
+    const insuranceByMember = insuranceTxs.reduce((acc: any, t: any) => {
+        acc[t.member] = (acc[t.member] || 0) + t.amount;
+        return acc;
+    }, {});
+
+    // 圖表數據準備: 趨勢圖 (按月)
+    const trendData = useMemo(() => {
+        const data: Record<string, number> = {};
+        expenseTxs.forEach((t:any) => {
+            const key = t.date.substring(0, 7); // YYYY-MM
+            data[key] = (data[key] || 0) + t.amount;
+        });
+        return Object.entries(data)
+            .sort((a, b) => a[0].localeCompare(b[0]))
+            .map(([date, amount]) => ({ date, amount }));
+    }, [expenseTxs]);
+
+    // 圖表數據準備: 類別佔比
+    const categoryData = useMemo(() => {
+        const data: Record<string, number> = {};
+        expenseTxs.forEach((t:any) => {
+            data[t.category] = (data[t.category] || 0) + t.amount;
+        });
+        return Object.entries(data)
+            .map(([name, value]) => ({ name, value }))
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 8); // 只取前 8 名
+    }, [expenseTxs]);
+
+    // 多選處理函數
+    const toggleCategory = (cat: string) => {
+        if (selectedCats.includes(cat)) {
+            setSelectedCats(selectedCats.filter(c => c !== cat));
+        } else {
+            setSelectedCats([...selectedCats, cat]);
+        }
+    };
+
+    return (
+        <div className="space-y-6 animate-in fade-in">
+            {/* 頂部篩選區 (仿截圖風格) */}
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-wrap gap-4 items-center justify-between">
+                <div className="flex items-center gap-4">
+                    <h2 className="font-bold text-lg text-slate-700">總覽篩選</h2>
+                    <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border">
+                         <span className="text-xs text-slate-400 pl-2">From</span>
+                         <input type="date" value={dateRange.start} onChange={e=>setDateRange({...dateRange, start: e.target.value})} className="bg-transparent text-sm font-bold text-slate-700 border-none focus:ring-0" />
+                         <span className="text-xs text-slate-400">To</span>
+                         <input type="date" value={dateRange.end} onChange={e=>setDateRange({...dateRange, end: e.target.value})} className="bg-transparent text-sm font-bold text-slate-700 border-none focus:ring-0" />
+                    </div>
+                </div>
+                <div className="relative">
+                    <button onClick={() => setIsFilterOpen(!isFilterOpen)} className="px-4 py-2 bg-blue-50 text-blue-600 rounded-lg text-sm font-bold hover:bg-blue-100 flex items-center gap-2">
+                        <ICONS.Tag /> 篩選支出類別 ({selectedCats.length}) {isFilterOpen ? '▲' : '▼'}
+                    </button>
+                    {isFilterOpen && (
+                        <div className="absolute right-0 top-12 w-64 bg-white shadow-xl rounded-xl border p-4 z-50 max-h-96 overflow-y-auto">
+                            <div className="flex justify-between mb-2">
+                                <button onClick={()=>setSelectedCats(CATEGORIES)} className="text-xs text-blue-600 underline">全選</button>
+                                <button onClick={()=>setSelectedCats([])} className="text-xs text-slate-400 underline">清空</button>
+                            </div>
+                            <div className="space-y-2">
+                                {CATEGORIES.map(c => (
+                                    <label key={c} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-50 p-1 rounded">
+                                        <input type="checkbox" checked={selectedCats.includes(c)} onChange={()=>toggleCategory(c)} className="rounded text-blue-600 focus:ring-blue-500" />
+                                        <span className="truncate">{c}</span>
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* 四大核心卡片 (仿截圖佈局) */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                {/* 1. 歷史支出 */}
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between h-40">
+                    <div className="flex justify-between items-start">
+                        <div className="p-2 bg-blue-50 rounded-lg text-blue-600"><ICONS.DollarSign /></div>
+                        <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full font-bold">已選區間</span>
+                    </div>
+                    <div>
+                        <p className="text-slate-500 text-sm">區間總支出 Total Expense</p>
+                        <h3 className="text-2xl font-bold text-slate-800">{formatCurrency(totalExpense)}</h3>
+                    </div>
+                </div>
+
+                {/* 2. 物業年淨值 */}
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between h-40">
+                    <div className="flex justify-between items-start">
+                        <div className="p-2 bg-emerald-50 rounded-lg text-emerald-600"><ICONS.Home /></div>
+                        <span className="bg-emerald-100 text-emerald-800 text-xs px-2 py-1 rounded-full font-bold">被動收入</span>
+                    </div>
+                    <div>
+                        <div className="flex justify-between items-end">
+                            <div>
+                                <p className="text-slate-500 text-xs">總資產 Value</p>
+                                <p className="font-bold text-emerald-700">{formatCurrency(propValuation)}</p>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-slate-500 text-xs">總負債 Debt</p>
+                                <p className="font-bold text-red-400">-{formatCurrency(propDebt)}</p>
+                            </div>
+                        </div>
+                        <div className="mt-2 border-t pt-2 flex justify-between">
+                            <span className="text-xs text-slate-500">每月租金流:</span>
+                            <span className="text-sm font-bold text-slate-800">{formatCurrency(activeMonthlyRent)}</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 3. 保險投入 */}
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between h-40">
+                    <div className="flex justify-between items-start">
+                        <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600"><ICONS.Shield /></div>
+                        <span className="bg-indigo-100 text-indigo-800 text-xs px-2 py-1 rounded-full font-bold">全家保障</span>
+                    </div>
+                    <div>
+                         <p className="text-slate-500 text-sm">歷年保險總投入</p>
+                         <h3 className="text-2xl font-bold text-slate-800">{formatCurrency(totalInsurance)}</h3>
+                         <div className="flex gap-1 mt-1">
+                            {Object.entries(insuranceByMember).slice(0,3).map(([m, v]:any) => (
+                                <span key={m} className="text-[10px] bg-slate-100 px-1 rounded text-slate-500">{m}</span>
+                            ))}
+                         </div>
+                    </div>
+                </div>
+
+                 {/* 4. 最大類別 (分析) */}
+                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between h-40">
+                    <div className="flex justify-between items-start">
+                        <div className="p-2 bg-orange-50 rounded-lg text-orange-600"><ICONS.PieChart /></div>
+                        <span className="bg-orange-100 text-orange-800 text-xs px-2 py-1 rounded-full font-bold">最大支出</span>
+                    </div>
+                    <div>
+                         <p className="text-slate-500 text-sm">{categoryData[0]?.name || 'N/A'}</p>
+                         <h3 className="text-2xl font-bold text-slate-800">{formatCurrency(categoryData[0]?.value || 0)}</h3>
+                         <p className="text-xs text-orange-400 mt-1">佔總支出 {totalExpense ? ((categoryData[0]?.value || 0)/totalExpense*100).toFixed(1) : 0}%</p>
+                    </div>
+                </div>
+            </div>
+
+            {/* 圖表分析區 */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* 支出趨勢圖 (佔 2/3) */}
+                <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <h3 className="font-bold text-slate-700 mb-6 flex items-center gap-2"><ICONS.LayoutDashboard /> 支出趨勢分析 (Trend)</h3>
+                    <div className="h-[300px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={trendData}>
+                                <defs>
+                                    <linearGradient id="colorAmt" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1}/>
+                                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                                    </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                <XAxis dataKey="date" tick={{fontSize: 12}} />
+                                <YAxis tick={{fontSize: 12}} tickFormatter={(v)=>`$${v/1000}k`} />
+                                <Tooltip formatter={(value:any) => formatCurrency(value)} contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)'}} />
+                                <Area type="monotone" dataKey="amount" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorAmt)" />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+
+                {/* 類別圓餅圖 (佔 1/3) */}
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <h3 className="font-bold text-slate-700 mb-6">類別分佈 (Top Categories)</h3>
+                    <div className="h-[300px] flex items-center justify-center">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                                <Pie
+                                    data={categoryData}
+                                    cx="50%"
+                                    cy="50%"
+                                    innerRadius={60}
+                                    outerRadius={80}
+                                    paddingAngle={5}
+                                    dataKey="value"
+                                >
+                                    {categoryData.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                    ))}
+                                </Pie>
+                                <Tooltip formatter={(value:any) => formatCurrency(value)} />
+                                <Legend layout="vertical" verticalAlign="middle" align="right" wrapperStyle={{fontSize: '11px'}} />
+                            </PieChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+            </div>
+            
+             {/* 額外圖表: 長條比較圖 */}
+             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                <h3 className="font-bold text-slate-700 mb-6">每月支出強度比較 (Bar Chart)</h3>
+                <div className="h-[200px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={trendData}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                            <XAxis dataKey="date" />
+                            <Tooltip cursor={{fill: 'transparent'}} formatter={(value:any) => formatCurrency(value)} />
+                            <Bar dataKey="amount" fill="#8884d8" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                    </ResponsiveContainer>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 // --- 9. 主應用程式 ---
 const App: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -802,7 +1049,7 @@ const App: React.FC = () => {
   const [eduDB, setEduDB] = useState<Record<string, EduConfig>>(INITIAL_EDUCATION_DB);
   const [dataLoaded, setDataLoaded] = useState(false);
 
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState('overview'); // 原本是 'dashboard'
   const [propertyViewId, setPropertyViewId] = useState<string | null>(null);
   const [modalMode, setModalMode] = useState<'none' | 'transaction' | 'property' | 'doc' | 'lease'>('none');
   const [editingLease, setEditingLease] = useState<Lease | null>(null);
@@ -1165,13 +1412,15 @@ const App: React.FC = () => {
                   </div>
                   <nav className="flex-1 px-3 space-y-1">
                       {[
-                          {id: 'dashboard', icon: 'LayoutDashboard', label: '物業總覽 Overview'},
+                          // 修改順序：新增 overview 為第一個
+                          {id: 'overview', icon: 'LayoutDashboard', label: '總覽 Overview'},
+                          {id: 'dashboard', icon: 'Home', label: '物業管理 Properties'}, // Icon 改為 Home 區分
                           {id: 'data', icon: 'Data', label: '數據中心 Data Hub'},
                           {id: 'insurance', icon: 'Shield', label: '保險庫 Insurance'},
                           {id: 'education', icon: 'GraduationCap', label: '升學 Education'}
                       ].map(item => (
                           <button key={item.id} onClick={() => { setActiveTab(item.id); setPropertyViewId(null); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${activeTab===item.id && !propertyViewId ? 'bg-blue-600 text-white' : 'hover:bg-slate-800'}`}>
-                              {item.id === 'dashboard' ? <ICONS.LayoutDashboard /> : item.id === 'data' ? <ICONS.Data /> : item.id === 'insurance' ? <ICONS.Shield /> : <ICONS.GraduationCap />} {item.label}
+                              {item.id === 'overview' ? <ICONS.LayoutDashboard /> : item.id === 'dashboard' ? <ICONS.Home /> : item.id === 'data' ? <ICONS.Data /> : item.id === 'insurance' ? <ICONS.Shield /> : <ICONS.GraduationCap />} {item.label}
                           </button>
                       ))}
                   </nav>
@@ -1179,6 +1428,16 @@ const App: React.FC = () => {
           )}
 
           <div className="flex-1 p-8 overflow-y-auto print-container">
+
+            {/* 新增這段：總覽頁面渲染 */}
+            {activeTab === 'overview' && (
+                 <OverviewDashboard 
+                     transactions={transactions} 
+                    properties={properties} 
+                    leases={leases} 
+                    />
+                )}      
+
               {activeTab === 'dashboard' && !propertyViewId && (
                   <PropertyDashboard 
                       properties={properties}

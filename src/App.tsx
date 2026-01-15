@@ -457,11 +457,8 @@ const OverviewDashboard = ({ transactions, properties, leases }: any) => {
 const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig: DocConfig, properties: Property[], transactions: Transaction[] }) => {
     const prop = properties.find(p => p.id === docConfig.propId) || { name: 'Unknown Property', address: '' } as Property;
 
-    // --- 收據樣式 (Receipt) ---
     if (docConfig.type === 'receipt') {
-        // 優先顯示已存在的編號，否則顯示 "PREVIEW" (代表還沒存檔列印)
         const receiptNo = docConfig.existingReceiptNo || "PREVIEW (Click Print to Generate)";
-        
         return (
              <div className="border border-black p-8 w-[210mm] h-[148mm] mx-auto bg-white text-black font-serif relative">
                 <h1 className="text-2xl font-bold text-center underline mb-2">OFFICIAL RECEIPT 正式收據</h1>
@@ -487,6 +484,10 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
                         <span className="flex-1 font-medium">{docConfig.paymentMethod}</span>
                     </div>
                     
+                    {docConfig.linkedTransactionId && (
+                         <div className="absolute bottom-12 left-8 text-xs text-gray-400">Archived Ref: {docConfig.linkedTransactionId}</div>
+                    )}
+
                     <div className="mt-12 flex justify-end">
                         <div className="text-center w-64">
                             <div className="h-16 border-b border-black mb-2 flex items-end justify-center">
@@ -499,9 +500,9 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
                 </div>
             </div>
         );
-    }
+    } 
     
-    // --- 對數單樣式 (Statement) ---
+    // ... Statement and Lease ...
     if (docConfig.type === 'statement') {
         const filteredTxs = transactions
             .filter(t => t.propertyId === docConfig.propId && (!docConfig.statementDateStart || t.date >= docConfig.statementDateStart) && (!docConfig.statementDateEnd || t.date <= docConfig.statementDateEnd))
@@ -532,7 +533,6 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
         );
     }
 
-    // --- 完整 4 頁租約樣式 (Lease) ---
     return (
         <div className="doc-print-container text-black font-serif text-sm leading-relaxed">
           {/* Page 1 */}
@@ -884,7 +884,7 @@ const PropertyDetailView = ({
     onBack, setDocConfig, setModalMode, setEditingProp, setEditingTx, 
     setEditingLease, deleteItem,
     ledgerFilter, setLedgerFilter, handleUpdateCategory,
-    handleOpenReceipt 
+    handleOpenReceipt // 新增：開啟收據函數
 }: any) => {
     const p = propStats.find((x: any) => x.id === propId);
     if (!p) return <div>Property not found</div>;
@@ -998,6 +998,10 @@ const PropertyDetailView = ({
                                                     <img key={idx} src={img} className="w-6 h-6 object-cover rounded border" alt="receipt" />
                                                 ))}
                                             </div>
+                                        )}
+                                        {/* 收據狀態 */}
+                                        {t.receiptNo && (
+                                            <span className="text-[10px] text-green-600 bg-green-50 px-1 rounded border border-green-200 ml-1">Receipt: {t.receiptNo}</span>
                                         )}
                                     </td>
                                     <td className={`p-3 font-mono font-bold ${(t.category || '').includes('Income') ? 'text-emerald-600' : 'text-red-500'}`}>{(t.category || '').includes('Income') ? '+' : '-'}{formatCurrency(t.amount)}</td>
@@ -1364,65 +1368,36 @@ const App: React.FC = () => {
       }
   };
 
-  // 1. 處理列印與存檔邏輯 (核心修復)
+  // 處理列印邏輯，並在列印收據時存檔
   const handlePrint = async () => {
-      // 如果是收據模式，且是來自流水帳 (有 Transaction ID)，但還沒有收據編號
+      // 1. 如果是收據模式且有關聯交易，更新交易的收據編號
       if (docConfig.type === 'receipt' && docConfig.linkedTransactionId) {
            let finalReceiptNo = docConfig.existingReceiptNo;
 
            // 如果還沒開過收據，現在生成並存檔
            if (!finalReceiptNo) {
-               finalReceiptNo = `${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`; // 生成 4 位隨機數
+               finalReceiptNo = `${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
                try {
-                   // A. 寫入 Firebase 資料庫
                    await updateDoc(doc(db, "transactions", docConfig.linkedTransactionId), {
                        receiptNo: finalReceiptNo
                    });
-
-                   // B. 更新本地交易列表 (讓流水帳列表立刻顯示綠色標籤，不用重新整理)
+                   // 更新本地狀態，讓流水帳列表即時顯示
                    setTransactions(prev => prev.map(t => 
                        t.id === docConfig.linkedTransactionId ? { ...t, receiptNo: finalReceiptNo } : t
                    ));
-
-                   // C. 更新當前預覽視窗的設定 (讓列印出來的紙上有編號)
                    setDocConfig(prev => ({ ...prev, existingReceiptNo: finalReceiptNo }));
-                   
                } catch (error) {
                    console.error("Error saving receipt no:", error);
-                   alert("自動存檔失敗，請檢查網絡，但仍可繼續列印。");
                }
            }
       }
 
-      // 2. 觸發瀏覽器列印 (給予一點延遲確保 React 渲染完成)
+      // 2. 觸發瀏覽器列印
       setReportMode(true);
       setTimeout(() => {
           window.print();
           setReportMode(false);
       }, 500);
-  };
-
-  // 2. 開啟收據預覽 (修正資料傳遞)
-  const handleOpenReceipt = (tx: Transaction) => {
-      // 嘗試找該物業的租客資料自動帶入
-      const activeLease = leases.find(l => l.propertyId === tx.propertyId && l.status === 'Active');
-      
-      setDocConfig({
-          type: 'receipt',
-          propId: tx.propertyId || '',
-          tenant: activeLease ? activeLease.tenantName : (tx.member || ''), // 如果沒租約，暫用成員名
-          tenantID: activeLease ? activeLease.tenantID : '',
-          period: tx.date, // 使用交易日期
-          amount: tx.amount,
-          deposit: 0,
-          startDate: '',
-          endDate: '',
-          landlord: 'Charles Lam',
-          paymentMethod: 'Bank Transfer',
-          linkedTransactionId: tx.id,     // 綁定交易 ID
-          existingReceiptNo: tx.receiptNo // 如果已有編號，帶入顯示
-      });
-      setModalMode('doc');
   };
   
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1513,6 +1488,28 @@ const App: React.FC = () => {
           newAtt.splice(index, 1);
           setEditingLease({ ...editingLease, attachments: newAtt });
       }
+  };
+
+  // 新增：從流水帳開啟收據
+  const handleOpenReceipt = (tx: Transaction) => {
+      const activeLease = leases.find(l => l.propertyId === tx.propertyId && l.status === 'Active');
+      
+      setDocConfig({
+          type: 'receipt',
+          propId: tx.propertyId || '',
+          tenant: activeLease ? activeLease.tenantName : '',
+          tenantID: activeLease ? activeLease.tenantID : '',
+          period: tx.date, // 使用交易日期作為期間參考
+          amount: tx.amount,
+          deposit: 0,
+          startDate: '',
+          endDate: '',
+          landlord: 'Charles Lam',
+          paymentMethod: 'Bank Transfer',
+          linkedTransactionId: tx.id,
+          existingReceiptNo: tx.receiptNo // 如果已有編號，傳入
+      });
+      setModalMode('doc');
   };
 
   if (!dataLoaded) {

@@ -1515,28 +1515,6 @@ const App: React.FC = () => {
       }
   };
 
-  // 新增：從流水帳開啟收據
-  const handleOpenReceipt = (tx: Transaction) => {
-      const activeLease = leases.find(l => l.propertyId === tx.propertyId && l.status === 'Active');
-      
-      setDocConfig({
-          type: 'receipt',
-          propId: tx.propertyId || '',
-          tenant: activeLease ? activeLease.tenantName : '',
-          tenantID: activeLease ? activeLease.tenantID : '',
-          period: tx.date, // 使用交易日期作為期間參考
-          amount: tx.amount,
-          deposit: 0,
-          startDate: '',
-          endDate: '',
-          landlord: 'Charles Lam',
-          paymentMethod: 'Bank Transfer',
-          linkedTransactionId: tx.id,
-          existingReceiptNo: tx.receiptNo // 如果已有編號，傳入
-      });
-      setModalMode('doc');
-  };
-
   if (!dataLoaded) {
        return <div className="h-screen flex items-center justify-center text-slate-500 animate-pulse">正在連接到 Firebase 雲端資料庫...</div>;
   }

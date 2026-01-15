@@ -459,38 +459,47 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
 
     // --- 收據樣式 (Receipt) ---
     if (docConfig.type === 'receipt') {
-        // 如果有傳入 existingReceiptNo (代表已存檔)，就用舊的；否則生成一個預覽用的
-        const receiptNo = docConfig.existingReceiptNo || `PREVIEW-${new Date().getFullYear()}-${Math.floor(Math.random()*10000)}`;
+        // 優先顯示已存在的編號，否則顯示 "PREVIEW" (代表還沒存檔列印)
+        const receiptNo = docConfig.existingReceiptNo || "PREVIEW (Click Print to Generate)";
         
         return (
              <div className="border border-black p-8 w-[210mm] h-[148mm] mx-auto bg-white text-black font-serif relative">
                 <h1 className="text-2xl font-bold text-center underline mb-2">OFFICIAL RECEIPT 正式收據</h1>
-                <div className="absolute top-8 right-8 text-sm">
-                    <div>Receipt No.: <strong>{receiptNo}</strong></div>
-                    <div>Date: {new Date().toLocaleDateString()}</div>
+                <div className="absolute top-8 right-8 text-sm text-right">
+                    <div className="font-bold border-b border-black mb-1">Receipt No. {receiptNo}</div>
+                    <div>Date: {docConfig.period || new Date().toLocaleDateString()}</div>
                 </div>
-                <div className="mt-8 space-y-4 text-sm leading-loose">
-                    <div className="flex"><span className="w-32 font-bold">Received from:</span><span className="border-b border-black flex-1 px-2">{docConfig.tenant}</span></div>
-                    <div className="flex"><span className="w-32 font-bold">The Sum of:</span><span className="border-b border-black flex-1 px-2">HK$ {docConfig.amount.toLocaleString()} (Words: {convertNumberToEnglish(docConfig.amount)})</span></div>
-                    <div className="flex"><span className="w-32 font-bold">For Rent of:</span><span className="border-b border-black flex-1 px-2">{prop.name} {prop.address}</span></div>
-                    <div className="flex"><span className="w-32 font-bold">Period:</span><span className="border-b border-black flex-1 px-2">{docConfig.period}</span></div>
+                <div className="mt-8 space-y-6 text-sm leading-loose">
+                    <div className="flex border-b border-dotted border-gray-400 pb-1">
+                        <span className="w-32 font-bold">Received from:</span>
+                        <span className="flex-1 font-medium">{docConfig.tenant}</span>
+                    </div>
+                    <div className="flex border-b border-dotted border-gray-400 pb-1">
+                        <span className="w-32 font-bold">The Sum of:</span>
+                        <span className="flex-1 font-medium">HK$ {docConfig.amount.toLocaleString()} <br/> <span className="text-xs text-gray-500 uppercase">(Words: {convertNumberToEnglish(docConfig.amount)} ONLY)</span></span>
+                    </div>
+                    <div className="flex border-b border-dotted border-gray-400 pb-1">
+                        <span className="w-32 font-bold">For Rent of:</span>
+                        <span className="flex-1 font-medium">{prop.name} <br/> <span className="text-xs">{prop.address}</span></span>
+                    </div>
+                    <div className="flex border-b border-dotted border-gray-400 pb-1">
+                        <span className="w-32 font-bold">Payment Mode:</span>
+                        <span className="flex-1 font-medium">{docConfig.paymentMethod}</span>
+                    </div>
                     
-                    {docConfig.linkedTransactionId && (
-                         <div className="mt-2 text-xs text-gray-500 italic">
-                             Ref ID: {docConfig.linkedTransactionId} 
-                             {docConfig.existingReceiptNo ? ' (Saved Record)' : ' (New Record)'}
-                         </div>
-                    )}
-                    
-                    <div className="mt-12 text-right border-t border-black w-64 ml-auto pt-2 text-center">
-                        <p className="mb-4 text-xs text-gray-400">{docConfig.landlordID ? 'Sig. Verified' : ''}</p>
-                        Signature of Landlord<br/>
-                        <strong>{docConfig.landlord}</strong>
+                    <div className="mt-12 flex justify-end">
+                        <div className="text-center w-64">
+                            <div className="h-16 border-b border-black mb-2 flex items-end justify-center">
+                                {/* 如果是預覽，顯示簽名佔位符 */}
+                                <span className="font-script text-2xl text-blue-900">{docConfig.landlord}</span> 
+                            </div>
+                            <p className="text-xs uppercase font-bold">Signature of Landlord</p>
+                        </div>
                     </div>
                 </div>
             </div>
         );
-    } 
+    }
     
     // --- 對數單樣式 (Statement) ---
     if (docConfig.type === 'statement') {
@@ -1355,30 +1364,65 @@ const App: React.FC = () => {
       }
   };
 
-  // 處理列印邏輯，並在列印收據時存檔
+  // 1. 處理列印與存檔邏輯 (核心修復)
   const handlePrint = async () => {
-      // 1. 如果是收據模式且有關聯交易，更新交易的收據編號
+      // 如果是收據模式，且是來自流水帳 (有 Transaction ID)，但還沒有收據編號
       if (docConfig.type === 'receipt' && docConfig.linkedTransactionId) {
-           const receiptNo = docConfig.existingReceiptNo || `${new Date().getFullYear()}-${Math.floor(Math.random()*10000)}`;
-           if (!docConfig.existingReceiptNo) {
+           let finalReceiptNo = docConfig.existingReceiptNo;
+
+           // 如果還沒開過收據，現在生成並存檔
+           if (!finalReceiptNo) {
+               finalReceiptNo = `${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`; // 生成 4 位隨機數
                try {
+                   // A. 寫入 Firebase 資料庫
                    await updateDoc(doc(db, "transactions", docConfig.linkedTransactionId), {
-                       receiptNo: receiptNo
+                       receiptNo: finalReceiptNo
                    });
-                   // 可以在這裡更新本地 state，或者等待 Firebase onSnapshot 更新
-                   setDocConfig(prev => ({ ...prev, existingReceiptNo: receiptNo }));
+
+                   // B. 更新本地交易列表 (讓流水帳列表立刻顯示綠色標籤，不用重新整理)
+                   setTransactions(prev => prev.map(t => 
+                       t.id === docConfig.linkedTransactionId ? { ...t, receiptNo: finalReceiptNo } : t
+                   ));
+
+                   // C. 更新當前預覽視窗的設定 (讓列印出來的紙上有編號)
+                   setDocConfig(prev => ({ ...prev, existingReceiptNo: finalReceiptNo }));
+                   
                } catch (error) {
                    console.error("Error saving receipt no:", error);
+                   alert("自動存檔失敗，請檢查網絡，但仍可繼續列印。");
                }
            }
       }
 
-      // 2. 觸發瀏覽器列印
+      // 2. 觸發瀏覽器列印 (給予一點延遲確保 React 渲染完成)
       setReportMode(true);
       setTimeout(() => {
           window.print();
           setReportMode(false);
-      }, 100);
+      }, 500);
+  };
+
+  // 2. 開啟收據預覽 (修正資料傳遞)
+  const handleOpenReceipt = (tx: Transaction) => {
+      // 嘗試找該物業的租客資料自動帶入
+      const activeLease = leases.find(l => l.propertyId === tx.propertyId && l.status === 'Active');
+      
+      setDocConfig({
+          type: 'receipt',
+          propId: tx.propertyId || '',
+          tenant: activeLease ? activeLease.tenantName : (tx.member || ''), // 如果沒租約，暫用成員名
+          tenantID: activeLease ? activeLease.tenantID : '',
+          period: tx.date, // 使用交易日期
+          amount: tx.amount,
+          deposit: 0,
+          startDate: '',
+          endDate: '',
+          landlord: 'Charles Lam',
+          paymentMethod: 'Bank Transfer',
+          linkedTransactionId: tx.id,     // 綁定交易 ID
+          existingReceiptNo: tx.receiptNo // 如果已有編號，帶入顯示
+      });
+      setModalMode('doc');
   };
   
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {

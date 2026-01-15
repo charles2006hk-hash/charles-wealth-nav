@@ -457,8 +457,11 @@ const OverviewDashboard = ({ transactions, properties, leases }: any) => {
 const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig: DocConfig, properties: Property[], transactions: Transaction[] }) => {
     const prop = properties.find(p => p.id === docConfig.propId) || { name: 'Unknown Property', address: '' } as Property;
 
+    // --- 收據樣式 (Receipt) ---
     if (docConfig.type === 'receipt') {
+        // 優先顯示已存在的編號，否則顯示 "PREVIEW" (代表還沒存檔列印)
         const receiptNo = docConfig.existingReceiptNo || "PREVIEW (Click Print to Generate)";
+        
         return (
              <div className="border border-black p-8 w-[210mm] h-[148mm] mx-auto bg-white text-black font-serif relative">
                 <h1 className="text-2xl font-bold text-center underline mb-2">OFFICIAL RECEIPT 正式收據</h1>
@@ -484,10 +487,6 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
                         <span className="flex-1 font-medium">{docConfig.paymentMethod}</span>
                     </div>
                     
-                    {docConfig.linkedTransactionId && (
-                         <div className="absolute bottom-12 left-8 text-xs text-gray-400">Archived Ref: {docConfig.linkedTransactionId}</div>
-                    )}
-
                     <div className="mt-12 flex justify-end">
                         <div className="text-center w-64">
                             <div className="h-16 border-b border-black mb-2 flex items-end justify-center">
@@ -500,9 +499,9 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
                 </div>
             </div>
         );
-    } 
+    }
     
-    // ... Statement and Lease ...
+    // --- 對數單樣式 (Statement) ---
     if (docConfig.type === 'statement') {
         const filteredTxs = transactions
             .filter(t => t.propertyId === docConfig.propId && (!docConfig.statementDateStart || t.date >= docConfig.statementDateStart) && (!docConfig.statementDateEnd || t.date <= docConfig.statementDateEnd))
@@ -533,6 +532,7 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
         );
     }
 
+    // --- 完整 4 頁租約樣式 (Lease) ---
     return (
         <div className="doc-print-container text-black font-serif text-sm leading-relaxed">
           {/* Page 1 */}
@@ -884,7 +884,7 @@ const PropertyDetailView = ({
     onBack, setDocConfig, setModalMode, setEditingProp, setEditingTx, 
     setEditingLease, deleteItem,
     ledgerFilter, setLedgerFilter, handleUpdateCategory,
-    handleOpenReceipt // 新增：開啟收據函數
+    handleOpenReceipt 
 }: any) => {
     const p = propStats.find((x: any) => x.id === propId);
     if (!p) return <div>Property not found</div>;
@@ -976,54 +976,63 @@ const PropertyDetailView = ({
                 <div className="max-h-[500px] overflow-y-auto">
                     <table className="w-full text-sm text-left">
                         <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0"><tr><th className="p-3">Date</th><th className="p-3">Category</th><th className="p-3">Detail</th><th className="p-3">Amount</th><th className="p-3">Action</th></tr></thead>
-                        <tbody className="divide-y">
-                            {pTransactions.filter((t: any) => (JSON.stringify(t) || '').toLowerCase().includes(ledgerFilter.toLowerCase())).map((t: any) => (
-                                <tr key={t.id} className="hover:bg-blue-50">
-                                    <td className="p-3">{t.date}</td>
-                                    <td className="p-3">
-                                        <select 
-                                            className="bg-transparent border-none" 
-                                            value={t.category} 
-                                            onChange={e => handleUpdateCategory(t.id, e.target.value)}
-                                        >
-                                            {CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
-                                        </select>
-                                    </td>
-                                    <td className="p-3 font-medium">
-                                        <div>{t.merchant} <span className="text-slate-400 text-xs">{t.note}</span></div>
-                                        {/* 圖片預覽小圖 */}
-                                        {t.attachments && t.attachments.length > 0 && (
-                                            <div className="flex gap-1 mt-1">
-                                                {t.attachments.map((img:string, idx:number) => (
-                                                    <img key={idx} src={img} className="w-6 h-6 object-cover rounded border" alt="receipt" />
-                                                ))}
-                                            </div>
-                                        )}
-                                        {/* 收據狀態 */}
-                                        {t.receiptNo && (
-                                            <span className="text-[10px] text-green-600 bg-green-50 px-1 rounded border border-green-200 ml-1">Receipt: {t.receiptNo}</span>
-                                        )}
-                                    </td>
-                                    <td className={`p-3 font-mono font-bold ${(t.category || '').includes('Income') ? 'text-emerald-600' : 'text-red-500'}`}>{(t.category || '').includes('Income') ? '+' : '-'}{formatCurrency(t.amount)}</td>
-                                    <td className="p-3">
-                                        <div className="flex items-center gap-2">
-                                            {/* 開收據按鈕 / 查看收據 */}
-                                            {(t.category || '').includes('Income') && (
-                                                <button 
-                                                    onClick={() => handleOpenReceipt(t)} 
-                                                    className={`text-xs px-2 py-1 rounded border flex flex-col items-center min-w-[70px] ${t.receiptNo ? 'bg-green-100 text-green-700 border-green-300' : 'bg-gray-100 text-gray-600 border-gray-300 hover:bg-emerald-50 hover:text-emerald-600'}`}
-                                                >
-                                                    <span className="font-bold">{t.receiptNo ? 'View Receipt' : 'Create Receipt'}</span>
-                                                    {t.receiptNo && <span className="text-[9px]">{t.receiptNo}</span>}
-                                                </button>
-                                            )}
-                                            <button onClick={() => { setEditingTx(t); setModalMode('transaction'); }} className="text-blue-400 hover:text-blue-600"><ICONS.Edit /></button>
-                                            <button onClick={() => deleteItem('transactions', t.id)} className="text-red-400 hover:text-red-600"><ICONS.Trash /></button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
+                        // 在 PropertyDetailView 的 table tbody 內，替換原本的 map 內容：
+<tbody className="divide-y">
+    {pTransactions.filter((t: any) => (JSON.stringify(t) || '').toLowerCase().includes(ledgerFilter.toLowerCase())).map((t: any) => (
+        <tr key={t.id} className="hover:bg-blue-50">
+            <td className="p-3">{t.date}</td>
+            <td className="p-3">
+                <select 
+                    className="bg-transparent border-none" 
+                    value={t.category} 
+                    onChange={e => handleUpdateCategory(t.id, e.target.value)}
+                >
+                    {CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
+                </select>
+            </td>
+            <td className="p-3 font-medium">
+                <div>{t.merchant} <span className="text-slate-400 text-xs">{t.note}</span></div>
+                {/* 圖片預覽 */}
+                {t.attachments && t.attachments.length > 0 && (
+                    <div className="flex gap-1 mt-1">
+                        {t.attachments.map((img:string, idx:number) => (
+                            <img key={idx} src={img} className="w-6 h-6 object-cover rounded border" alt="receipt" />
+                        ))}
+                    </div>
+                )}
+                {/* 顯示收據編號 (綠色標籤) */}
+                {t.receiptNo && (
+                    <span className="inline-block mt-1 text-[10px] text-green-700 bg-green-100 px-2 py-0.5 rounded border border-green-200 font-bold">
+                        🧾 {t.receiptNo}
+                    </span>
+                )}
+            </td>
+            <td className={`p-3 font-mono font-bold ${(t.category || '').includes('Income') ? 'text-emerald-600' : 'text-red-500'}`}>{(t.category || '').includes('Income') ? '+' : '-'}{formatCurrency(t.amount)}</td>
+            <td className="p-3">
+                <div className="flex items-center gap-2">
+                    {/* 修改處：移除了 .includes('Income') 判斷，現在所有交易都能開單 */}
+                    <button 
+                        onClick={() => handleOpenReceipt(t)} 
+                        className={`text-xs px-2 py-1 rounded border flex flex-col items-center min-w-[70px] transition-colors ${
+                            t.receiptNo 
+                            ? 'bg-green-100 text-green-700 border-green-300 hover:bg-green-200' 
+                            : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                        }`}
+                        title={t.receiptNo ? "查看已存檔收據 (View Saved)" : "建立新收據 (Create New)"}
+                    >
+                        <span className="font-bold flex items-center gap-1">
+                            <ICONS.FileText /> {t.receiptNo ? 'View' : 'Receipt'}
+                        </span>
+                        {t.receiptNo && <span className="text-[9px]">{t.receiptNo}</span>}
+                    </button>
+
+                    <button onClick={() => { setEditingTx(t); setModalMode('transaction'); }} className="text-blue-400 hover:text-blue-600 p-1"><ICONS.Edit /></button>
+                    <button onClick={() => deleteItem('transactions', t.id)} className="text-red-400 hover:text-red-600 p-1"><ICONS.Trash /></button>
+                </div>
+            </td>
+        </tr>
+    ))}
+</tbody>
                     </table>
                 </div>
             </div>
@@ -1368,36 +1377,65 @@ const App: React.FC = () => {
       }
   };
 
-  // 處理列印邏輯，並在列印收據時存檔
+  // 1. 處理列印與存檔邏輯 (核心修復)
   const handlePrint = async () => {
-      // 1. 如果是收據模式且有關聯交易，更新交易的收據編號
+      // 如果是收據模式，且是來自流水帳 (有 Transaction ID)，但還沒有收據編號
       if (docConfig.type === 'receipt' && docConfig.linkedTransactionId) {
            let finalReceiptNo = docConfig.existingReceiptNo;
 
            // 如果還沒開過收據，現在生成並存檔
            if (!finalReceiptNo) {
-               finalReceiptNo = `${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+               finalReceiptNo = `${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`; // 生成 4 位隨機數
                try {
+                   // A. 寫入 Firebase 資料庫
                    await updateDoc(doc(db, "transactions", docConfig.linkedTransactionId), {
                        receiptNo: finalReceiptNo
                    });
-                   // 更新本地狀態，讓流水帳列表即時顯示
+
+                   // B. 更新本地交易列表 (讓流水帳列表立刻顯示綠色標籤，不用重新整理)
                    setTransactions(prev => prev.map(t => 
                        t.id === docConfig.linkedTransactionId ? { ...t, receiptNo: finalReceiptNo } : t
                    ));
+
+                   // C. 更新當前預覽視窗的設定 (讓列印出來的紙上有編號)
                    setDocConfig(prev => ({ ...prev, existingReceiptNo: finalReceiptNo }));
+                   
                } catch (error) {
                    console.error("Error saving receipt no:", error);
+                   alert("自動存檔失敗，請檢查網絡，但仍可繼續列印。");
                }
            }
       }
 
-      // 2. 觸發瀏覽器列印
+      // 2. 觸發瀏覽器列印 (給予一點延遲確保 React 渲染完成)
       setReportMode(true);
       setTimeout(() => {
           window.print();
           setReportMode(false);
       }, 500);
+  };
+
+  // 2. 開啟收據預覽 (修正資料傳遞)
+  const handleOpenReceipt = (tx: Transaction) => {
+      // 嘗試找該物業的租客資料自動帶入
+      const activeLease = leases.find(l => l.propertyId === tx.propertyId && l.status === 'Active');
+      
+      setDocConfig({
+          type: 'receipt',
+          propId: tx.propertyId || '',
+          tenant: activeLease ? activeLease.tenantName : (tx.member || ''), // 如果沒租約，暫用成員名
+          tenantID: activeLease ? activeLease.tenantID : '',
+          period: tx.date, // 使用交易日期
+          amount: tx.amount,
+          deposit: 0,
+          startDate: '',
+          endDate: '',
+          landlord: 'Charles Lam',
+          paymentMethod: 'Bank Transfer',
+          linkedTransactionId: tx.id,     // 綁定交易 ID
+          existingReceiptNo: tx.receiptNo // 如果已有編號，帶入顯示
+      });
+      setModalMode('doc');
   };
   
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1488,28 +1526,6 @@ const App: React.FC = () => {
           newAtt.splice(index, 1);
           setEditingLease({ ...editingLease, attachments: newAtt });
       }
-  };
-
-  // 新增：從流水帳開啟收據
-  const handleOpenReceipt = (tx: Transaction) => {
-      const activeLease = leases.find(l => l.propertyId === tx.propertyId && l.status === 'Active');
-      
-      setDocConfig({
-          type: 'receipt',
-          propId: tx.propertyId || '',
-          tenant: activeLease ? activeLease.tenantName : '',
-          tenantID: activeLease ? activeLease.tenantID : '',
-          period: tx.date, // 使用交易日期作為期間參考
-          amount: tx.amount,
-          deposit: 0,
-          startDate: '',
-          endDate: '',
-          landlord: 'Charles Lam',
-          paymentMethod: 'Bank Transfer',
-          linkedTransactionId: tx.id,
-          existingReceiptNo: tx.receiptNo // 如果已有編號，傳入
-      });
-      setModalMode('doc');
   };
 
   if (!dataLoaded) {
@@ -1635,21 +1651,34 @@ const App: React.FC = () => {
                         <select className="border rounded px-2 py-1" value={filterYear} onChange={e=>setFilterYear(e.target.value)}><option value="All">All Years</option>{[2024,2025,2026].map(y=><option key={y} value={y}>{y}</option>)}</select>
                       </div>
                       <table className="w-full text-sm text-left">
-                          <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0"><tr><th className="p-3">Date</th><th className="p-3">Merchant</th><th className="p-3">Amount</th><th className="p-3">Category</th><th className="p-3">Member</th></tr></thead>
-                          <tbody className="divide-y">
-                              {transactions
-                                .filter(t => (filterCategory==='All'||t.category===filterCategory) && (searchTerm===''||(t.merchant || '').toLowerCase().includes(searchTerm.toLowerCase())))
-                                .slice(0, 50).map(t => (
-                                  <tr key={t.id} className="hover:bg-slate-50">
-                                      <td className="p-3">{t.date}</td>
-                                      <td className="p-3 font-medium">{t.merchant}</td>
-                                      <td className="p-3 font-mono">{formatCurrency(t.amount)}</td>
-                                      <td className="p-3"><span className="px-2 py-1 bg-gray-100 rounded text-xs">{t.category}</span></td>
-                                      <td className="p-3">{t.member}</td>
-                                  </tr>
-                              ))}
-                          </tbody>
-                      </table>
+    <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0"><tr><th className="p-3">Date</th><th className="p-3">Merchant</th><th className="p-3">Amount</th><th className="p-3">Category</th><th className="p-3">Member</th><th className="p-3">Doc</th></tr></thead>
+    <tbody className="divide-y">
+        {transactions
+          .filter(t => (filterCategory==='All'||t.category===filterCategory) && (searchTerm===''||(t.merchant || '').toLowerCase().includes(searchTerm.toLowerCase())))
+          .slice(0, 50).map(t => (
+            <tr key={t.id} className="hover:bg-slate-50">
+                <td className="p-3">{t.date}</td>
+                <td className="p-3 font-medium">
+                    {t.merchant}
+                    {t.receiptNo && <div className="text-[9px] text-green-600 mt-1">🧾 {t.receiptNo}</div>}
+                </td>
+                <td className="p-3 font-mono">{formatCurrency(t.amount)}</td>
+                <td className="p-3"><span className="px-2 py-1 bg-gray-100 rounded text-xs">{t.category}</span></td>
+                <td className="p-3">{t.member}</td>
+                {/* 新增操作欄位 */}
+                <td className="p-3">
+                    <button 
+                        onClick={() => handleOpenReceipt(t)} 
+                        className={`p-1 rounded border ${t.receiptNo ? 'text-green-600 border-green-200 bg-green-50' : 'text-slate-400 border-slate-200 hover:text-blue-500 hover:border-blue-300'}`}
+                        title="Open Receipt"
+                    >
+                        <ICONS.FileText />
+                    </button>
+                </td>
+            </tr>
+        ))}
+    </tbody>
+</table>
                   </div>
               )}
               

@@ -678,7 +678,7 @@ const PropertyDetailView = ({
                  <div className="flex justify-between items-center">
                     <h3 className="font-bold">租約紀錄 Lease History</h3>
                     <button onClick={()=>{
-                        setEditingLease({ id: '',propertyId: p.id, tenantName: '', tenantID: '', startDate: '', endDate: '', monthlyRent: 0, deposit: 0, status: 'Active', attachments: [] } as Lease);
+                        setEditingLease({ id: '', propertyId: p.id, tenantName: '', tenantID: '', startDate: '', endDate: '', monthlyRent: 0, deposit: 0, status: 'Active', attachments: [] } as Lease);
                         setModalMode('lease');
                     }} className="text-sm text-blue-600 hover:underline">+ Register New Lease</button>
                  </div>
@@ -1231,7 +1231,6 @@ const App: React.FC = () => {
 
   // 新增：從流水帳開啟收據
   const handleOpenReceipt = (tx: Transaction) => {
-      const handleOpenReceipt = (tx: Transaction) => {
       const activeLease = leases.find(l => l.propertyId === tx.propertyId && l.status === 'Active');
       
       setDocConfig({

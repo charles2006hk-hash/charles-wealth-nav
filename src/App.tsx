@@ -181,7 +181,38 @@ const FAMILY_INFO = {
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
 
 // --- 4. 輔助函數 ---
-const convertNumberToEnglish = (n: any) => (Number(n) || 0).toString(); 
+const convertNumberToEnglish = (n: number) => {
+    if (n === 0) return "Zero";
+    
+    const units = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
+    const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+    
+    const convertChunk = (num: number): string => {
+        if (num < 20) return units[num];
+        if (num < 100) return tens[Math.floor(num / 10)] + (num % 10 !== 0 ? " " + units[num % 10] : "");
+        if (num < 1000) return units[Math.floor(num / 100)] + " Hundred" + (num % 100 !== 0 ? " and " + convertChunk(num % 100) : "");
+        return "";
+    };
+
+    let result = "";
+    // Handle Millions
+    if (n >= 1000000) {
+        result += convertChunk(Math.floor(n / 1000000)) + " Million ";
+        n %= 1000000;
+    }
+    // Handle Thousands
+    if (n >= 1000) {
+        result += convertChunk(Math.floor(n / 1000)) + " Thousand ";
+        n %= 1000;
+    }
+    // Handle Hundreds/Units
+    if (n > 0) {
+        result += convertChunk(n);
+    }
+
+    return result.trim() + " ONLY";
+};
+
 const formatCurrency = (val: any) => {
     const num = Number(val);
     if (isNaN(num)) return '$0';
@@ -457,51 +488,134 @@ const OverviewDashboard = ({ transactions, properties, leases }: any) => {
 const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig: DocConfig, properties: Property[], transactions: Transaction[] }) => {
     const prop = properties.find(p => p.id === docConfig.propId) || { name: 'Unknown Property', address: '' } as Property;
 
-    // --- 收據樣式 (Receipt) ---
+    // --- 收據樣式 (Receipt) - 樣式還原版 ---
     if (docConfig.type === 'receipt') {
-        // 優先顯示已存在的編號，否則顯示 "PREVIEW" (代表還沒存檔列印)
-        const receiptNo = docConfig.existingReceiptNo || "PREVIEW (Click Print to Generate)";
+        const receiptNo = docConfig.existingReceiptNo || `PREVIEW`; // 預覽時顯示 PREVIEW
+        const englishAmount = convertNumberToEnglish(docConfig.amount);
         
+        // 判斷 Checkbox 狀態 (預設租客與租金)
+        const isTenant = true; // 這裡假設收款對象通常是租客
+        const isRent = true;   // 這裡假設通常是收租金
+
         return (
-             <div className="border border-black p-8 w-[210mm] h-[148mm] mx-auto bg-white text-black font-serif relative">
-                <h1 className="text-2xl font-bold text-center underline mb-2">OFFICIAL RECEIPT 正式收據</h1>
-                <div className="absolute top-8 right-8 text-sm text-right">
-                    <div className="font-bold border-b border-black mb-1">Receipt No. {receiptNo}</div>
-                    <div>Date: {docConfig.period || new Date().toLocaleDateString()}</div>
+             // 設定固定尺寸 210mm x 145mm，藍色邊框，白色背景
+             <div className="w-[210mm] h-[145mm] mx-auto bg-white text-black font-sans relative border-[3px] border-blue-400 p-6 box-border overflow-hidden">
+                
+                {/* Header: 編號、標題、日期 */}
+                <div className="flex justify-between items-end mb-2">
+                    <div className="text-sm font-bold w-1/3">
+                        收據編號<br/>
+                        Receipt No. : <span className="text-red-600 text-xl font-mono ml-2">{receiptNo}</span>
+                    </div>
+                    <div className="text-center w-1/3">
+                        <h1 className="text-2xl font-bold whitespace-nowrap">收 OFFICIAL RECEIPT 據</h1>
+                    </div>
+                    <div className="text-right w-1/3 text-sm">
+                        日期<br/>
+                        Date : <span className="border-b border-black inline-block w-32 text-center">{docConfig.period || new Date().toLocaleDateString()}</span>
+                    </div>
                 </div>
-                <div className="mt-8 space-y-6 text-sm leading-loose">
-                    <div className="flex border-b border-dotted border-gray-400 pb-1">
-                        <span className="w-32 font-bold">Received from:</span>
-                        <span className="flex-1 font-medium">{docConfig.tenant}</span>
-                    </div>
-                    <div className="flex border-b border-dotted border-gray-400 pb-1">
-                        <span className="w-32 font-bold">The Sum of:</span>
-                        <span className="flex-1 font-medium">HK$ {docConfig.amount.toLocaleString()} <br/> <span className="text-xs text-gray-500 uppercase">(Words: {convertNumberToEnglish(docConfig.amount)} ONLY)</span></span>
-                    </div>
-                    <div className="flex border-b border-dotted border-gray-400 pb-1">
-                        <span className="w-32 font-bold">For Rent of:</span>
-                        <span className="flex-1 font-medium">{prop.name} <br/> <span className="text-xs">{prop.address}</span></span>
-                    </div>
-                    <div className="flex border-b border-dotted border-gray-400 pb-1">
-                        <span className="w-32 font-bold">Payment Mode:</span>
-                        <span className="flex-1 font-medium">{docConfig.paymentMethod}</span>
-                    </div>
+
+                {/* Body Content */}
+                <div className="space-y-3 text-sm font-medium">
                     
-                    <div className="mt-12 flex justify-end">
-                        <div className="text-center w-64">
-                            <div className="h-16 border-b border-black mb-2 flex items-end justify-center">
-                                {/* 如果是預覽，顯示簽名佔位符 */}
-                                <span className="font-script text-2xl text-blue-900">{docConfig.landlord}</span> 
-                            </div>
-                            <p className="text-xs uppercase font-bold">Signature of Landlord</p>
+                    {/* Row 1: Received From & Role Checkboxes */}
+                    <div className="flex items-end">
+                        <div className="whitespace-nowrap pb-1">茲 收 到<br/>Received From :</div>
+                        <div className="border-b border-black flex-1 mx-2 px-2 text-lg font-bold pb-1">{docConfig.tenant}</div>
+                        <div className="flex gap-4 text-xs items-end pb-1">
+                            <label className="flex items-center gap-1"><div className="w-4 h-4 border border-black flex items-center justify-center"></div> 賣家 Vendor</label>
+                            <label className="flex items-center gap-1"><div className="w-4 h-4 border border-black flex items-center justify-center"></div> 業主 Landlord</label>
+                            <label className="flex items-center gap-1"><div className="w-4 h-4 border border-black flex items-center justify-center"></div> 買家 Purchaser</label>
+                            <label className="flex items-center gap-1"><div className="w-4 h-4 border border-black flex items-center justify-center">{isTenant ? '✔' : ''}</div> 租客 Tenant</label>
+                        </div>
+                    </div>
+
+                    {/* Row 2: HK Dollars (English Words) */}
+                    <div className="flex items-end">
+                        <div className="whitespace-nowrap pb-1">港 幣<br/>H.K.Dollars :</div>
+                        {/* 背景橫線樣式 */}
+                        <div className="border-b border-black flex-1 mx-2 px-2 pb-1 relative">
+                            <span className="relative z-10 text-lg italic">{englishAmount}</span>
+                            <div className="absolute top-1/2 left-0 w-full h-[1px] bg-gray-200 z-0"></div>
+                            <div className="absolute top-[30%] left-0 w-full h-[1px] bg-gray-200 z-0"></div>
+                            <div className="absolute top-[70%] left-0 w-full h-[1px] bg-gray-200 z-0"></div>
+                        </div>
+                    </div>
+
+                    {/* Row 3: HK$ Numeric (Big) */}
+                    <div className="flex items-center justify-center my-1">
+                        <div className="text-4xl font-serif italic font-bold border-b-2 border-black border-t-2 py-1 px-8 w-2/3 text-center">
+                            HK$ {docConfig.amount.toLocaleString()}
+                        </div>
+                    </div>
+
+                    {/* Row 4: Property Address */}
+                    <div className="flex items-end">
+                        <div className="whitespace-nowrap pb-1">物 業 地 址<br/>Property at :</div>
+                        <div className="border-b border-black flex-1 mx-2 px-2 pb-1 truncate">{prop.address}</div>
+                    </div>
+
+                    {/* Row 5: Contract No. */}
+                    <div className="flex justify-end">
+                        <div className="w-1/2 flex items-end">
+                            <div className="whitespace-nowrap pb-1">合 約 編 號<br/>Contract No. :</div>
+                            <div className="border-b border-black flex-1 mx-2 px-2 pb-1 text-right">{docConfig.linkedTransactionId ? `TX-${docConfig.linkedTransactionId.slice(0,6)}` : ''}</div>
+                        </div>
+                    </div>
+
+                    {/* Row 6: Payment Type Checkboxes */}
+                    <div className="flex items-end pt-2">
+                        <div className="whitespace-nowrap mr-2">該 款 係 付<br/>In Payment of :</div>
+                        <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs flex-1 items-end">
+                            <label className="flex items-center gap-1"><div className="w-4 h-4 border border-black"></div> 按金 Deposit</label>
+                            <label className="flex items-center gap-1"><div className="w-4 h-4 border border-black flex items-center justify-center">{isRent ? '✔' : ''}</div> 租金 Rent</label>
+                            <label className="flex items-center gap-1"><div className="w-4 h-4 border border-black"></div> 訂金 Deposit</label>
+                            <label className="flex items-center gap-1"><div className="w-4 h-4 border border-black"></div> 佣金 Commission Fee</label>
+                            <label className="flex items-center gap-1"><div className="w-4 h-4 border border-black"></div> 釐印 Stamp Duty</label>
+                            <label className="flex items-center gap-1"><div className="w-4 h-4 border border-black"></div> 其它 Others</label>
+                        </div>
+                    </div>
+
+                    {/* Row 7: Payment Method */}
+                    <div className="flex items-end mt-2 text-xs">
+                        <div className="flex gap-4 items-center">
+                            <label className="flex items-center gap-1"><div className="w-4 h-4 border border-black flex items-center justify-center">{docConfig.paymentMethod === 'Cash' ? '✔' : ''}</div> 現金<br/>Cash</label>
+                            <label className="flex items-center gap-1"><div className="w-4 h-4 border border-black flex items-center justify-center">{docConfig.paymentMethod === 'Cheque' ? '✔' : ''}</div> 支票號碼<br/>Cheque</label>
+                        </div>
+                        <div className="border-b border-black w-24 mx-1"></div>
+                        <div className="mx-2">銀行<br/>Bank</div>
+                        <div className="border-b border-black w-24 mx-1 flex-1 text-center">{docConfig.paymentMethod === 'Bank Transfer' ? 'Bank Transfer' : ''}</div>
+                        <div className="mx-2 text-right">開票日期<br/>Date</div>
+                        <div className="border-b border-black w-24 mx-1"></div>
+                        <div className="flex items-center gap-2 ml-auto">
+                            <div className="w-4 h-4 border border-black"></div> 鎖匙 Key(s) <span className="border-b border-black inline-block w-8 text-center"></span> pcs
+                        </div>
+                    </div>
+                </div>
+
+                {/* Footer */}
+                <div className="absolute bottom-6 left-6 right-6 flex justify-between items-end">
+                    <div className="text-xs w-1/2">
+                        交來支票收妥作實<br/>
+                        Cheques received are subject to clearance
+                    </div>
+                    <div className="w-1/2 flex flex-col items-end">
+                        <div className="w-48 border-b border-black mb-1 text-center font-script text-xl relative">
+                            {/* 簽名佔位 */}
+                            {docConfig.landlord}
+                        </div>
+                        <div className="w-48 flex justify-between text-xs">
+                            <span>經手收款人</span>
+                            <span>Received by</span>
                         </div>
                     </div>
                 </div>
             </div>
         );
-    }
+    } 
     
-    // --- 對數單樣式 (Statement) ---
+    // --- 對數單樣式 (Statement) - 保持不變 ---
     if (docConfig.type === 'statement') {
         const filteredTxs = transactions
             .filter(t => t.propertyId === docConfig.propId && (!docConfig.statementDateStart || t.date >= docConfig.statementDateStart) && (!docConfig.statementDateEnd || t.date <= docConfig.statementDateEnd))
@@ -532,7 +646,7 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
         );
     }
 
-    // --- 完整 4 頁租約樣式 (Lease) ---
+    // --- 完整 4 頁租約樣式 (Lease) - 保持不變 ---
     return (
         <div className="doc-print-container text-black font-serif text-sm leading-relaxed">
           {/* Page 1 */}

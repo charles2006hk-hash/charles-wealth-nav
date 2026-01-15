@@ -976,7 +976,6 @@ const PropertyDetailView = ({
                 <div className="max-h-[500px] overflow-y-auto">
                     <table className="w-full text-sm text-left">
                         <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0"><tr><th className="p-3">Date</th><th className="p-3">Category</th><th className="p-3">Detail</th><th className="p-3">Amount</th><th className="p-3">Action</th></tr></thead>
-                        // 在 PropertyDetailView 的 table tbody 內，替換原本的 map 內容：
 <tbody className="divide-y">
     {pTransactions.filter((t: any) => (JSON.stringify(t) || '').toLowerCase().includes(ledgerFilter.toLowerCase())).map((t: any) => (
         <tr key={t.id} className="hover:bg-blue-50">

@@ -512,6 +512,7 @@ const OverviewDashboard = ({ transactions, properties, leases }: any) => {
 
 const SettingsView = ({ settings, setSettings }: { settings: AppSettings, setSettings: (s: AppSettings) => void }) => {
     
+    // 移除未使用的 addItem 函數，直接在 onKeyDown 處理
     const removeItem = (type: keyof AppSettings, item: string) => {
         setSettings({ ...settings, [type]: settings[type].filter(x => x !== item) });
     };
@@ -536,12 +537,11 @@ const SettingsView = ({ settings, setSettings }: { settings: AppSettings, setSet
                                 placeholder="Add new..." 
                                 onKeyDown={(e) => {
                                     if(e.key === 'Enter') {
-                                        // @ts-ignore
-                                        const val = e.target.value;
+                                        const target = e.target as HTMLInputElement;
+                                        const val = target.value;
                                         if (val) {
                                             setSettings({ ...settings, [section.key]: [...settings[section.key as keyof AppSettings], val] });
-                                            // @ts-ignore
-                                            e.target.value = '';
+                                            target.value = '';
                                         }
                                     }
                                 }}
@@ -1747,6 +1747,7 @@ const App: React.FC = () => {
 
   const handleOpenReceipt = (tx: Transaction) => {
       const activeLease = leases.find(l => l.propertyId === tx.propertyId && l.status === 'Active');
+      
       setDocConfig({
           type: 'receipt',
           propId: tx.propertyId || '',
@@ -1760,7 +1761,7 @@ const App: React.FC = () => {
           landlord: 'Charles Lam',
           paymentMethod: 'Bank Transfer',
           linkedTransactionId: tx.id,
-          existingReceiptNo: tx.receiptNo 
+          existingReceiptNo: tx.receiptNo // 支援舊收據編號
       });
       setModalMode('doc');
   };
@@ -2052,9 +2053,28 @@ const App: React.FC = () => {
                                       <label className="text-xs block text-slate-500">Tags (Enter to add)</label>
                                       <div className="border rounded p-2 flex flex-wrap gap-1 min-h-[42px]">
                                           {editingProp?.tags?.map(t => (
-                                              <span key={t} className="text-xs bg-slate-100 px-1 rounded flex items-center">{t} <button className="ml-1 text-red-400" onClick={()=>setEditingProp({...editingProp, tags: editingProp!.tags.filter(x=>x!==t)} as any)}>x</button></span>
+                                              <span key={t} className="text-xs bg-slate-100 px-1 rounded flex items-center">
+                                                  {t} 
+                                                  <button className="ml-1 text-red-400" onClick={()=>setEditingProp({...editingProp, tags: editingProp!.tags.filter(x=>x!==t)} as any)}>x</button>
+                                              </span>
                                           ))}
-                                          <input className="outline-none text-xs w-20" onKeyDown={(e)=>{if(e.key==='Enter' && editingProp) { const val = (e.target as HTMLInputElement).value; if(val) { setEditingProp({...editingProp, tags: [...(editingProp.tags||[]), val]} as any); (e.target as HTMLInputElement).value = ''; }}}} />
+                                          <input 
+                                              className="outline-none text-xs w-20" 
+                                              onKeyDown={(e) => {
+                                                  // 加入 && editingProp 檢查，解決 TS18047 錯誤
+                                                  if(e.key === 'Enter' && editingProp) { 
+                                                      const target = e.target as HTMLInputElement;
+                                                      const val = target.value; 
+                                                      if(val) { 
+                                                          setEditingProp({
+                                                              ...editingProp, 
+                                                              tags: [...(editingProp.tags || []), val]
+                                                          } as any); 
+                                                          target.value = ''; 
+                                                      }
+                                                  }
+                                              }} 
+                                          />
                                       </div>
                                   </div>
                               </div>

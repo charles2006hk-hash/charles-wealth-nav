@@ -540,8 +540,9 @@ const OverviewDashboard = ({ transactions, properties, leases }: any) => {
 };
 
 const SettingsView = ({ settings, setSettings }: { settings: AppSettings, setSettings: (s: AppSettings) => void }) => {
+    // 明確指定 x 的類型為 string
     const removeItem = (type: keyof AppSettings, item: string) => {
-        setSettings({ ...settings, [type]: settings[type].filter(x => x !== item) });
+        setSettings({ ...settings, [type]: settings[type].filter((x: string) => x !== item) });
     };
 
     return (
@@ -564,18 +565,18 @@ const SettingsView = ({ settings, setSettings }: { settings: AppSettings, setSet
                                 placeholder="Add new..." 
                                 onKeyDown={(e) => {
                                     if(e.key === 'Enter') {
-                                        // @ts-ignore
-                                        const val = e.target.value;
+                                        const target = e.target as HTMLInputElement;
+                                        const val = target.value;
                                         if (val) {
                                             setSettings({ ...settings, [section.key]: [...settings[section.key as keyof AppSettings], val] });
-                                            // @ts-ignore
-                                            e.target.value = '';
+                                            target.value = '';
                                         }
                                     }
                                 }}
                             />
                         </div>
                         <div className="space-y-2 max-h-60 overflow-y-auto">
+                            {/* 明確指定 item 的類型為 string */}
                             {settings[section.key as keyof AppSettings].map((item: string) => (
                                 <div key={item} className="flex justify-between items-center bg-slate-50 px-3 py-2 rounded text-sm group">
                                     <span>{item}</span>
@@ -880,6 +881,16 @@ const PropertyDetailView = ({
         </div>
     );
 };
+
+interface DocModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    docConfig: DocConfig;
+    setDocConfig: (config: DocConfig) => void;
+    handlePrint: () => void;
+    properties: Property[];
+    transactions: Transaction[];
+}
 
 const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig: DocConfig, properties: Property[], transactions: Transaction[] }) => {
     const prop = properties.find(p => p.id === docConfig.propId) || { name: 'Unknown Property', address: '' } as Property;

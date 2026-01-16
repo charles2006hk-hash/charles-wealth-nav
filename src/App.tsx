@@ -61,12 +61,9 @@ interface Property {
   address: string;
   type: 'Investment' | 'Self-use';
   status: 'Occupied' | 'Vacant' | 'Renovation';
-  
-  // 新增：業權資料
-  owner: string; // 業主
-  ownershipType: 'Self-owned' | 'Managed'; // 自己的 vs 代管
-  tags: string[]; // 手動標籤
-
+  owner: string; 
+  ownershipType: 'Self-owned' | 'Managed'; 
+  tags: string[]; 
   currentValue: number; 
   purchasePrice: number; 
   initialDeposit: number; 
@@ -92,7 +89,7 @@ interface PropertyWithStats extends Property {
     isLate: boolean;
     estRent: number;
     stressedExpense: number;
-    displayTags: string[]; // 包含自動和手動的標籤
+    displayTags: string[];
 }
 
 interface EduConfig {
@@ -133,7 +130,6 @@ interface InsurancePolicy {
     rawMerchant?: string;
 }
 
-// 系統設定介面
 interface AppSettings {
     banks: string[];
     insuranceCompanies: string[];
@@ -172,6 +168,7 @@ const CATEGORIES = [
   'Insurance (保險)', 'Utilities (水電煤)', 'Agent Fee (佣金)', 'Other (其他)',
   'Credit Card', 'Education', 'Transport', 'Telecom', 'Shopping', 'Dining', 'Medical', 'General'
 ];
+const MEMBERS = ['Charles', 'Carmen', 'Virginia', 'Jason', 'Family'];
 
 const INITIAL_PROPERTIES_DATA: Property[] = [
     { id: 'p1', name: '京瑞二期 16E', address: '沙田安群街1號京瑞廣場二期16樓E室', type: 'Investment', status: 'Occupied', currentValue: 8000000, purchasePrice: 6000000, initialDeposit: 300000, furtherDeposit: 300000, balancePayment: 5400000, mortgageLoan: 3000000, mortgageAmount: 15000, outstandingLoan: 3000000, managementFee: 1200, govtRates: 1500, govtRent: 900, estRent: 25000, tenure: 15, interestRate: 3.5, bank: 'BOC', owner: 'Charles', ownershipType: 'Self-owned', tags: [] },
@@ -508,6 +505,58 @@ const OverviewDashboard = ({ transactions, properties, leases }: any) => {
                         </BarChart>
                     </ResponsiveContainer>
                 </div>
+            </div>
+        </div>
+    );
+};
+
+const SettingsView = ({ settings, setSettings }: { settings: AppSettings, setSettings: (s: AppSettings) => void }) => {
+    
+    const removeItem = (type: keyof AppSettings, item: string) => {
+        setSettings({ ...settings, [type]: settings[type].filter(x => x !== item) });
+    };
+
+    return (
+        <div className="space-y-8 animate-in fade-in">
+            <h2 className="text-2xl font-bold mb-4 text-slate-800">系統設定 System Settings</h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {[
+                    { key: 'banks', title: '銀行列表 (Banks)' },
+                    { key: 'insuranceCompanies', title: '保險公司 (Insurance)' },
+                    { key: 'owners', title: '業主名單 (Owners)' }
+                ].map((section) => (
+                    <div key={section.key} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                        <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-700">
+                            {section.title}
+                        </h3>
+                        <div className="flex gap-2 mb-4">
+                            <input 
+                                className="border rounded px-2 py-1 text-sm flex-1" 
+                                placeholder="Add new..." 
+                                onKeyDown={(e) => {
+                                    if(e.key === 'Enter') {
+                                        // @ts-ignore
+                                        const val = e.target.value;
+                                        if (val) {
+                                            setSettings({ ...settings, [section.key]: [...settings[section.key as keyof AppSettings], val] });
+                                            // @ts-ignore
+                                            e.target.value = '';
+                                        }
+                                    }
+                                }}
+                            />
+                        </div>
+                        <div className="space-y-2 max-h-60 overflow-y-auto">
+                            {settings[section.key as keyof AppSettings].map((item: string) => (
+                                <div key={item} className="flex justify-between items-center bg-slate-50 px-3 py-2 rounded text-sm group">
+                                    <span>{item}</span>
+                                    <button onClick={() => removeItem(section.key as keyof AppSettings, item)} className="text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100">✕</button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ))}
             </div>
         </div>
     );
@@ -1003,63 +1052,6 @@ const PropertyDashboard = ({
     </div>
 );
 
-const SettingsView = ({ settings, setSettings }: { settings: AppSettings, setSettings: (s: AppSettings) => void }) => {
-    const [newItem, setNewItem] = useState('');
-    
-    const addItem = (type: keyof AppSettings) => {
-        if (!newItem) return;
-        setSettings({ ...settings, [type]: [...settings[type], newItem] });
-        setNewItem('');
-    };
-
-    const removeItem = (type: keyof AppSettings, item: string) => {
-        setSettings({ ...settings, [type]: settings[type].filter(x => x !== item) });
-    };
-
-    return (
-        <div className="space-y-8 animate-in fade-in">
-            <h2 className="text-2xl font-bold mb-4 text-slate-800">系統設定 System Settings</h2>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {[
-                    { key: 'banks', title: '銀行列表 (Banks)' },
-                    { key: 'insuranceCompanies', title: '保險公司 (Insurance)' },
-                    { key: 'owners', title: '業主名單 (Owners)' }
-                ].map((section) => (
-                    <div key={section.key} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                        <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-700">
-                            {section.title}
-                        </h3>
-                        <div className="flex gap-2 mb-4">
-                            <input 
-                                className="border rounded px-2 py-1 text-sm flex-1" 
-                                placeholder="Add new..." 
-                                onKeyDown={(e) => {
-                                    if(e.key === 'Enter') {
-                                        // @ts-ignore
-                                        const val = e.target.value;
-                                        setSettings({ ...settings, [section.key]: [...settings[section.key as keyof AppSettings], val] });
-                                        // @ts-ignore
-                                        e.target.value = '';
-                                    }
-                                }}
-                            />
-                        </div>
-                        <div className="space-y-2 max-h-60 overflow-y-auto">
-                            {settings[section.key as keyof AppSettings].map((item: string) => (
-                                <div key={item} className="flex justify-between items-center bg-slate-50 px-3 py-2 rounded text-sm group">
-                                    <span>{item}</span>
-                                    <button onClick={() => removeItem(section.key as keyof AppSettings, item)} className="text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100">✕</button>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-};
-
 const PropertyDetailView = ({ 
     propId, propStats, transactions, leases, 
     onBack, setDocConfig, setModalMode, setEditingProp, setEditingTx, 
@@ -1070,7 +1062,6 @@ const PropertyDetailView = ({
     const p = propStats.find((x: any) => x.id === propId);
     if (!p) return <div>Property not found</div>;
     
-    // 依據篩選後的交易計算總收支
     const filteredTxs = transactions
         .filter((t: any) => t.propertyId === propId)
         .filter((t: any) => (JSON.stringify(t) || '').toLowerCase().includes(ledgerFilter.toLowerCase()))
@@ -2061,9 +2052,9 @@ const App: React.FC = () => {
                                       <label className="text-xs block text-slate-500">Tags (Enter to add)</label>
                                       <div className="border rounded p-2 flex flex-wrap gap-1 min-h-[42px]">
                                           {editingProp?.tags?.map(t => (
-                                              <span key={t} className="text-xs bg-slate-100 px-1 rounded flex items-center">{t} <button className="ml-1 text-red-400" onClick={()=>setEditingProp({...editingProp, tags: editingProp.tags.filter(x=>x!==t)} as any)}>x</button></span>
+                                              <span key={t} className="text-xs bg-slate-100 px-1 rounded flex items-center">{t} <button className="ml-1 text-red-400" onClick={()=>setEditingProp({...editingProp, tags: editingProp!.tags.filter(x=>x!==t)} as any)}>x</button></span>
                                           ))}
-                                          <input className="outline-none text-xs w-20" onKeyDown={(e)=>{if(e.key==='Enter') { const val = (e.target as HTMLInputElement).value; if(val) { setEditingProp({...editingProp, tags: [...(editingProp.tags||[]), val]} as any); (e.target as HTMLInputElement).value = ''; }}}} />
+                                          <input className="outline-none text-xs w-20" onKeyDown={(e)=>{if(e.key==='Enter' && editingProp) { const val = (e.target as HTMLInputElement).value; if(val) { setEditingProp({...editingProp, tags: [...(editingProp.tags||[]), val]} as any); (e.target as HTMLInputElement).value = ''; }}}} />
                                       </div>
                                   </div>
                               </div>

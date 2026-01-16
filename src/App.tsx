@@ -638,106 +638,209 @@ const PropertyDashboard = ({
     stressRate, setStressRate, rentDrop, setRentDrop, 
     onSelectProperty, onAddProperty, onInitializeDefaults,
     onDeleteProperty
-}: any) => (
-    <div className="space-y-8 animate-in fade-in">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <StatCard title="物業總估值 Total Valuation" value={formatCurrency(totalValuation)} color="blue" iconName="Home" subtext={`${properties.length} Properties`} />
-            <StatCard title="每月租金收入 Monthly Rent" value={formatCurrency(totalMonthlyRent)} color="emerald" iconName="DollarSign" />
-            <StatCard title="整體出租率 Occupancy Rate" value={`${properties.length ? (properties.filter((p:any)=>p.status==='Occupied').length / properties.length * 100).toFixed(0) : 0}%`} color="indigo" iconName="PieChart" />
-            <StatCard title="應收未收 Arrears" value={propStats.filter((p:any)=>p.isLate).length} color="red" iconName="Shield" subtext="Units Late" />
-        </div>
+}: any) => {
+    // --- 新增：篩選狀態 ---
+    const [filterStatus, setFilterStatus] = useState('All'); // All, Held, Sold
+    const [filterOwnership, setFilterOwnership] = useState('All'); // All, Self-owned, Managed
+    const [timeType, setTimeType] = useState('Purchase'); // Purchase, Sale
+    const [filterYear, setFilterYear] = useState('All');
 
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
-            <div className="font-bold text-slate-700">壓力測試 Stress Test:</div>
-            <div className="flex items-center gap-2">
-                <span className="text-sm">Rate +{stressRate}%</span>
-                <input type="range" min="0" max="5" step="0.5" value={stressRate} onChange={e=>setStressRate(Number(e.target.value))} className="w-24" />
+    // --- 邏輯：計算篩選後的物業列表 ---
+    const filteredProps = useMemo(() => {
+        return propStats.filter((p: any) => {
+            // 1. 狀態篩選
+            if (filterStatus === 'Held' && p.status === 'Sold') return false;
+            if (filterStatus === 'Sold' && p.status !== 'Sold') return false;
+
+            // 2. 業權篩選
+            if (filterOwnership !== 'All' && p.ownershipType !== filterOwnership) return false;
+
+            // 3. 時間篩選
+            if (filterYear !== 'All') {
+                const dateTarget = timeType === 'Purchase' ? p.purchaseDate : p.saleDate;
+                if (!dateTarget) return false; // 如果沒日期資料就被濾掉
+                const year = new Date(dateTarget).getFullYear().toString();
+                if (year !== filterYear) return false;
+            }
+
+            return true;
+        });
+    }, [propStats, filterStatus, filterOwnership, timeType, filterYear]);
+
+    // --- 邏輯：動態生成年份選單 (只顯示有資料的年份) ---
+    const availableYears = useMemo(() => {
+        const years = new Set<string>();
+        propStats.forEach((p: any) => {
+            const dateTarget = timeType === 'Purchase' ? p.purchaseDate : p.saleDate;
+            if (dateTarget) {
+                years.add(new Date(dateTarget).getFullYear().toString());
+            }
+        });
+        return Array.from(years).sort().reverse(); // 從新到舊排序
+    }, [propStats, timeType]);
+
+    // --- 邏輯：重置所有篩選 ---
+    const clearFilters = () => {
+        setFilterStatus('All');
+        setFilterOwnership('All');
+        setFilterYear('All');
+        setTimeType('Purchase'); // 重置回預設
+    };
+
+    return (
+        <div className="space-y-8 animate-in fade-in">
+            {/* 頂部統計卡片 (保持不變) */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <StatCard title="物業總估值 Total Valuation" value={formatCurrency(totalValuation)} color="blue" iconName="Home" subtext={`${properties.length} Properties`} />
+                <StatCard title="每月租金收入 Monthly Rent" value={formatCurrency(totalMonthlyRent)} color="emerald" iconName="DollarSign" />
+                <StatCard title="整體出租率 Occupancy Rate" value={`${properties.length ? (properties.filter((p:any)=>p.status==='Occupied').length / properties.length * 100).toFixed(0) : 0}%`} color="indigo" iconName="PieChart" />
+                <StatCard title="應收未收 Arrears" value={propStats.filter((p:any)=>p.isLate).length} color="red" iconName="Shield" subtext="Units Late" />
             </div>
-            <div className="flex items-center gap-2">
-                <span className="text-sm">Rent Drop {rentDrop}%</span>
-                <input type="range" min="0" max="30" step="5" value={rentDrop} onChange={e=>setRentDrop(Number(e.target.value))} className="w-24" />
-            </div>
-        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {propStats.map((p: any) => (
-                <div 
-                  key={p.id} 
-                  role="button"
-                  tabIndex={0}
-                  onClick={(e) => {
-                      e.preventDefault();
-                      if (p.id) onSelectProperty(p.id);
-                  }}
-                  onKeyDown={(e) => e.key === 'Enter' && onSelectProperty(p.id)}
-                  className={`rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer group relative overflow-hidden active:scale-95 z-0 hover:z-10 ${p.status === 'Sold' ? 'bg-slate-100 grayscale-[0.5]' : 'bg-white'}`}
-                >
-                    <div className={`h-24 relative pointer-events-none ${p.status === 'Sold' ? 'bg-gradient-to-r from-gray-400 to-slate-500' : 'bg-gradient-to-r from-blue-500 to-indigo-600'}`}>
-                        <span className={`absolute top-4 left-4 px-3 py-1 text-xs rounded-full font-bold shadow-sm z-20 ${
-                            p.status === 'Occupied' 
-                                ? (p.isLate ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700') 
-                                : p.status === 'Sold' ? 'bg-black text-white' : 'bg-red-100 text-red-700'
-                        }`}>
-                            {p.status === 'Occupied' ? (p.isLate ? '欠租 Arrears' : '出租 Occupied') : p.status === 'Sold' ? '已售出 SOLD' : '空置 Vacant'}
-                        </span>
-
-                        <div className="absolute top-4 right-16 flex gap-1 pointer-events-auto">
-                            {p.displayTags?.map((tag:string, idx:number) => (
-                                <span key={idx} className="text-[10px] bg-white/20 text-white px-2 py-0.5 rounded backdrop-blur-sm">{tag}</span>
-                            ))}
-                        </div>
-
-                        <button 
-                            onClick={(e) => {
-                                e.stopPropagation(); 
-                                onDeleteProperty(p.id);
-                            }}
-                            className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-red-500 text-white rounded-full transition-all duration-200 z-50 backdrop-blur-sm pointer-events-auto hover:scale-110"
-                        >
-                            <ICONS.Trash />
-                        </button>
+            {/* --- 新增：篩選工具列 --- */}
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap gap-4 items-center justify-between">
+                <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
+                        <ICONS.Search /> 篩選條件:
                     </div>
                     
-                    <div className="p-5 pt-2">
-                        <div className="flex justify-between items-end mb-4">
-                            <div>
-                                <h3 className="font-bold text-xl text-slate-800 mb-1">{p.name}</h3>
-                                <p className="text-xs text-slate-500 truncate max-w-[200px]">{p.address || 'No Address'}</p>
-                                <p className="text-[10px] text-slate-400 mt-1">Held: {calculateDuration(p.purchaseDate, p.saleDate)}</p>
+                    {/* 1. 狀態篩選 */}
+                    <select className="border rounded-lg px-2 py-1 text-sm bg-slate-50" value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}>
+                        <option value="All">全部狀態 (All Status)</option>
+                        <option value="Held">持有中 (In Hand)</option>
+                        <option value="Sold">已賣出 (Sold)</option>
+                    </select>
+
+                    {/* 2. 業權篩選 */}
+                    <select className="border rounded-lg px-2 py-1 text-sm bg-slate-50" value={filterOwnership} onChange={e=>setFilterOwnership(e.target.value)}>
+                        <option value="All">全部業權 (All Types)</option>
+                        <option value="Self-owned">自行持有 (Self)</option>
+                        <option value="Managed">代管 (Managed)</option>
+                    </select>
+
+                    {/* 3. 時間篩選 (類型 + 年份) */}
+                    <div className="flex border rounded-lg overflow-hidden">
+                        <select className="px-2 py-1 text-sm bg-slate-100 border-r" value={timeType} onChange={e=>{setTimeType(e.target.value); setFilterYear('All');}}>
+                            <option value="Purchase">購入年份</option>
+                            <option value="Sale">賣出年份</option>
+                        </select>
+                        <select className="px-2 py-1 text-sm bg-white" value={filterYear} onChange={e=>setFilterYear(e.target.value)}>
+                            <option value="All">所有年份</option>
+                            {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+                        </select>
+                    </div>
+
+                    {/* 清除按鈕 */}
+                    {(filterStatus!=='All' || filterOwnership!=='All' || filterYear!=='All') && (
+                        <button onClick={clearFilters} className="text-xs text-red-500 hover:underline bg-red-50 px-2 py-1 rounded">
+                            ✕ 清除條件
+                        </button>
+                    )}
+                </div>
+
+                {/* 壓力測試 (保持不變) */}
+                <div className="flex items-center gap-4 border-l pl-4 hidden xl:flex">
+                    <div className="font-bold text-slate-700 text-xs">壓力測試:</div>
+                    <div className="flex items-center gap-2">
+                        <span className="text-[10px]">Rate +{stressRate}%</span>
+                        <input type="range" min="0" max="5" step="0.5" value={stressRate} onChange={e=>setStressRate(Number(e.target.value))} className="w-16 h-1" />
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span className="text-[10px]">Rent -{rentDrop}%</span>
+                        <input type="range" min="0" max="30" step="5" value={rentDrop} onChange={e=>setRentDrop(Number(e.target.value))} className="w-16 h-1" />
+                    </div>
+                </div>
+            </div>
+
+            {/* 物業卡片列表 (已套用篩選) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {/* 顯示結果數量 */}
+                {filteredProps.length === 0 && (
+                    <div className="col-span-full text-center py-10 text-slate-400 bg-slate-50 rounded-xl border border-dashed">
+                        沒有符合條件的物業
+                    </div>
+                )}
+
+                {filteredProps.map((p: any) => (
+                    <div 
+                    key={p.id} 
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => {
+                        e.preventDefault();
+                        if (p.id) onSelectProperty(p.id);
+                    }}
+                    onKeyDown={(e) => e.key === 'Enter' && onSelectProperty(p.id)}
+                    className={`rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer group relative overflow-hidden active:scale-95 z-0 hover:z-10 ${p.status === 'Sold' ? 'bg-slate-100 grayscale-[0.5]' : 'bg-white'}`}
+                    >
+                        <div className={`h-24 relative pointer-events-none ${p.status === 'Sold' ? 'bg-gradient-to-r from-gray-400 to-slate-500' : 'bg-gradient-to-r from-blue-500 to-indigo-600'}`}>
+                            <span className={`absolute top-4 left-4 px-3 py-1 text-xs rounded-full font-bold shadow-sm z-20 ${
+                                p.status === 'Occupied' 
+                                    ? (p.isLate ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700') 
+                                    : p.status === 'Sold' ? 'bg-black text-white' : 'bg-red-100 text-red-700'
+                            }`}>
+                                {p.status === 'Occupied' ? (p.isLate ? '欠租 Arrears' : '出租 Occupied') : p.status === 'Sold' ? '已售出 SOLD' : '空置 Vacant'}
+                            </span>
+
+                            <div className="absolute top-4 right-16 flex gap-1 pointer-events-auto">
+                                {p.displayTags?.map((tag:string, idx:number) => (
+                                    <span key={idx} className="text-[10px] bg-white/20 text-white px-2 py-0.5 rounded backdrop-blur-sm">{tag}</span>
+                                ))}
                             </div>
+
+                            <button 
+                                onClick={(e) => {
+                                    e.stopPropagation(); 
+                                    onDeleteProperty(p.id);
+                                }}
+                                className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-red-500 text-white rounded-full transition-all duration-200 z-50 backdrop-blur-sm pointer-events-auto hover:scale-110"
+                            >
+                                <ICONS.Trash />
+                            </button>
                         </div>
                         
-                        <div className="grid grid-cols-2 gap-3 text-sm bg-slate-50 p-3 rounded-xl border border-slate-100">
-                            <div>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{p.status==='Sold' ? 'Sold Price' : 'Valuation'}</p>
-                                <p className="font-mono font-bold text-slate-700">{formatCurrency(p.status==='Sold' ? p.salePrice : p.currentValue)}</p>
+                        <div className="p-5 pt-2">
+                            <div className="flex justify-between items-end mb-4">
+                                <div>
+                                    <h3 className="font-bold text-xl text-slate-800 mb-1">{p.name}</h3>
+                                    <p className="text-xs text-slate-500 truncate max-w-[200px]">{p.address || 'No Address'}</p>
+                                    <p className="text-[10px] text-slate-400 mt-1">Held: {calculateDuration(p.purchaseDate, p.saleDate)}</p>
+                                </div>
                             </div>
-                            <div>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{p.status==='Sold' ? 'Profit' : 'Rent'}</p>
-                                <p className={`font-mono font-bold ${p.status==='Sold' ? 'text-green-600' : 'text-emerald-600'}`}>
-                                    {p.status==='Sold' ? formatCurrency((p.salePrice||0) - (p.purchasePrice||0)) : (p.activeLease ? formatCurrency(p.activeLease.monthlyRent) : '-')}
-                                </p>
-                            </div>
-                             <div>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Net Income</p>
-                                <p className={`font-mono font-bold ${p.net >= 0 ? 'text-blue-600' : 'text-red-500'}`}>{formatCurrency(p.net)}</p>
-                            </div>
-                            <div>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Expense (Stress)</p>
-                                <p className="font-mono text-red-400">-{formatCurrency(p.stressedExpense)}</p>
+                            
+                            <div className="grid grid-cols-2 gap-3 text-sm bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                <div>
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{p.status==='Sold' ? 'Sold Price' : 'Valuation'}</p>
+                                    <p className="font-mono font-bold text-slate-700">{formatCurrency(p.status==='Sold' ? p.salePrice : p.currentValue)}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{p.status==='Sold' ? 'Profit' : 'Rent'}</p>
+                                    <p className={`font-mono font-bold ${p.status==='Sold' ? 'text-green-600' : 'text-emerald-600'}`}>
+                                        {p.status==='Sold' ? formatCurrency((p.salePrice||0) - (p.purchasePrice||0)) : (p.activeLease ? formatCurrency(p.activeLease.monthlyRent) : '-')}
+                                    </p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Net Income</p>
+                                    <p className={`font-mono font-bold ${p.net >= 0 ? 'text-blue-600' : 'text-red-500'}`}>{formatCurrency(p.net)}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Expense (Stress)</p>
+                                    <p className="font-mono text-red-400">-{formatCurrency(p.stressedExpense)}</p>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            ))}
-            
-             <button onClick={onAddProperty} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-2xl hover:bg-slate-50 transition text-slate-400 hover:text-slate-600 cursor-pointer z-10 min-h-[240px]"><ICONS.Plus /><span className="mt-2 font-bold">新增物業 Add Property</span></button>
-             {properties.length === 0 && (
-                <button onClick={onInitializeDefaults} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-blue-300 bg-blue-50 rounded-2xl hover:bg-blue-100 transition text-blue-500 cursor-pointer z-10 min-h-[240px]"><ICONS.Plus /><span className="mt-2 font-bold">初始化預設物業</span></button>
-            )}
+                ))}
+                
+                {/* 新增按鈕 (保持不變) */}
+                <button onClick={onAddProperty} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-2xl hover:bg-slate-50 transition text-slate-400 hover:text-slate-600 cursor-pointer z-10 min-h-[240px]"><ICONS.Plus /><span className="mt-2 font-bold">新增物業 Add Property</span></button>
+                {properties.length === 0 && (
+                    <button onClick={onInitializeDefaults} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-blue-300 bg-blue-50 rounded-2xl hover:bg-blue-100 transition text-blue-500 cursor-pointer z-10 min-h-[240px]"><ICONS.Plus /><span className="mt-2 font-bold">初始化預設物業</span></button>
+                )}
+            </div>
         </div>
-    </div>
-);
+    );
+};
 
 const PropertyDetailView = ({ 
     propId, propStats, transactions, leases, 

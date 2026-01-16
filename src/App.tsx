@@ -849,7 +849,10 @@ const PropertyDetailView = ({
                                             </span>
                                         )}
                                     </td>
-                                    <td className={`p-3 font-mono font-bold ${((t.category || '').includes('Income') || t.category === 'Property Sale (賣樓收入)') ? 'text-emerald-600' : 'text-red-500'}`}>{((t.category || '').includes('Income') || t.category === 'Property Sale (賣樓收入)') ? '+' : '-'}{formatCurrency(t.amount)}</td>
+                                    <td className={`p-3 font-mono font-bold ${((t.category || '').includes('Income') || t.category === 'Property Sale (賣樓收入)') ? 'text-emerald-600' : 'text-red-500'}`}>
+    {((t.category || '').includes('Income') || t.category === 'Property Sale (賣樓收入)') ? '+' : '-'}
+    {formatCurrency(t.amount)}
+</td>
                                     <td className="p-3">
                                         <div className="flex items-center gap-2">
                                             {/* Allow receipt generation for any income or specific categories */}
@@ -1636,9 +1639,11 @@ const App: React.FC = () => {
       setTimeout(() => { window.print(); setReportMode(false); }, 500);
   };
   
+  // --- 修改 1: 替換 handleCSVUpload 函數 ---
   const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    
     const readFile = (encoding: string): Promise<string> => {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -1647,14 +1652,18 @@ const App: React.FC = () => {
             reader.readAsText(file, encoding);
         });
     };
-    if (!window.confirm("確定要導入此 CSV？")) return;
+
+    if (!window.confirm("確定要導入此 CSV？系統將自動比對並略過重複資料，同時建立缺失的物業檔案。")) return;
+
     try {
         let text = await readFile('UTF-8');
         let lines = text.split('\n').filter(l => l.trim() !== '');
         let headers = parseCSVLine(lines[0]).map(h => h.trim().replace(/^\ufeff/, ''));
+        
         let idxDate = headers.indexOf('繳費日期');
         let idxAmount = headers.indexOf('費用');
         let idxProp = headers.indexOf('物業');
+
         if (idxDate === -1 || idxAmount === -1) {
             text = await readFile('big5');
             lines = text.split('\n').filter(l => l.trim() !== '');
@@ -1663,35 +1672,53 @@ const App: React.FC = () => {
             idxAmount = headers.indexOf('費用');
             idxProp = headers.indexOf('物業');
         }
-        if (idxDate === -1 || idxAmount === -1) { alert("CSV 格式不符"); return; }
+
+        if (idxDate === -1 || idxAmount === -1) { 
+            alert(`CSV 格式不符。未找到 '繳費日期' 或 '費用' 欄位。`); 
+            return; 
+        }
+
         const idxItem = headers.indexOf('項目');
         const idxOwner = headers.indexOf('業主');
         const idxMethod = headers.indexOf('繳費方法');
         const idxNote = headers.indexOf('備註(A/C)');
         const idxType = headers.indexOf('物業性質');
+
         let batch = writeBatch(db);
         let operationCount = 0;
         const newPropertiesMap: Record<string, string> = {}; 
         let newTxCount = 0;
         let dupTxCount = 0;
         let newPropCount = 0;
-        const existingTxKeys = new Set(transactions.map(t => `${t.date}_${t.amount}_${properties.find(p => p.id === t.propertyId)?.name || t.merchant}`));
+
+        const existingTxKeys = new Set(
+            transactions.map(t => {
+                const pName = properties.find(p => p.id === t.propertyId)?.name || t.merchant; 
+                return `${t.date}_${t.amount}_${pName}`;
+            })
+        );
         const existingPropMap = new Map(properties.map(p => [p.name, p.id]));
+
         for (let i = 1; i < lines.length; i++) {
             const row = parseCSVLine(lines[i]);
             if (row.length < headers.length) continue;
+
             const rawDate = row[idxDate];
             const propName = row[idxProp];
-            const item = row[idxItem];
+            const item = row[idxItem] || ''; // 確保 item 不為 undefined
             const owner = row[idxOwner];
             const amountStr = row[idxAmount];
             const note = row[idxNote] || '';
             const method = row[idxMethod] || '';
             const propType = row[idxType] || 'Investment';
+
             const date = parseChineseDate(rawDate);
             const amount = parseAmount(amountStr);
+
             if (!date || !amount) continue;
+
             let propId = existingPropMap.get(propName) || newPropertiesMap[propName];
+
             if (!propId) {
                 const newPropRef = doc(collection(db, "properties"));
                 propId = newPropRef.id;
@@ -1701,24 +1728,65 @@ const App: React.FC = () => {
                 newPropCount++;
                 operationCount++;
             }
+
             const txKey = `${date}_${amount}_${propName}`;
-            if (existingTxKeys.has(txKey)) { dupTxCount++; continue; }
+            if (existingTxKeys.has(txKey)) {
+                dupTxCount++;
+                continue; 
+            }
+
             const newTxRef = doc(collection(db, "transactions"));
+            
+            // --- 智能分類與正負數邏輯 ---
             let category = 'Other (其他)';
-            if ((item || '').includes('差餉') || (item || '').includes('地租')) category = 'Govt Rates (差餉)';
-            else if ((item || '').includes('管理費')) category = 'Management Fee (管理費)';
-            else if ((item || '').includes('保險')) category = 'Insurance (保險)';
-            else if ((item || '').includes('維修')) category = 'Repair & Maint (維修)';
-            const newTxData: any = { date: date, amount: amount, merchant: item, category: category, member: owner || 'Family', note: `${note} (${method})`, year: new Date(date).getFullYear(), month: new Date(date).getMonth() + 1, propertyId: propId, isVerified: true };
+            // 優先判斷收入
+            if (item.includes('租') || item.includes('Rent') || item.includes('Income')) {
+                category = 'Rental Income (租金收入)';
+            }
+            // 判斷支出
+            else if (item.includes('差餉') || item.includes('地租')) category = 'Govt Rates (差餉)';
+            else if (item.includes('管理費')) category = 'Management Fee (管理費)';
+            else if (item.includes('保險')) category = 'Insurance (保險)';
+            else if (item.includes('維修')) category = 'Repair & Maint (維修)';
+            
+            // 注意：金額保持絕對值，正負號由前端根據 category 判斷
+            // -------------------------
+
+            const newTxData: any = {
+                date: date,
+                amount: amount,
+                merchant: item,
+                category: category,
+                member: owner || 'Family',
+                note: `${note} (${method})`,
+                year: new Date(date).getFullYear(),
+                month: new Date(date).getMonth() + 1,
+                propertyId: propId,
+                isVerified: true
+            };
+
             batch.set(newTxRef, newTxData);
             existingTxKeys.add(txKey);
             newTxCount++;
             operationCount++;
-            if (operationCount >= 450) { await batch.commit(); batch = writeBatch(db); operationCount = 0; }
+
+            if (operationCount >= 450) {
+                await batch.commit();
+                batch = writeBatch(db);
+                operationCount = 0;
+            }
         }
-        if (operationCount > 0) { await batch.commit(); }
-        alert(`導入完成！新增: ${newTxCount}, 重複: ${dupTxCount}, 新物業: ${newPropCount}`);
-    } catch (err) { console.error(err); alert("匯入失敗: " + err); }
+
+        if (operationCount > 0) {
+            await batch.commit();
+        }
+
+        alert(`導入完成！\n- 新增紀錄: ${newTxCount} 筆\n- 略過重複: ${dupTxCount} 筆\n- 新增物業: ${newPropCount} 個`);
+        
+    } catch (err) {
+        console.error(err);
+        alert("匯入失敗: " + err);
+    }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2033,6 +2101,7 @@ const App: React.FC = () => {
           {/* Modals */}
           {modalMode === 'doc' && <DocModal isOpen={modalMode === 'doc'} onClose={() => setModalMode('none')} docConfig={docConfig} setDocConfig={setDocConfig} handlePrint={handlePrint} properties={properties} transactions={transactions} />}
           
+          {/* --- 修改 2: 優化交易輸入視窗 (增加金額預覽) --- */}
           {modalMode === 'transaction' && (
               <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
                   <div className="bg-white rounded-xl shadow-2xl p-6 w-[500px] animate-in fade-in zoom-in duration-200">
@@ -2040,12 +2109,22 @@ const App: React.FC = () => {
                         <div className="space-y-3">
                             <input type="date" className="w-full border rounded p-2" value={editingTx?.date} onChange={e=>setEditingTx({...editingTx, date: e.target.value} as any)} />
                             <input type="text" placeholder="Detail/Merchant" className="w-full border rounded p-2" value={editingTx?.merchant} onChange={e=>setEditingTx({...editingTx, merchant: e.target.value} as any)} />
-                            <input type="number" placeholder="Amount" className="w-full border rounded p-2" value={editingTx?.amount} onChange={e=>setEditingTx({...editingTx, amount: Number(e.target.value)} as any)} />
+                            
+                            {/* 金額輸入優化：右側顯示千分位 */}
+                            <div className="relative">
+                                <input type="number" placeholder="Amount" className="w-full border rounded p-2 pr-20" value={editingTx?.amount} onChange={e=>setEditingTx({...editingTx, amount: Number(e.target.value)} as any)} />
+                                <span className="absolute right-3 top-2 text-sm text-gray-500 font-mono pointer-events-none">
+                                    {formatCurrency(editingTx?.amount)}
+                                </span>
+                            </div>
+
                             <select className="w-full border rounded p-2" value={editingTx?.category} onChange={e=>setEditingTx({...editingTx, category: e.target.value} as any)}>{CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select>
                             <select className="w-full border rounded p-2" value={editingTx?.member} onChange={e=>setEditingTx({...editingTx, member: e.target.value} as any)}>{MEMBERS.map(m=><option key={m} value={m}>{m}</option>)}</select>
                             
+                            {/* 圖片上傳區塊保持不變... */}
                             <div className="border-t pt-3 mt-3">
-                                <label className="block text-sm font-bold text-slate-700 mb-2">附件圖片 (最多10張, 自動壓縮)</label>
+                                {/* ... (原有的圖片上傳代碼) ... */}
+                                <label className="block text-sm font-bold text-slate-700 mb-2">附件圖片 (最多10張)</label>
                                 <div className="flex flex-wrap gap-2 mb-2">
                                     {editingTx?.attachments?.map((img, idx) => (
                                         <div key={idx} className="relative w-16 h-16">

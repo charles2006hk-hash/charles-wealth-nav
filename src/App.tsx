@@ -60,21 +60,34 @@ interface Property {
   name: string;
   address: string;
   type: 'Investment' | 'Self-use';
-  status: 'Occupied' | 'Vacant' | 'Renovation';
+  status: 'Occupied' | 'Vacant' | 'Renovation' | 'Sold';
+  
   owner: string; 
   ownershipType: 'Self-owned' | 'Managed'; 
   tags: string[]; 
-  currentValue: number; 
+  
+  // 買入與持有資料
+  purchaseDate: string;       
   purchasePrice: number; 
+  purchaseAgent: string;      
+  purchaseCommission: number; 
+  
   initialDeposit: number; 
   furtherDeposit: number; 
   balancePayment: number; 
+  
   mortgageLoan: number; 
   bank: string;
   interestRate: number; 
   mortgageAmount: number; 
   outstandingLoan: number; 
   tenure: number;  
+  
+  // 賣出資料
+  saleDate?: string;
+  salePrice?: number;
+
+  currentValue: number; 
   estRent: number; 
   managementFee: number;
   govtRates: number;
@@ -90,6 +103,7 @@ interface PropertyWithStats extends Property {
     estRent: number;
     stressedExpense: number;
     displayTags: string[];
+    holdingPeriod: string;
 }
 
 interface EduConfig {
@@ -163,15 +177,19 @@ const ICONS = {
 
 // --- Constants ---
 const CATEGORIES = [
-  'Rental Income (租金收入)', 'Management Fee (管理費)', 'Govt Rates (差餉)', 'Govt Rent (地租)',
+  'Rental Income (租金收入)', 
+  'Property Sale (賣樓收入)', // 
+  'Management Fee (管理費)', 'Govt Rates (差餉)', 'Govt Rent (地租)',
   'Mortgage Payment (按揭供款)', 'Repair & Maint (維修)', 'Tax (稅項)', 
-  'Insurance (保險)', 'Utilities (水電煤)', 'Agent Fee (佣金)', 'Other (其他)',
+  'Purchase Commission (買入佣金)', // 
+  'Agent Fee (招租佣金)', 
+  'Insurance (保險)', 'Utilities (水電煤)', 'Other (其他)',
   'Credit Card', 'Education', 'Transport', 'Telecom', 'Shopping', 'Dining', 'Medical', 'General'
 ];
 const MEMBERS = ['Charles', 'Carmen', 'Virginia', 'Jason', 'Family'];
 
 const INITIAL_PROPERTIES_DATA: Property[] = [
-    { id: 'p1', name: '京瑞二期 16E', address: '沙田安群街1號京瑞廣場二期16樓E室', type: 'Investment', status: 'Occupied', currentValue: 8000000, purchasePrice: 6000000, initialDeposit: 300000, furtherDeposit: 300000, balancePayment: 5400000, mortgageLoan: 3000000, mortgageAmount: 15000, outstandingLoan: 3000000, managementFee: 1200, govtRates: 1500, govtRent: 900, estRent: 25000, tenure: 15, interestRate: 3.5, bank: 'BOC', owner: 'Charles', ownershipType: 'Self-owned', tags: [] },
+    { id: 'p1', name: '京瑞二期 16E', address: '沙田安群街1號京瑞廣場二期16樓E室', type: 'Investment', status: 'Occupied', currentValue: 8000000, purchasePrice: 6000000, initialDeposit: 300000, furtherDeposit: 300000, balancePayment: 5400000, mortgageLoan: 3000000, mortgageAmount: 15000, outstandingLoan: 3000000, managementFee: 1200, govtRates: 1500, govtRent: 900, estRent: 25000, tenure: 15, interestRate: 3.5, bank: 'BOC', owner: 'Charles', ownershipType: 'Self-owned', tags: [], purchaseDate: '2015-01-01', purchaseAgent: '', purchaseCommission: 0 },
 ];
 
 const INITIAL_EDUCATION_DB: Record<string, EduConfig> = {
@@ -210,6 +228,17 @@ const formatCurrency = (val: any) => {
     const num = Number(val);
     if (isNaN(num)) return '$0';
     return `$${num.toLocaleString()}`;
+};
+
+const calculateDuration = (start: string, end?: string) => {
+    if (!start) return '-';
+    const s = new Date(start);
+    const e = end ? new Date(end) : new Date();
+    const diffTime = Math.abs(e.getTime() - s.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const years = Math.floor(diffDays / 365);
+    const days = diffDays % 365;
+    return `${years}年 ${days}天`;
 };
 
 const compressImage = async (file: File): Promise<string> => {
@@ -302,10 +331,10 @@ const OverviewDashboard = ({ transactions, properties, leases }: any) => {
         });
     }, [transactions, dateRange, selectedCats]);
 
-    const expenseTxs = filteredTxs.filter((t:any) => !(t.category || '').includes('Income'));
+    const expenseTxs = filteredTxs.filter((t:any) => !(t.category || '').includes('Income') && !(t.category || '').includes('Sale'));
     const totalExpense = expenseTxs.reduce((sum: number, t: any) => sum + (t.amount || 0), 0);
     
-    const propValuation = properties.reduce((sum: number, p: any) => sum + (p.currentValue || 0), 0);
+    const propValuation = properties.reduce((sum: number, p: any) => sum + (p.status === 'Sold' ? (p.salePrice || 0) : (p.currentValue || 0)), 0);
     const propDebt = properties.reduce((sum: number, p: any) => sum + (p.outstandingLoan || 0), 0);
     const activeMonthlyRent = leases.filter((l:any) => l.status === 'Active').reduce((sum:number, l:any) => sum + (l.monthlyRent || 0), 0);
 
@@ -511,8 +540,6 @@ const OverviewDashboard = ({ transactions, properties, leases }: any) => {
 };
 
 const SettingsView = ({ settings, setSettings }: { settings: AppSettings, setSettings: (s: AppSettings) => void }) => {
-    
-    // 移除未使用的 addItem 函數，直接在 onKeyDown 處理
     const removeItem = (type: keyof AppSettings, item: string) => {
         setSettings({ ...settings, [type]: settings[type].filter(x => x !== item) });
     };
@@ -537,11 +564,12 @@ const SettingsView = ({ settings, setSettings }: { settings: AppSettings, setSet
                                 placeholder="Add new..." 
                                 onKeyDown={(e) => {
                                     if(e.key === 'Enter') {
-                                        const target = e.target as HTMLInputElement;
-                                        const val = target.value;
+                                        // @ts-ignore
+                                        const val = e.target.value;
                                         if (val) {
                                             setSettings({ ...settings, [section.key]: [...settings[section.key as keyof AppSettings], val] });
-                                            target.value = '';
+                                            // @ts-ignore
+                                            e.target.value = '';
                                         }
                                     }
                                 }}
@@ -557,6 +585,297 @@ const SettingsView = ({ settings, setSettings }: { settings: AppSettings, setSet
                         </div>
                     </div>
                 ))}
+            </div>
+        </div>
+    );
+};
+
+const PropertyDashboard = ({ 
+    properties, totalValuation, totalMonthlyRent, propStats, 
+    stressRate, setStressRate, rentDrop, setRentDrop, 
+    onSelectProperty, onAddProperty, onInitializeDefaults,
+    onDeleteProperty
+}: any) => (
+    <div className="space-y-8 animate-in fade-in">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <StatCard title="物業總估值 Total Valuation" value={formatCurrency(totalValuation)} color="blue" iconName="Home" subtext={`${properties.length} Properties`} />
+            <StatCard title="每月租金收入 Monthly Rent" value={formatCurrency(totalMonthlyRent)} color="emerald" iconName="DollarSign" />
+            <StatCard title="整體出租率 Occupancy Rate" value={`${properties.length ? (properties.filter((p:any)=>p.status==='Occupied').length / properties.length * 100).toFixed(0) : 0}%`} color="indigo" iconName="PieChart" />
+            <StatCard title="應收未收 Arrears" value={propStats.filter((p:any)=>p.isLate).length} color="red" iconName="Shield" subtext="Units Late" />
+        </div>
+
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
+            <div className="font-bold text-slate-700">壓力測試 Stress Test:</div>
+            <div className="flex items-center gap-2">
+                <span className="text-sm">Rate +{stressRate}%</span>
+                <input type="range" min="0" max="5" step="0.5" value={stressRate} onChange={e=>setStressRate(Number(e.target.value))} className="w-24" />
+            </div>
+            <div className="flex items-center gap-2">
+                <span className="text-sm">Rent Drop {rentDrop}%</span>
+                <input type="range" min="0" max="30" step="5" value={rentDrop} onChange={e=>setRentDrop(Number(e.target.value))} className="w-24" />
+            </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {propStats.map((p: any) => (
+                <div 
+                  key={p.id} 
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => {
+                      e.preventDefault();
+                      if (p.id) onSelectProperty(p.id);
+                  }}
+                  onKeyDown={(e) => e.key === 'Enter' && onSelectProperty(p.id)}
+                  className={`rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer group relative overflow-hidden active:scale-95 z-0 hover:z-10 ${p.status === 'Sold' ? 'bg-slate-100 grayscale-[0.5]' : 'bg-white'}`}
+                >
+                    <div className={`h-24 relative pointer-events-none ${p.status === 'Sold' ? 'bg-gradient-to-r from-gray-400 to-slate-500' : 'bg-gradient-to-r from-blue-500 to-indigo-600'}`}>
+                        <span className={`absolute top-4 left-4 px-3 py-1 text-xs rounded-full font-bold shadow-sm z-20 ${
+                            p.status === 'Occupied' 
+                                ? (p.isLate ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700') 
+                                : p.status === 'Sold' ? 'bg-black text-white' : 'bg-red-100 text-red-700'
+                        }`}>
+                            {p.status === 'Occupied' ? (p.isLate ? '欠租 Arrears' : '出租 Occupied') : p.status === 'Sold' ? '已售出 SOLD' : '空置 Vacant'}
+                        </span>
+
+                        <div className="absolute top-4 right-16 flex gap-1 pointer-events-auto">
+                            {p.displayTags?.map((tag:string, idx:number) => (
+                                <span key={idx} className="text-[10px] bg-white/20 text-white px-2 py-0.5 rounded backdrop-blur-sm">{tag}</span>
+                            ))}
+                        </div>
+
+                        <button 
+                            onClick={(e) => {
+                                e.stopPropagation(); 
+                                onDeleteProperty(p.id);
+                            }}
+                            className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-red-500 text-white rounded-full transition-all duration-200 z-50 backdrop-blur-sm pointer-events-auto hover:scale-110"
+                        >
+                            <ICONS.Trash />
+                        </button>
+                    </div>
+                    
+                    <div className="p-5 pt-2">
+                        <div className="flex justify-between items-end mb-4">
+                            <div>
+                                <h3 className="font-bold text-xl text-slate-800 mb-1">{p.name}</h3>
+                                <p className="text-xs text-slate-500 truncate max-w-[200px]">{p.address || 'No Address'}</p>
+                                <p className="text-[10px] text-slate-400 mt-1">Held: {calculateDuration(p.purchaseDate, p.saleDate)}</p>
+                            </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-3 text-sm bg-slate-50 p-3 rounded-xl border border-slate-100">
+                            <div>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{p.status==='Sold' ? 'Sold Price' : 'Valuation'}</p>
+                                <p className="font-mono font-bold text-slate-700">{formatCurrency(p.status==='Sold' ? p.salePrice : p.currentValue)}</p>
+                            </div>
+                            <div>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{p.status==='Sold' ? 'Profit' : 'Rent'}</p>
+                                <p className={`font-mono font-bold ${p.status==='Sold' ? 'text-green-600' : 'text-emerald-600'}`}>
+                                    {p.status==='Sold' ? formatCurrency((p.salePrice||0) - (p.purchasePrice||0)) : (p.activeLease ? formatCurrency(p.activeLease.monthlyRent) : '-')}
+                                </p>
+                            </div>
+                             <div>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Net Income</p>
+                                <p className={`font-mono font-bold ${p.net >= 0 ? 'text-blue-600' : 'text-red-500'}`}>{formatCurrency(p.net)}</p>
+                            </div>
+                            <div>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Expense (Stress)</p>
+                                <p className="font-mono text-red-400">-{formatCurrency(p.stressedExpense)}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            ))}
+            
+             <button onClick={onAddProperty} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-2xl hover:bg-slate-50 transition text-slate-400 hover:text-slate-600 cursor-pointer z-10 min-h-[240px]"><ICONS.Plus /><span className="mt-2 font-bold">新增物業 Add Property</span></button>
+             {properties.length === 0 && (
+                <button onClick={onInitializeDefaults} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-blue-300 bg-blue-50 rounded-2xl hover:bg-blue-100 transition text-blue-500 cursor-pointer z-10 min-h-[240px]"><ICONS.Plus /><span className="mt-2 font-bold">初始化預設物業</span></button>
+            )}
+        </div>
+    </div>
+);
+
+const PropertyDetailView = ({ 
+    propId, propStats, transactions, leases, 
+    onBack, setDocConfig, setModalMode, setEditingProp, setEditingTx, 
+    setEditingLease, deleteItem,
+    ledgerFilter, setLedgerFilter, handleUpdateCategory,
+    handleOpenReceipt 
+}: any) => {
+    const p = propStats.find((x: any) => x.id === propId);
+    if (!p) return <div>Property not found</div>;
+    
+    // Updated ledger logic to include sales and commission
+    const filteredTxs = transactions
+        .filter((t: any) => t.propertyId === propId)
+        .filter((t: any) => (JSON.stringify(t) || '').toLowerCase().includes(ledgerFilter.toLowerCase()))
+        .sort((a: any,b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    
+    const pLeases = leases.filter((l: any) => l.propertyId === propId);
+
+    const periodIncome = filteredTxs.filter((t:any) => (t.category || '').includes('Income') || t.category === 'Property Sale (賣樓收入)').reduce((sum:number, t:any) => sum + t.amount, 0);
+    const periodExpense = filteredTxs.filter((t:any) => !((t.category || '').includes('Income') || t.category === 'Property Sale (賣樓收入)')).reduce((sum:number, t:any) => sum + t.amount, 0);
+
+    return (
+        <div className="space-y-6 animate-in fade-in">
+            <button onClick={onBack} className="text-sm text-slate-500 hover:text-blue-600 flex items-center gap-1">← 返回總覽 Back to Dashboard</button>
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex justify-between items-start">
+                <div>
+                    <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">{p.name} <span className={`text-sm px-2 py-1 rounded-full font-normal ${p.status==='Occupied'?'bg-green-100 text-green-800': p.status==='Sold' ? 'bg-black text-white' : 'bg-red-100 text-red-800'}`}>{p.status}</span></h1>
+                    <p className="text-slate-500 mt-1">{p.address}</p>
+                    <div className="flex gap-2 mt-2">
+                        <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded">{p.ownershipType}</span>
+                        <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded">Owner: {p.owner}</span>
+                        <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded">Held: {calculateDuration(p.purchaseDate, p.saleDate)}</span>
+                        {p.displayTags?.map((tag:string, idx:number) => (
+                            <span key={idx} className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded">#{tag}</span>
+                        ))}
+                    </div>
+                </div>
+                <div className="flex gap-2">
+                    <button onClick={() => { setDocConfig((prev: any) => ({ ...prev, propId: p.id, type: 'lease', amount: p.activeLease?.monthlyRent || 0, tenant: p.activeLease?.tenantName || '' })); setModalMode('doc'); }} className="px-3 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-bold hover:bg-indigo-100">建立租約</button>
+                    <button onClick={() => { setEditingProp(p); setModalMode('property'); }} className="p-2 bg-gray-100 rounded-lg hover:bg-gray-200"><ICONS.Edit /></button>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-white p-6 rounded-xl border space-y-4">
+                    <h3 className="font-bold border-b pb-2">財務摘要 Financials</h3>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div><p className="text-slate-500">買入價 Purchase</p><p className="font-mono">{formatCurrency(p.purchasePrice)}</p></div>
+                        <div><p className="text-slate-500">{p.status==='Sold' ? '賣出價 Sold' : '現估值 Value'}</p><p className="font-mono font-bold text-blue-600">{formatCurrency(p.status==='Sold' ? p.salePrice : p.currentValue)}</p></div>
+                        <div><p className="text-slate-500">尚餘按揭 Loan</p><p className="font-mono">{formatCurrency(p.outstandingLoan)}</p></div>
+                        <div><p className="text-slate-500">月供款 Mortgage</p><p className="font-mono text-red-500">-{formatCurrency(p.mortgageAmount)}</p></div>
+                        {p.purchaseCommission > 0 && <div><p className="text-slate-500">買入佣金 Comm.</p><p className="font-mono">{formatCurrency(p.purchaseCommission)}</p></div>}
+                        {p.purchaseAgent && <div><p className="text-slate-500">買入代理 Agent</p><p className="font-medium">{p.purchaseAgent}</p></div>}
+                    </div>
+                </div>
+                <div className="bg-white p-6 rounded-xl border space-y-4">
+                    <h3 className="font-bold border-b pb-2">收支紀錄 Expenses</h3>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div><p className="text-slate-500">管理費 Mgt</p><p className="font-mono">{formatCurrency(p.managementFee)}/mo</p></div>
+                        <div><p className="text-slate-500">差餉 Rates</p><p className="font-mono">{formatCurrency(p.govtRates)}/qtr</p></div>
+                        <div><p className="text-slate-500">地租 Govt Rent</p><p className="font-mono">{formatCurrency(p.govtRent)}/qtr</p></div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="space-y-4">
+                 <div className="flex justify-between items-center">
+                    <h3 className="font-bold">租約紀錄 Lease History</h3>
+                    <button onClick={()=>{
+                        setEditingLease({ id: '', propertyId: p.id, tenantName: '', tenantID: '', startDate: '', endDate: '', monthlyRent: 0, deposit: 0, status: 'Active', attachments: [] } as Lease);
+                        setModalMode('lease');
+                    }} className="text-sm text-blue-600 hover:underline">+ Register New Lease</button>
+                 </div>
+                 {pLeases.map((l: any) => (
+                     <div key={l.id} className={`p-4 rounded-xl border ${l.status === 'Active' ? 'bg-green-50 border-green-200' : 'bg-gray-50'}`}>
+                         <div className="flex justify-between">
+                             <div>
+                                 <p className="font-bold text-slate-800">{l.tenantName} <span className="text-xs font-normal text-slate-500">({l.tenantID})</span></p>
+                                 <p className="text-sm">{l.startDate} to {l.endDate}</p>
+                                 {l.attachments && l.attachments.length > 0 && (
+                                     <div className="flex gap-2 mt-2">
+                                         {l.attachments.map((img:string, idx:number) => (
+                                             <img key={idx} src={img} className="w-10 h-10 object-cover rounded border" alt="lease doc" />
+                                         ))}
+                                     </div>
+                                 )}
+                             </div>
+                             <div className="text-right">
+                                 <p className="font-bold font-mono">{formatCurrency(l.monthlyRent)}/mo</p>
+                                 <div className="flex gap-2 justify-end mt-1">
+                                     {l.status === 'Active' && <span className="text-xs bg-green-200 text-green-800 px-2 py-0.5 rounded">Active</span>}
+                                     <button onClick={() => { setEditingLease(l); setModalMode('lease'); }} className="text-xs text-blue-600 hover:underline">Edit</button>
+                                 </div>
+                             </div>
+                         </div>
+                     </div>
+                 ))}
+            </div>
+
+            <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+                <div className="p-4 bg-slate-50 flex justify-between items-center border-b">
+                    <h3 className="font-bold">流水帳 Ledger</h3>
+                    <button onClick={() => { setEditingTx({ propertyId: p.id, date: new Date().toISOString().split('T')[0], attachments: [] } as any); setModalMode('transaction'); }} className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 font-bold">+ 新增紀錄 Add Record</button>
+                </div>
+                <div className="p-4 bg-slate-50 border-b space-y-3">
+                    <input 
+                        type="text" 
+                        placeholder="Search transactions..." 
+                        className="border rounded px-2 py-1 text-sm w-full" 
+                        value={ledgerFilter} 
+                        onChange={e => setLedgerFilter(e.target.value)} 
+                    />
+                    <div className="flex gap-4 text-sm">
+                        <div className="bg-emerald-50 text-emerald-700 px-3 py-1 rounded font-bold border border-emerald-100">
+                            區間總收入: {formatCurrency(periodIncome)}
+                        </div>
+                        <div className="bg-red-50 text-red-700 px-3 py-1 rounded font-bold border border-red-100">
+                            區間總支出: {formatCurrency(periodExpense)}
+                        </div>
+                    </div>
+                </div>
+                <div className="max-h-[500px] overflow-y-auto">
+                    <table className="w-full text-sm text-left">
+                        <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0"><tr><th className="p-3">Date</th><th className="p-3">Category</th><th className="p-3">Detail</th><th className="p-3">Amount</th><th className="p-3">Action</th></tr></thead>
+                        <tbody className="divide-y">
+                            {filteredTxs.map((t: any) => (
+                                <tr key={t.id} className="hover:bg-blue-50">
+                                    <td className="p-3">{t.date}</td>
+                                    <td className="p-3">
+                                        <select 
+                                            className="bg-transparent border-none" 
+                                            value={t.category} 
+                                            onChange={e => handleUpdateCategory(t.id, e.target.value)}
+                                        >
+                                            {CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
+                                        </select>
+                                    </td>
+                                    <td className="p-3 font-medium">
+                                        <div>{t.merchant} <span className="text-slate-400 text-xs">{t.note}</span></div>
+                                        {t.attachments && t.attachments.length > 0 && (
+                                            <div className="flex gap-1 mt-1">
+                                                {t.attachments.map((img:string, idx:number) => (
+                                                    <img key={idx} src={img} className="w-6 h-6 object-cover rounded border" alt="receipt" />
+                                                ))}
+                                            </div>
+                                        )}
+                                        {t.receiptNo && (
+                                            <span className="inline-block mt-1 text-[10px] text-green-700 bg-green-100 px-2 py-0.5 rounded border border-green-200 font-bold">
+                                                🧾 {t.receiptNo}
+                                            </span>
+                                        )}
+                                    </td>
+                                    <td className={`p-3 font-mono font-bold ${((t.category || '').includes('Income') || t.category === 'Property Sale (賣樓收入)') ? 'text-emerald-600' : 'text-red-500'}`}>{((t.category || '').includes('Income') || t.category === 'Property Sale (賣樓收入)') ? '+' : '-'}{formatCurrency(t.amount)}</td>
+                                    <td className="p-3">
+                                        <div className="flex items-center gap-2">
+                                            {/* Allow receipt generation for any income or specific categories */}
+                                            <button 
+                                                onClick={() => handleOpenReceipt(t)} 
+                                                className={`text-xs px-2 py-1 rounded border flex flex-col items-center min-w-[70px] transition-colors ${
+                                                    t.receiptNo 
+                                                    ? 'bg-green-100 text-green-700 border-green-300 hover:bg-green-200' 
+                                                    : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                                                }`}
+                                                title={t.receiptNo ? "查看已存檔收據" : "建立新收據"}
+                                            >
+                                                <span className="font-bold flex items-center gap-1">
+                                                    <ICONS.FileText /> {t.receiptNo ? 'View' : 'Receipt'}
+                                                </span>
+                                                {t.receiptNo && <span className="text-[9px]">{t.receiptNo}</span>}
+                                            </button>
+
+                                            <button onClick={() => { setEditingTx(t); setModalMode('transaction'); }} className="text-blue-400 hover:text-blue-600 p-1"><ICONS.Edit /></button>
+                                            <button onClick={() => deleteItem('transactions', t.id)} className="text-red-400 hover:text-red-600 p-1"><ICONS.Trash /></button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     );
@@ -949,299 +1268,6 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
     );
 };
 
-const PropertyDashboard = ({ 
-    properties, totalValuation, totalMonthlyRent, propStats, 
-    stressRate, setStressRate, rentDrop, setRentDrop, 
-    onSelectProperty, onAddProperty, onInitializeDefaults,
-    onDeleteProperty
-}: any) => (
-    <div className="space-y-8 animate-in fade-in">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <StatCard title="物業總估值 Total Valuation" value={formatCurrency(totalValuation)} color="blue" iconName="Home" subtext={`${properties.length} Properties`} />
-            <StatCard title="每月租金收入 Monthly Rent" value={formatCurrency(totalMonthlyRent)} color="emerald" iconName="DollarSign" />
-            <StatCard title="整體出租率 Occupancy Rate" value={`${properties.length ? (properties.filter((p:any)=>p.status==='Occupied').length / properties.length * 100).toFixed(0) : 0}%`} color="indigo" iconName="PieChart" />
-            <StatCard title="應收未收 Arrears" value={propStats.filter((p:any)=>p.isLate).length} color="red" iconName="Shield" subtext="Units Late" />
-        </div>
-
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
-            <div className="font-bold text-slate-700">壓力測試 Stress Test:</div>
-            <div className="flex items-center gap-2">
-                <span className="text-sm">Rate +{stressRate}%</span>
-                <input type="range" min="0" max="5" step="0.5" value={stressRate} onChange={e=>setStressRate(Number(e.target.value))} className="w-24" />
-            </div>
-            <div className="flex items-center gap-2">
-                <span className="text-sm">Rent Drop {rentDrop}%</span>
-                <input type="range" min="0" max="30" step="5" value={rentDrop} onChange={e=>setRentDrop(Number(e.target.value))} className="w-24" />
-            </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {propStats.map((p: any) => (
-                <div 
-                  key={p.id} 
-                  role="button"
-                  tabIndex={0}
-                  onClick={(e) => {
-                      e.preventDefault();
-                      if (p.id) onSelectProperty(p.id);
-                  }}
-                  onKeyDown={(e) => e.key === 'Enter' && onSelectProperty(p.id)}
-                  className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer group relative overflow-hidden active:scale-95 z-0 hover:z-10"
-                >
-                    <div className="h-24 bg-gradient-to-r from-blue-500 to-indigo-600 relative pointer-events-none">
-                        <span className={`absolute top-4 left-4 px-3 py-1 text-xs rounded-full font-bold shadow-sm z-20 ${
-                            p.status === 'Occupied' 
-                                ? (p.isLate ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700') 
-                                : 'bg-red-100 text-red-700'
-                        }`}>
-                            {p.status === 'Occupied' ? (p.isLate ? '欠租 Arrears' : '出租 Occupied') : '空置 Vacant'}
-                        </span>
-
-                        <div className="absolute top-4 right-16 flex gap-1 pointer-events-auto">
-                            {p.displayTags?.map((tag:string, idx:number) => (
-                                <span key={idx} className="text-[10px] bg-white/20 text-white px-2 py-0.5 rounded backdrop-blur-sm">{tag}</span>
-                            ))}
-                        </div>
-
-                        <button 
-                            onClick={(e) => {
-                                e.stopPropagation(); 
-                                onDeleteProperty(p.id);
-                            }}
-                            className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-red-500 text-white rounded-full transition-all duration-200 z-50 backdrop-blur-sm pointer-events-auto hover:scale-110"
-                        >
-                            <ICONS.Trash />
-                        </button>
-                    </div>
-                    
-                    <div className="p-5 pt-2">
-                        <div className="flex justify-between items-end mb-4">
-                            <div>
-                                <h3 className="font-bold text-xl text-slate-800 mb-1">{p.name}</h3>
-                                <p className="text-xs text-slate-500 truncate max-w-[200px]">{p.address || 'No Address'}</p>
-                            </div>
-                        </div>
-                        
-                        <div className="grid grid-cols-2 gap-3 text-sm bg-slate-50 p-3 rounded-xl border border-slate-100">
-                            <div>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Valuation</p>
-                                <p className="font-mono font-bold text-slate-700">{formatCurrency(p.currentValue)}</p>
-                            </div>
-                            <div>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Rent</p>
-                                <p className="font-mono font-bold text-emerald-600">{p.activeLease ? formatCurrency(p.activeLease.monthlyRent) : '-'}</p>
-                            </div>
-                             <div>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Net Income</p>
-                                <p className={`font-mono font-bold ${p.net >= 0 ? 'text-blue-600' : 'text-red-500'}`}>{formatCurrency(p.net)}</p>
-                            </div>
-                            <div>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Expense (Stress)</p>
-                                <p className="font-mono text-red-400">-{formatCurrency(p.stressedExpense)}</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            ))}
-            
-             <button onClick={onAddProperty} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-2xl hover:bg-slate-50 transition text-slate-400 hover:text-slate-600 cursor-pointer z-10 min-h-[240px]"><ICONS.Plus /><span className="mt-2 font-bold">新增物業 Add Property</span></button>
-             {properties.length === 0 && (
-                <button onClick={onInitializeDefaults} className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-blue-300 bg-blue-50 rounded-2xl hover:bg-blue-100 transition text-blue-500 cursor-pointer z-10 min-h-[240px]"><ICONS.Plus /><span className="mt-2 font-bold">初始化預設物業</span></button>
-            )}
-        </div>
-    </div>
-);
-
-const PropertyDetailView = ({ 
-    propId, propStats, transactions, leases, 
-    onBack, setDocConfig, setModalMode, setEditingProp, setEditingTx, 
-    setEditingLease, deleteItem,
-    ledgerFilter, setLedgerFilter, handleUpdateCategory,
-    handleOpenReceipt 
-}: any) => {
-    const p = propStats.find((x: any) => x.id === propId);
-    if (!p) return <div>Property not found</div>;
-    
-    const filteredTxs = transactions
-        .filter((t: any) => t.propertyId === propId)
-        .filter((t: any) => (JSON.stringify(t) || '').toLowerCase().includes(ledgerFilter.toLowerCase()))
-        .sort((a: any,b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    
-    const pLeases = leases.filter((l: any) => l.propertyId === propId);
-
-    const periodIncome = filteredTxs.filter((t:any) => (t.category || '').includes('Income')).reduce((sum:number, t:any) => sum + t.amount, 0);
-    const periodExpense = filteredTxs.filter((t:any) => !(t.category || '').includes('Income')).reduce((sum:number, t:any) => sum + t.amount, 0);
-
-    return (
-        <div className="space-y-6 animate-in fade-in">
-            <button onClick={onBack} className="text-sm text-slate-500 hover:text-blue-600 flex items-center gap-1">← 返回總覽 Back to Dashboard</button>
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex justify-between items-start">
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">{p.name} <span className={`text-sm px-2 py-1 rounded-full font-normal ${p.status==='Occupied'?'bg-green-100 text-green-800':'bg-red-100 text-red-800'}`}>{p.status}</span></h1>
-                    <p className="text-slate-500 mt-1">{p.address}</p>
-                    <div className="flex gap-2 mt-2">
-                        <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded">{p.ownershipType}</span>
-                        <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded">Owner: {p.owner}</span>
-                        {p.displayTags?.map((tag:string, idx:number) => (
-                            <span key={idx} className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded">#{tag}</span>
-                        ))}
-                    </div>
-                </div>
-                <div className="flex gap-2">
-                    <button onClick={() => { setDocConfig((prev: any) => ({ ...prev, propId: p.id, type: 'lease', amount: p.activeLease?.monthlyRent || 0, tenant: p.activeLease?.tenantName || '' })); setModalMode('doc'); }} className="px-3 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-bold hover:bg-indigo-100">建立租約</button>
-                    <button onClick={() => { setEditingProp(p); setModalMode('property'); }} className="p-2 bg-gray-100 rounded-lg hover:bg-gray-200"><ICONS.Edit /></button>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-white p-6 rounded-xl border space-y-4">
-                    <h3 className="font-bold border-b pb-2">財務摘要 Financials</h3>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div><p className="text-slate-500">買入價 Purchase</p><p className="font-mono">{formatCurrency(p.purchasePrice)}</p></div>
-                        <div><p className="text-slate-500">現估值 Value</p><p className="font-mono font-bold text-blue-600">{formatCurrency(p.currentValue)}</p></div>
-                        <div><p className="text-slate-500">尚餘按揭 Loan</p><p className="font-mono">{formatCurrency(p.outstandingLoan)}</p></div>
-                        <div><p className="text-slate-500">月供款 Mortgage</p><p className="font-mono text-red-500">-{formatCurrency(p.mortgageAmount)}</p></div>
-                    </div>
-                </div>
-                <div className="bg-white p-6 rounded-xl border space-y-4">
-                    <h3 className="font-bold border-b pb-2">收支紀錄 Expenses</h3>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div><p className="text-slate-500">管理費 Mgt</p><p className="font-mono">{formatCurrency(p.managementFee)}/mo</p></div>
-                        <div><p className="text-slate-500">差餉 Rates</p><p className="font-mono">{formatCurrency(p.govtRates)}/qtr</p></div>
-                        <div><p className="text-slate-500">地租 Govt Rent</p><p className="font-mono">{formatCurrency(p.govtRent)}/qtr</p></div>
-                    </div>
-                </div>
-            </div>
-
-            <div className="space-y-4">
-                 <div className="flex justify-between items-center">
-                    <h3 className="font-bold">租約紀錄 Lease History</h3>
-                    <button onClick={()=>{
-                        setEditingLease({ id: '', propertyId: p.id, tenantName: '', tenantID: '', startDate: '', endDate: '', monthlyRent: 0, deposit: 0, status: 'Active', attachments: [] } as Lease);
-                        setModalMode('lease');
-                    }} className="text-sm text-blue-600 hover:underline">+ Register New Lease</button>
-                 </div>
-                 {pLeases.map((l: any) => (
-                     <div key={l.id} className={`p-4 rounded-xl border ${l.status === 'Active' ? 'bg-green-50 border-green-200' : 'bg-gray-50'}`}>
-                         <div className="flex justify-between">
-                             <div>
-                                 <p className="font-bold text-slate-800">{l.tenantName} <span className="text-xs font-normal text-slate-500">({l.tenantID})</span></p>
-                                 <p className="text-sm">{l.startDate} to {l.endDate}</p>
-                                 {l.attachments && l.attachments.length > 0 && (
-                                     <div className="flex gap-2 mt-2">
-                                         {l.attachments.map((img:string, idx:number) => (
-                                             <img key={idx} src={img} className="w-10 h-10 object-cover rounded border" alt="lease doc" />
-                                         ))}
-                                     </div>
-                                 )}
-                             </div>
-                             <div className="text-right">
-                                 <p className="font-bold font-mono">{formatCurrency(l.monthlyRent)}/mo</p>
-                                 <div className="flex gap-2 justify-end mt-1">
-                                     {l.status === 'Active' && <span className="text-xs bg-green-200 text-green-800 px-2 py-0.5 rounded">Active</span>}
-                                     <button onClick={() => { setEditingLease(l); setModalMode('lease'); }} className="text-xs text-blue-600 hover:underline">Edit</button>
-                                 </div>
-                             </div>
-                         </div>
-                     </div>
-                 ))}
-            </div>
-
-            <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-                <div className="p-4 bg-slate-50 flex justify-between items-center border-b">
-                    <h3 className="font-bold">流水帳 Ledger</h3>
-                    <button onClick={() => { setEditingTx({ propertyId: p.id, date: new Date().toISOString().split('T')[0], attachments: [] } as any); setModalMode('transaction'); }} className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 font-bold">+ 新增紀錄 Add Record</button>
-                </div>
-                <div className="p-4 bg-slate-50 border-b space-y-3">
-                    <input 
-                        type="text" 
-                        placeholder="Search transactions..." 
-                        className="border rounded px-2 py-1 text-sm w-full" 
-                        value={ledgerFilter} 
-                        onChange={e => setLedgerFilter(e.target.value)} 
-                    />
-                    <div className="flex gap-4 text-sm">
-                        <div className="bg-emerald-50 text-emerald-700 px-3 py-1 rounded font-bold border border-emerald-100">
-                            區間總收入: {formatCurrency(periodIncome)}
-                        </div>
-                        <div className="bg-red-50 text-red-700 px-3 py-1 rounded font-bold border border-red-100">
-                            區間總支出: {formatCurrency(periodExpense)}
-                        </div>
-                    </div>
-                </div>
-                <div className="max-h-[500px] overflow-y-auto">
-                    <table className="w-full text-sm text-left">
-                        <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0"><tr><th className="p-3">Date</th><th className="p-3">Category</th><th className="p-3">Detail</th><th className="p-3">Amount</th><th className="p-3">Action</th></tr></thead>
-                        <tbody className="divide-y">
-                            {filteredTxs.map((t: any) => (
-                                <tr key={t.id} className="hover:bg-blue-50">
-                                    <td className="p-3">{t.date}</td>
-                                    <td className="p-3">
-                                        <select 
-                                            className="bg-transparent border-none" 
-                                            value={t.category} 
-                                            onChange={e => handleUpdateCategory(t.id, e.target.value)}
-                                        >
-                                            {CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
-                                        </select>
-                                    </td>
-                                    <td className="p-3 font-medium">
-                                        <div>{t.merchant} <span className="text-slate-400 text-xs">{t.note}</span></div>
-                                        {t.attachments && t.attachments.length > 0 && (
-                                            <div className="flex gap-1 mt-1">
-                                                {t.attachments.map((img:string, idx:number) => (
-                                                    <img key={idx} src={img} className="w-6 h-6 object-cover rounded border" alt="receipt" />
-                                                ))}
-                                            </div>
-                                        )}
-                                        {t.receiptNo && (
-                                            <span className="inline-block mt-1 text-[10px] text-green-700 bg-green-100 px-2 py-0.5 rounded border border-green-200 font-bold">
-                                                🧾 {t.receiptNo}
-                                            </span>
-                                        )}
-                                    </td>
-                                    <td className={`p-3 font-mono font-bold ${(t.category || '').includes('Income') ? 'text-emerald-600' : 'text-red-500'}`}>{(t.category || '').includes('Income') ? '+' : '-'}{formatCurrency(t.amount)}</td>
-                                    <td className="p-3">
-                                        <div className="flex items-center gap-2">
-                                            <button 
-                                                onClick={() => handleOpenReceipt(t)} 
-                                                className={`text-xs px-2 py-1 rounded border flex flex-col items-center min-w-[70px] transition-colors ${
-                                                    t.receiptNo 
-                                                    ? 'bg-green-100 text-green-700 border-green-300 hover:bg-green-200' 
-                                                    : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
-                                                }`}
-                                                title={t.receiptNo ? "查看已存檔收據" : "建立新收據"}
-                                            >
-                                                <span className="font-bold flex items-center gap-1">
-                                                    <ICONS.FileText /> {t.receiptNo ? 'View' : 'Receipt'}
-                                                </span>
-                                                {t.receiptNo && <span className="text-[9px]">{t.receiptNo}</span>}
-                                            </button>
-
-                                            <button onClick={() => { setEditingTx(t); setModalMode('transaction'); }} className="text-blue-400 hover:text-blue-600 p-1"><ICONS.Edit /></button>
-                                            <button onClick={() => deleteItem('transactions', t.id)} className="text-red-400 hover:text-red-600 p-1"><ICONS.Trash /></button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-interface DocModalProps {
-    isOpen: boolean;
-    onClose: () => void;
-    docConfig: DocConfig;
-    setDocConfig: (config: DocConfig) => void;
-    handlePrint: () => void;
-    properties: Property[];
-    transactions: Transaction[];
-}
-
 const DocModal: React.FC<DocModalProps> = ({ 
     isOpen, onClose, docConfig, setDocConfig, handlePrint, properties, transactions 
 }) => {
@@ -1513,7 +1539,11 @@ const App: React.FC = () => {
             mortgageLoan: Number(rawData.mortgageLoan || 0),
             interestRate: Number(rawData.interestRate || 0),
             outstandingLoan: Number(rawData.outstandingLoan || 0),
-            bank: rawData.bank || 'Standard Bank' 
+            bank: rawData.bank || 'Standard Bank',
+            purchaseAgent: rawData.purchaseAgent || '',
+            purchaseCommission: Number(rawData.purchaseCommission || 0),
+            salePrice: Number(rawData.salePrice || 0),
+            saleDate: rawData.saleDate || '',
         };
 
         if(editingProp.id) {
@@ -1747,7 +1777,6 @@ const App: React.FC = () => {
 
   const handleOpenReceipt = (tx: Transaction) => {
       const activeLease = leases.find(l => l.propertyId === tx.propertyId && l.status === 'Active');
-      
       setDocConfig({
           type: 'receipt',
           propId: tx.propertyId || '',
@@ -1761,7 +1790,7 @@ const App: React.FC = () => {
           landlord: 'Charles Lam',
           paymentMethod: 'Bank Transfer',
           linkedTransactionId: tx.id,
-          existingReceiptNo: tx.receiptNo // 支援舊收據編號
+          existingReceiptNo: tx.receiptNo 
       });
       setModalMode('doc');
   };
@@ -1840,7 +1869,7 @@ const App: React.FC = () => {
                       setModalMode={setModalMode}
                       initializeDefaults={initializeDefaults}
                       onDeleteProperty={handleDeleteProperty}
-                      onAddProperty={() => { setEditingProp({ id: '', name: '', address: '', type: 'Investment', status: 'Vacant', currentValue: 0, purchasePrice: 0, initialDeposit: 0, furtherDeposit: 0, balancePayment: 0, mortgageLoan: 0, mortgageAmount: 0, outstandingLoan: 0, managementFee: 0, govtRates: 0, govtRent: 0, estRent: 0, tenure: 0, interestRate: 0, bank: '', owner: '', ownershipType: 'Self-owned', tags: [] } as Property); setModalMode('property'); }}
+                      onAddProperty={() => { setEditingProp({ id: '', name: '', address: '', type: 'Investment', status: 'Vacant', currentValue: 0, purchasePrice: 0, initialDeposit: 0, furtherDeposit: 0, balancePayment: 0, mortgageLoan: 0, mortgageAmount: 0, outstandingLoan: 0, managementFee: 0, govtRates: 0, govtRent: 0, estRent: 0, tenure: 0, interestRate: 0, bank: '', owner: '', ownershipType: 'Self-owned', tags: [], purchaseDate: '', purchaseAgent: '', purchaseCommission: 0 } as Property); setModalMode('property'); }}
                       onInitializeDefaults={initializeDefaults}
                   />
               )}
@@ -2038,7 +2067,7 @@ const App: React.FC = () => {
                               <input className="border w-full p-2 rounded" placeholder="Property Name" value={editingProp?.name || ''} onChange={e => setEditingProp({...editingProp, name: e.target.value} as any)} />
                               <input className="border w-full p-2 rounded" placeholder="Full Address" value={editingProp?.address || ''} onChange={e => setEditingProp({...editingProp, address: e.target.value} as any)} />
                               <div className="flex gap-2">
-                                <select className="border w-full p-2 rounded" value={editingProp?.status} onChange={e => setEditingProp({...editingProp, status: e.target.value} as any)}><option value="Occupied">Occupied</option><option value="Vacant">Vacant</option></select>
+                                <select className="border w-full p-2 rounded" value={editingProp?.status} onChange={e => setEditingProp({...editingProp, status: e.target.value} as any)}><option value="Occupied">Occupied</option><option value="Vacant">Vacant</option><option value="Sold">Sold</option></select>
                                 <select className="border w-full p-2 rounded" value={editingProp?.ownershipType} onChange={e => setEditingProp({...editingProp, ownershipType: e.target.value} as any)}><option value="Self-owned">Self-owned</option><option value="Managed">Managed</option></select>
                               </div>
                               <div className="flex gap-2">
@@ -2053,38 +2082,36 @@ const App: React.FC = () => {
                                       <label className="text-xs block text-slate-500">Tags (Enter to add)</label>
                                       <div className="border rounded p-2 flex flex-wrap gap-1 min-h-[42px]">
                                           {editingProp?.tags?.map(t => (
-                                              <span key={t} className="text-xs bg-slate-100 px-1 rounded flex items-center">
-                                                  {t} 
-                                                  <button className="ml-1 text-red-400" onClick={()=>setEditingProp({...editingProp, tags: editingProp!.tags.filter(x=>x!==t)} as any)}>x</button>
-                                              </span>
+                                              <span key={t} className="text-xs bg-slate-100 px-1 rounded flex items-center">{t} <button className="ml-1 text-red-400" onClick={()=>setEditingProp({...editingProp, tags: editingProp!.tags.filter(x=>x!==t)} as any)}>x</button></span>
                                           ))}
-                                          <input 
-                                              className="outline-none text-xs w-20" 
-                                              onKeyDown={(e) => {
-                                                  // 加入 && editingProp 檢查，解決 TS18047 錯誤
-                                                  if(e.key === 'Enter' && editingProp) { 
-                                                      const target = e.target as HTMLInputElement;
-                                                      const val = target.value; 
-                                                      if(val) { 
-                                                          setEditingProp({
-                                                              ...editingProp, 
-                                                              tags: [...(editingProp.tags || []), val]
-                                                          } as any); 
-                                                          target.value = ''; 
-                                                      }
-                                                  }
-                                              }} 
-                                          />
+                                          <input className="outline-none text-xs w-20" onKeyDown={(e)=>{if(e.key==='Enter' && editingProp) { const val = (e.target as HTMLInputElement).value; if(val) { setEditingProp({...editingProp, tags: [...(editingProp.tags||[]), val]} as any); (e.target as HTMLInputElement).value = ''; }}}} />
                                       </div>
                                   </div>
                               </div>
                           </div>
                           
+                          {/* 買入與賣出區塊 */}
                           <div className="space-y-2">
-                              <label className="text-xs font-bold text-slate-500 uppercase">Purchase Detail 買入詳情</label>
-                              <div className="p-4 bg-blue-50 rounded-lg border border-blue-100 grid grid-cols-2 gap-4">
-                                  <div><label className="text-xs text-slate-500 block mb-1">Purchase Price</label><input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.purchasePrice || ''} onChange={e => setEditingProp({...editingProp, purchasePrice: Number(e.target.value)} as any)} /></div>
-                                  <div><label className="text-xs text-slate-500 block mb-1">Mortgage Loan</label><input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.mortgageLoan || ''} onChange={e => setEditingProp({...editingProp, mortgageLoan: Number(e.target.value)} as any)} /></div>
+                              <label className="text-xs font-bold text-slate-500 uppercase">Purchase & Sale Detail</label>
+                              <div className="p-4 bg-blue-50 rounded-lg border border-blue-100 space-y-3">
+                                  <div className="grid grid-cols-2 gap-2">
+                                      <div><label className="text-xs text-slate-500 block mb-1">Purchase Price</label><input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.purchasePrice || ''} onChange={e => setEditingProp({...editingProp, purchasePrice: Number(e.target.value)} as any)} /></div>
+                                      <div><label className="text-xs text-slate-500 block mb-1">Purchase Date</label><input className="border w-full p-2 rounded text-sm" type="date" value={editingProp?.purchaseDate || ''} onChange={e => setEditingProp({...editingProp, purchaseDate: e.target.value} as any)} /></div>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-2">
+                                      <div><label className="text-xs text-slate-500 block mb-1">Agent</label><input className="border w-full p-2 rounded text-sm" type="text" value={editingProp?.purchaseAgent || ''} onChange={e => setEditingProp({...editingProp, purchaseAgent: e.target.value} as any)} /></div>
+                                      <div><label className="text-xs text-slate-500 block mb-1">Commission</label><input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.purchaseCommission || ''} onChange={e => setEditingProp({...editingProp, purchaseCommission: Number(e.target.value)} as any)} /></div>
+                                  </div>
+                                  
+                                  {/* 如果狀態是 Sold，顯示賣出欄位 */}
+                                  {editingProp?.status === 'Sold' && (
+                                      <div className="mt-2 border-t pt-2 border-blue-200 bg-blue-100/50 p-2 rounded">
+                                          <div className="grid grid-cols-2 gap-2">
+                                              <div><label className="text-xs text-slate-700 font-bold block mb-1">Sale Price (賣出價)</label><input className="border w-full p-2 rounded text-sm font-bold text-green-700" type="number" value={editingProp?.salePrice || ''} onChange={e => setEditingProp({...editingProp, salePrice: Number(e.target.value)} as any)} /></div>
+                                              <div><label className="text-xs text-slate-700 font-bold block mb-1">Sale Date (賣出日)</label><input className="border w-full p-2 rounded text-sm" type="date" value={editingProp?.saleDate || ''} onChange={e => setEditingProp({...editingProp, saleDate: e.target.value} as any)} /></div>
+                                          </div>
+                                      </div>
+                                  )}
                               </div>
                           </div>
                           
@@ -2098,10 +2125,11 @@ const App: React.FC = () => {
                                            {settings.banks.map(b => <option key={b} value={b}>{b}</option>)}
                                        </select>
                                    </div>
-                                   <div><label className="text-xs text-slate-500 block mb-1">Outstanding Loan</label><input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.outstandingLoan || ''} onChange={e => setEditingProp({...editingProp, outstandingLoan: Number(e.target.value)} as any)} /></div>
-                                   <div><label className="text-xs text-slate-500 block mb-1">Interest Rate (%)</label><input className="border w-full p-2 rounded text-sm" type="number" step="0.1" value={editingProp?.interestRate || ''} onChange={e => setEditingProp({...editingProp, interestRate: Number(e.target.value)} as any)} /></div>
-                                   <div><label className="text-xs text-slate-500 block mb-1">Tenure (Years)</label><input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.tenure || ''} onChange={e => setEditingProp({...editingProp, tenure: Number(e.target.value)} as any)} /></div>
-                                   <div><label className="text-xs text-slate-500 block mb-1">Monthly Repayment</label><input className="border w-full p-2 rounded text-sm bg-white font-bold text-red-600" type="number" value={editingProp?.mortgageAmount || ''} onChange={e => setEditingProp({...editingProp, mortgageAmount: Number(e.target.value)} as any)} /></div>
+                                   <div><label className="text-xs text-slate-500 block mb-1">Mortgage Loan</label><input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.mortgageLoan || ''} onChange={e => setEditingProp({...editingProp, mortgageLoan: Number(e.target.value)} as any)} /></div>
+                                   <div><label className="text-xs text-slate-500 block mb-1">Outstanding</label><input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.outstandingLoan || ''} onChange={e => setEditingProp({...editingProp, outstandingLoan: Number(e.target.value)} as any)} /></div>
+                                   <div><label className="text-xs text-slate-500 block mb-1">Rate (%)</label><input className="border w-full p-2 rounded text-sm" type="number" step="0.1" value={editingProp?.interestRate || ''} onChange={e => setEditingProp({...editingProp, interestRate: Number(e.target.value)} as any)} /></div>
+                                   <div><label className="text-xs text-slate-500 block mb-1">Tenure (Yrs)</label><input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.tenure || ''} onChange={e => setEditingProp({...editingProp, tenure: Number(e.target.value)} as any)} /></div>
+                                   <div><label className="text-xs text-slate-500 block mb-1">Monthly Pay</label><input className="border w-full p-2 rounded text-sm bg-white font-bold text-red-600" type="number" value={editingProp?.mortgageAmount || ''} onChange={e => setEditingProp({...editingProp, mortgageAmount: Number(e.target.value)} as any)} /></div>
                               </div>
                           </details>
 

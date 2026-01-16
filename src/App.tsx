@@ -324,8 +324,15 @@ const StatCard = ({ title, value, subtext, color, iconName }: any) => {
 };
 
 const OverviewDashboard = ({ transactions, properties, leases }: any) => {
+    // 1. 計算所有數據的最早與最晚日期，用於 "All Time" 功能
+    const { minDate, maxDate } = useMemo(() => {
+        if (transactions.length === 0) return { minDate: new Date().toISOString().split('T')[0], maxDate: new Date().toISOString().split('T')[0] };
+        const dates = transactions.map((t:any) => t.date).sort();
+        return { minDate: dates[0], maxDate: dates[dates.length - 1] };
+    }, [transactions]);
+
     const [dateRange, setDateRange] = useState({ 
-        start: new Date(new Date().setFullYear(new Date().getFullYear() - 1)).toISOString().split('T')[0],
+        start: new Date(new Date().setFullYear(new Date().getFullYear() - 1)).toISOString().split('T')[0], // 預設過去一年
         end: new Date().toISOString().split('T')[0] 
     });
     const [selectedCats, setSelectedCats] = useState<string[]>(CATEGORIES);
@@ -387,15 +394,33 @@ const OverviewDashboard = ({ transactions, properties, leases }: any) => {
     return (
         <div className="space-y-6 animate-in fade-in">
             <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-wrap gap-4 items-center justify-between">
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-4 flex-wrap">
                     <h2 className="font-bold text-lg text-slate-700">總覽篩選</h2>
+                    
+                    {/* 時間篩選器 (包含 All Time 按鈕) */}
                     <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border">
-                         <span className="text-xs text-slate-400 pl-2">From</span>
-                         <input type="date" value={dateRange.start} onChange={e=>setDateRange({...dateRange, start: e.target.value})} className="bg-transparent text-sm font-bold text-slate-700 border-none focus:ring-0" />
+                         <button 
+                            onClick={() => setDateRange({ start: minDate, end: maxDate })}
+                            className="px-2 py-1 text-xs bg-white border shadow-sm rounded hover:bg-blue-50 text-blue-600 font-bold transition-colors"
+                            title="顯示所有歷史數據"
+                         >
+                            All Time
+                         </button>
+                         <span className="w-[1px] h-4 bg-slate-300 mx-1"></span>
+                         <span className="text-xs text-slate-400 pl-1">From</span>
+                         <input type="date" value={dateRange.start} onChange={e=>setDateRange({...dateRange, start: e.target.value})} className="bg-transparent text-sm font-bold text-slate-700 border-none focus:ring-0 w-32" />
                          <span className="text-xs text-slate-400">To</span>
-                         <input type="date" value={dateRange.end} onChange={e=>setDateRange({...dateRange, end: e.target.value})} className="bg-transparent text-sm font-bold text-slate-700 border-none focus:ring-0" />
+                         <input type="date" value={dateRange.end} onChange={e=>setDateRange({...dateRange, end: e.target.value})} className="bg-transparent text-sm font-bold text-slate-700 border-none focus:ring-0 w-32" />
+                    </div>
+
+                    {/* 數據量統計顯示 */}
+                    <div className="text-xs px-3 py-1 bg-slate-100 rounded-full text-slate-600 border border-slate-200">
+                        正在分析: <strong className="text-blue-600 text-sm">{filteredTxs.length}</strong> 筆
+                        <span className="text-slate-400 mx-2">/</span>
+                        總數據庫: {transactions.length} 筆
                     </div>
                 </div>
+
                 <div className="relative">
                     <button onClick={() => setIsFilterOpen(!isFilterOpen)} className="px-4 py-2 bg-blue-50 text-blue-600 rounded-lg text-sm font-bold hover:bg-blue-100 flex items-center gap-2">
                         <ICONS.Tag /> 篩選支出類別 ({selectedCats.length}) {isFilterOpen ? '▲' : '▼'}

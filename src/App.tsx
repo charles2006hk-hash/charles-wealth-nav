@@ -1618,157 +1618,174 @@ const App: React.FC = () => {
     reader.readAsText(file);
   };
 
-// --- CSV 導入與自動整合邏輯 (修正版) ---
+// --- CSV 導入與自動整合邏輯 (智能編碼修復版) ---
   const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    
+    // 內部函數：封裝 FileReader 為 Promise 以便使用 await
+    const readFile = (encoding: string): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target?.result as string);
+            reader.onerror = (e) => reject(e);
+            reader.readAsText(file, encoding);
+        });
+    };
+
     if (!window.confirm("確定要導入此 CSV？系統將自動比對並略過重複資料，同時建立缺失的物業檔案。")) return;
 
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-        try {
-            const text = ev.target?.result;
-            if (typeof text !== 'string') return;
+    try {
+        // 1. 先嘗試用 UTF-8 讀取 (標準格式)
+        let text = await readFile('UTF-8');
+        let lines = text.split('\n').filter(l => l.trim() !== '');
+        
+        // 解析標題 (移除 BOM \ufeff 和空白)
+        let headers = parseCSVLine(lines[0]).map(h => h.trim().replace(/^\ufeff/, ''));
+        
+        let idxDate = headers.indexOf('繳費日期');
+        let idxAmount = headers.indexOf('費用');
+        let idxProp = headers.indexOf('物業');
 
-            const lines = text.split('\n').filter(l => l.trim() !== '');
-            if (lines.length < 2) { alert("CSV 檔案似乎是空的"); return; }
+        // 2. 如果 UTF-8 失敗 (找不到欄位)，嘗試用 Big5 (Excel 格式)
+        if (idxDate === -1 || idxAmount === -1) {
+            console.log("UTF-8 解析失敗，嘗試切換為 Big5 編碼...");
+            text = await readFile('big5'); // 重新讀取
+            lines = text.split('\n').filter(l => l.trim() !== '');
+            headers = parseCSVLine(lines[0]).map(h => h.trim()); // Big5 通常沒有 BOM
+            
+            idxDate = headers.indexOf('繳費日期');
+            idxAmount = headers.indexOf('費用');
+            idxProp = headers.indexOf('物業');
+        }
 
-            // 1. 解析標題列以取得欄位索引
-            const headers = parseCSVLine(lines[0]);
-            const idxDate = headers.indexOf('繳費日期');
-            const idxProp = headers.indexOf('物業');
-            const idxItem = headers.indexOf('項目');
-            const idxOwner = headers.indexOf('業主');
-            const idxAmount = headers.indexOf('費用');
-            const idxMethod = headers.indexOf('繳費方法');
-            const idxNote = headers.indexOf('備註(A/C)');
-            const idxType = headers.indexOf('物業性質');
+        // 3. 再次檢查，如果還是失敗，報錯並顯示讀到了什麼
+        if (idxDate === -1 || idxAmount === -1 || idxProp === -1) {
+            alert(`CSV 格式不符。\n系統讀取到的標題列為:\n[${headers.join(', ')}]\n\n請檢查 CSV 是否包含: '繳費日期', '物業', '費用'。`);
+            return;
+        }
 
-            if (idxDate === -1 || idxAmount === -1 || idxProp === -1) {
-                alert("CSV 格式不符：找不到 '繳費日期', '物業' 或 '費用' 欄位。");
-                return;
-            }
+        // --- 以下邏輯與之前相同 (取得其他欄位索引) ---
+        const idxItem = headers.indexOf('項目');
+        const idxOwner = headers.indexOf('業主');
+        const idxMethod = headers.indexOf('繳費方法');
+        const idxNote = headers.indexOf('備註(A/C)');
+        const idxType = headers.indexOf('物業性質');
 
-            // 修改點 1: 使用 let 而非 const，因為我們需要重新賦值
-            let batch = writeBatch(db);
-            let operationCount = 0;
-            const newPropertiesMap: Record<string, string> = {}; 
-            let newTxCount = 0;
-            let dupTxCount = 0;
-            let newPropCount = 0;
+        let batch = writeBatch(db);
+        let operationCount = 0;
+        const newPropertiesMap: Record<string, string> = {}; 
+        let newTxCount = 0;
+        let dupTxCount = 0;
+        let newPropCount = 0;
 
-            // 2. 建立現有數據的快取
-            const existingTxKeys = new Set(
-                transactions.map(t => {
-                    const pName = properties.find(p => p.id === t.propertyId)?.name || t.merchant; 
-                    return `${t.date}_${t.amount}_${pName}`;
-                })
-            );
+        // 建立現有數據快取 (去重用)
+        const existingTxKeys = new Set(
+            transactions.map(t => {
+                const pName = properties.find(p => p.id === t.propertyId)?.name || t.merchant; 
+                return `${t.date}_${t.amount}_${pName}`;
+            })
+        );
+        const existingPropMap = new Map(properties.map(p => [p.name, p.id]));
 
-            const existingPropMap = new Map(properties.map(p => [p.name, p.id]));
+        // 逐行處理
+        for (let i = 1; i < lines.length; i++) {
+            const row = parseCSVLine(lines[i]);
+            if (row.length < headers.length) continue;
 
-            // 3. 逐行處理
-            for (let i = 1; i < lines.length; i++) {
-                const row = parseCSVLine(lines[i]);
-                if (row.length < headers.length) continue;
+            const rawDate = row[idxDate];
+            const propName = row[idxProp];
+            const item = row[idxItem];
+            const owner = row[idxOwner];
+            const amountStr = row[idxAmount];
+            const note = row[idxNote] || '';
+            const method = row[idxMethod] || '';
+            const propType = row[idxType] || 'Investment';
 
-                const rawDate = row[idxDate];
-                const propName = row[idxProp];
-                const item = row[idxItem];
-                const owner = row[idxOwner];
-                const amountStr = row[idxAmount];
-                const note = row[idxNote] || '';
-                const method = row[idxMethod] || '';
-                const propType = row[idxType] || 'Investment';
+            const date = parseChineseDate(rawDate);
+            const amount = parseAmount(amountStr);
 
-                const date = parseChineseDate(rawDate);
-                const amount = parseAmount(amountStr);
+            if (!date || !amount) continue;
 
-                if (!date || !amount) continue;
+            // 步驟 A: 檢查/建立 物業
+            let propId = existingPropMap.get(propName) || newPropertiesMap[propName];
 
-                // --- 步驟 A: 檢查/建立 物業 ---
-                let propId = existingPropMap.get(propName) || newPropertiesMap[propName];
-
-                if (!propId) {
-                    const newPropRef = doc(collection(db, "properties"));
-                    propId = newPropRef.id;
-                    
-                    const newPropData: any = {
-                        name: propName,
-                        address: propName, 
-                        type: propType.includes('自置') ? 'Self-use' : 'Investment',
-                        status: 'Occupied', 
-                        currentValue: 0,
-                        purchasePrice: 0,
-                        mortgageLoan: 0, mortgageAmount: 0, outstandingLoan: 0,
-                        managementFee: 0, govtRates: 0, govtRent: 0, estRent: 0,
-                        tenure: 0, interestRate: 0, bank: '',
-                        initialDeposit: 0, furtherDeposit: 0, balancePayment: 0
-                    };
-
-                    batch.set(newPropRef, newPropData);
-                    newPropertiesMap[propName] = propId;
-                    newPropCount++;
-                    operationCount++;
-                }
-
-                // --- 步驟 B: 檢查重複交易 ---
-                const txKey = `${date}_${amount}_${propName}`;
-                if (existingTxKeys.has(txKey)) {
-                    dupTxCount++;
-                    continue; 
-                }
-
-                // --- 步驟 C: 建立交易 ---
-                const newTxRef = doc(collection(db, "transactions"));
+            if (!propId) {
+                const newPropRef = doc(collection(db, "properties"));
+                propId = newPropRef.id;
                 
-                let category = 'Other (其他)';
-                if (item.includes('差餉') || item.includes('地租')) category = 'Govt Rates (差餉)';
-                else if (item.includes('管理費')) category = 'Management Fee (管理費)';
-                else if (item.includes('保險')) category = 'Insurance (保險)';
-                else if (item.includes('維修')) category = 'Repair & Maint (維修)';
-
-                const newTxData: any = {
-                    date: date,
-                    amount: amount,
-                    merchant: item,
-                    category: category,
-                    member: owner || 'Family',
-                    note: `${note} (${method})`,
-                    year: new Date(date).getFullYear(),
-                    month: new Date(date).getMonth() + 1,
-                    propertyId: propId,
-                    isVerified: true
+                const newPropData: any = {
+                    name: propName,
+                    address: propName, 
+                    type: propType.includes('自置') ? 'Self-use' : 'Investment',
+                    status: 'Occupied', 
+                    currentValue: 0,
+                    purchasePrice: 0,
+                    mortgageLoan: 0, mortgageAmount: 0, outstandingLoan: 0,
+                    managementFee: 0, govtRates: 0, govtRent: 0, estRent: 0,
+                    tenure: 0, interestRate: 0, bank: '',
+                    initialDeposit: 0, furtherDeposit: 0, balancePayment: 0
                 };
 
-                batch.set(newTxRef, newTxData);
-                existingTxKeys.add(txKey);
-                newTxCount++;
+                batch.set(newPropRef, newPropData);
+                newPropertiesMap[propName] = propId;
+                newPropCount++;
                 operationCount++;
-
-                // 修改點 2: 當批次滿了提交後，必須「重新建立」一個新的 batch
-                if (operationCount >= 450) {
-                    await batch.commit();
-                    batch = writeBatch(db); // <--- 關鍵修復：建立新批次
-                    operationCount = 0;
-                }
             }
 
-            // 提交剩下的操作
-            if (operationCount > 0) {
-                await batch.commit();
+            // 步驟 B: 檢查重複
+            const txKey = `${date}_${amount}_${propName}`;
+            if (existingTxKeys.has(txKey)) {
+                dupTxCount++;
+                continue; 
             }
 
-            alert(`導入完成！\n- 新增交易: ${newTxCount} 筆\n- 略過重複: ${dupTxCount} 筆\n- 自動建立物業: ${newPropCount} 個`);
+            // 步驟 C: 建立交易
+            const newTxRef = doc(collection(db, "transactions"));
             
-        } catch (err) {
-            console.error(err);
-            alert("匯入失敗: " + err);
+            let category = 'Other (其他)';
+            if ((item || '').includes('差餉') || (item || '').includes('地租')) category = 'Govt Rates (差餉)';
+            else if ((item || '').includes('管理費')) category = 'Management Fee (管理費)';
+            else if ((item || '').includes('保險')) category = 'Insurance (保險)';
+            else if ((item || '').includes('維修')) category = 'Repair & Maint (維修)';
+
+            const newTxData: any = {
+                date: date,
+                amount: amount,
+                merchant: item,
+                category: category,
+                member: owner || 'Family',
+                note: `${note} (${method})`,
+                year: new Date(date).getFullYear(),
+                month: new Date(date).getMonth() + 1,
+                propertyId: propId,
+                isVerified: true
+            };
+
+            batch.set(newTxRef, newTxData);
+            existingTxKeys.add(txKey);
+            newTxCount++;
+            operationCount++;
+
+            // 批次滿了就提交並重置
+            if (operationCount >= 450) {
+                await batch.commit();
+                batch = writeBatch(db); // 建立新批次
+                operationCount = 0;
+            }
         }
-    };
-    // 如果您的 CSV 是 Excel 輸出的，通常需要使用 Big5 編碼讀取
-    // reader.readAsText(file); // 原本是 UTF-8
-    reader.readAsText(file, 'big5'); // 建議改為 Big5 以支援中文 CSV
+
+        // 提交剩餘資料
+        if (operationCount > 0) {
+            await batch.commit();
+        }
+
+        alert(`導入完成！\n- 新增交易: ${newTxCount} 筆\n- 略過重複: ${dupTxCount} 筆\n- 自動建立物業: ${newPropCount} 個`);
+        
+    } catch (err) {
+        console.error(err);
+        alert("匯入失敗: " + err);
+    }
   };
 
   const handleExportJSON = () => {

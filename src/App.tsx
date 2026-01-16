@@ -1639,7 +1639,7 @@ const App: React.FC = () => {
       setTimeout(() => { window.print(); setReportMode(false); }, 500);
   };
   
-  // --- 修改 1: 替換 handleCSVUpload 函數 ---
+  // --- 修改 1: 替換 handleCSVUpload 函數 (加強收入辨識) ---
   const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1653,9 +1653,10 @@ const App: React.FC = () => {
         });
     };
 
-    if (!window.confirm("確定要導入此 CSV？系統將自動比對並略過重複資料，同時建立缺失的物業檔案。")) return;
+    if (!window.confirm("確定要導入此 CSV？系統將自動比對並略過重複資料。")) return;
 
     try {
+        // 1. 嘗試讀取 (UTF-8 優先，失敗轉 Big5)
         let text = await readFile('UTF-8');
         let lines = text.split('\n').filter(l => l.trim() !== '');
         let headers = parseCSVLine(lines[0]).map(h => h.trim().replace(/^\ufeff/, ''));
@@ -1705,7 +1706,7 @@ const App: React.FC = () => {
 
             const rawDate = row[idxDate];
             const propName = row[idxProp];
-            const item = row[idxItem] || ''; // 確保 item 不為 undefined
+            const item = row[idxItem] || ''; 
             const owner = row[idxOwner];
             const amountStr = row[idxAmount];
             const note = row[idxNote] || '';
@@ -1717,12 +1718,12 @@ const App: React.FC = () => {
 
             if (!date || !amount) continue;
 
+            // 建立/查找物業
             let propId = existingPropMap.get(propName) || newPropertiesMap[propName];
-
             if (!propId) {
                 const newPropRef = doc(collection(db, "properties"));
                 propId = newPropRef.id;
-                const newPropData: any = { name: propName, address: propName, type: propType.includes('自置') ? 'Self-use' : 'Investment', status: 'Occupied', currentValue: 0, purchasePrice: 0, mortgageLoan: 0, mortgageAmount: 0, outstandingLoan: 0, managementFee: 0, govtRates: 0, govtRent: 0, estRent: 0, tenure: 0, interestRate: 0, bank: '', initialDeposit: 0, furtherDeposit: 0, balancePayment: 0, owner: '', ownershipType: 'Self-owned', tags: [] };
+                const newPropData: any = { name: propName, address: propName, type: propType.includes('自置') ? 'Self-use' : 'Investment', status: 'Occupied', currentValue: 0, purchasePrice: 0, mortgageLoan: 0, mortgageAmount: 0, outstandingLoan: 0, managementFee: 0, govtRates: 0, govtRent: 0, estRent: 0, tenure: 0, interestRate: 0, bank: '', initialDeposit: 0, furtherDeposit: 0, balancePayment: 0, owner: '', ownershipType: 'Self-owned', tags: [], purchaseDate: '', purchaseAgent: '', purchaseCommission: 0 };
                 batch.set(newPropRef, newPropData);
                 newPropertiesMap[propName] = propId;
                 newPropCount++;
@@ -1737,24 +1738,22 @@ const App: React.FC = () => {
 
             const newTxRef = doc(collection(db, "transactions"));
             
-            // --- 智能分類與正負數邏輯 ---
+            // --- 智能分類邏輯 (關鍵修正) ---
             let category = 'Other (其他)';
-            // 優先判斷收入
-            if (item.includes('租') || item.includes('Rent') || item.includes('Income')) {
+            const itemText = (item + (note || '')).toLowerCase();
+            
+            // 只要出現 租, rent, income 就歸類為收入
+            if (itemText.includes('租') || itemText.includes('rent') || itemText.includes('income')) {
                 category = 'Rental Income (租金收入)';
             }
-            // 判斷支出
-            else if (item.includes('差餉') || item.includes('地租')) category = 'Govt Rates (差餉)';
-            else if (item.includes('管理費')) category = 'Management Fee (管理費)';
-            else if (item.includes('保險')) category = 'Insurance (保險)';
-            else if (item.includes('維修')) category = 'Repair & Maint (維修)';
+            else if (itemText.includes('差餉') || itemText.includes('rates')) category = 'Govt Rates (差餉)';
+            else if (itemText.includes('管理') || itemText.includes('mgt')) category = 'Management Fee (管理費)';
+            else if (itemText.includes('保險') || itemText.includes('insurance')) category = 'Insurance (保險)';
+            else if (itemText.includes('維修') || itemText.includes('repair')) category = 'Repair & Maint (維修)';
             
-            // 注意：金額保持絕對值，正負號由前端根據 category 判斷
-            // -------------------------
-
             const newTxData: any = {
                 date: date,
-                amount: amount,
+                amount: amount, // 存絕對值
                 merchant: item,
                 category: category,
                 member: owner || 'Family',
@@ -2101,29 +2100,44 @@ const App: React.FC = () => {
           {/* Modals */}
           {modalMode === 'doc' && <DocModal isOpen={modalMode === 'doc'} onClose={() => setModalMode('none')} docConfig={docConfig} setDocConfig={setDocConfig} handlePrint={handlePrint} properties={properties} transactions={transactions} />}
           
-          {/* --- 修改 2: 優化交易輸入視窗 (增加金額預覽) --- */}
+          {/* --- 修改 2: 優化交易輸入介面 (千分位 + 正負提示) --- */}
           {modalMode === 'transaction' && (
               <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
                   <div className="bg-white rounded-xl shadow-2xl p-6 w-[500px] animate-in fade-in zoom-in duration-200">
                         <h3 className="text-lg font-bold mb-4">新增交易 Record</h3>
-                        <div className="space-y-3">
+                        <div className="space-y-4">
                             <input type="date" className="w-full border rounded p-2" value={editingTx?.date} onChange={e=>setEditingTx({...editingTx, date: e.target.value} as any)} />
                             <input type="text" placeholder="Detail/Merchant" className="w-full border rounded p-2" value={editingTx?.merchant} onChange={e=>setEditingTx({...editingTx, merchant: e.target.value} as any)} />
                             
-                            {/* 金額輸入優化：右側顯示千分位 */}
+                            {/* 金額輸入優化 */}
                             <div className="relative">
-                                <input type="number" placeholder="Amount" className="w-full border rounded p-2 pr-20" value={editingTx?.amount} onChange={e=>setEditingTx({...editingTx, amount: Number(e.target.value)} as any)} />
-                                <span className="absolute right-3 top-2 text-sm text-gray-500 font-mono pointer-events-none">
+                                <label className="text-xs font-bold text-slate-500 mb-1 block">金額 Amount (輸入數字即可)</label>
+                                <input 
+                                    type="number" 
+                                    placeholder="0" 
+                                    className="w-full border rounded p-2 pr-24 font-mono text-lg" 
+                                    value={editingTx?.amount} 
+                                    onChange={e=>setEditingTx({...editingTx, amount: Number(e.target.value)} as any)} 
+                                />
+                                {/* 千分位預覽 */}
+                                <span className="absolute right-3 top-9 text-sm text-gray-400 font-mono pointer-events-none">
                                     {formatCurrency(editingTx?.amount)}
                                 </span>
                             </div>
 
-                            <select className="w-full border rounded p-2" value={editingTx?.category} onChange={e=>setEditingTx({...editingTx, category: e.target.value} as any)}>{CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select>
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 mb-1 block">類別 Category (決定正負)</label>
+                                <select className="w-full border rounded p-2" value={editingTx?.category} onChange={e=>setEditingTx({...editingTx, category: e.target.value} as any)}>{CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select>
+                                
+                                {/* 正負號即時提示 */}
+                                <div className={`text-xs mt-1 font-bold ${((editingTx?.category||'').includes('Income') || editingTx?.category?.includes('Sale')) ? 'text-emerald-600' : 'text-red-500'}`}>
+                                    此筆將記錄為: {((editingTx?.category||'').includes('Income') || editingTx?.category?.includes('Sale')) ? '(+) 收入 Income' : '(-) 支出 Expense'}
+                                </div>
+                            </div>
+
                             <select className="w-full border rounded p-2" value={editingTx?.member} onChange={e=>setEditingTx({...editingTx, member: e.target.value} as any)}>{MEMBERS.map(m=><option key={m} value={m}>{m}</option>)}</select>
                             
-                            {/* 圖片上傳區塊保持不變... */}
                             <div className="border-t pt-3 mt-3">
-                                {/* ... (原有的圖片上傳代碼) ... */}
                                 <label className="block text-sm font-bold text-slate-700 mb-2">附件圖片 (最多10張)</label>
                                 <div className="flex flex-wrap gap-2 mb-2">
                                     {editingTx?.attachments?.map((img, idx) => (
@@ -2182,22 +2196,33 @@ const App: React.FC = () => {
                           
                           {/* 買入與賣出區塊 */}
                           <div className="space-y-2">
-                              <label className="text-xs font-bold text-slate-500 uppercase">Purchase & Sale Detail</label>
+                              <label className="text-xs font-bold text-slate-500 uppercase">Purchase Detail 買入詳情</label>
                               <div className="p-4 bg-blue-50 rounded-lg border border-blue-100 space-y-3">
                                   <div className="grid grid-cols-2 gap-2">
-                                      <div><label className="text-xs text-slate-500 block mb-1">Purchase Price</label><input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.purchasePrice || ''} onChange={e => setEditingProp({...editingProp, purchasePrice: Number(e.target.value)} as any)} /></div>
+                                      <div className="relative">
+                                          <label className="text-xs text-slate-500 block mb-1">Purchase Price</label>
+                                          <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.purchasePrice || ''} onChange={e => setEditingProp({...editingProp, purchasePrice: Number(e.target.value)} as any)} />
+                                          <span className="absolute right-2 top-8 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.purchasePrice)}</span>
+                                      </div>
                                       <div><label className="text-xs text-slate-500 block mb-1">Purchase Date</label><input className="border w-full p-2 rounded text-sm" type="date" value={editingProp?.purchaseDate || ''} onChange={e => setEditingProp({...editingProp, purchaseDate: e.target.value} as any)} /></div>
                                   </div>
                                   <div className="grid grid-cols-2 gap-2">
                                       <div><label className="text-xs text-slate-500 block mb-1">Agent</label><input className="border w-full p-2 rounded text-sm" type="text" value={editingProp?.purchaseAgent || ''} onChange={e => setEditingProp({...editingProp, purchaseAgent: e.target.value} as any)} /></div>
-                                      <div><label className="text-xs text-slate-500 block mb-1">Commission</label><input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.purchaseCommission || ''} onChange={e => setEditingProp({...editingProp, purchaseCommission: Number(e.target.value)} as any)} /></div>
+                                      <div className="relative">
+                                          <label className="text-xs text-slate-500 block mb-1">Commission</label>
+                                          <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.purchaseCommission || ''} onChange={e => setEditingProp({...editingProp, purchaseCommission: Number(e.target.value)} as any)} />
+                                          <span className="absolute right-2 top-8 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.purchaseCommission)}</span>
+                                      </div>
                                   </div>
                                   
-                                  {/* 如果狀態是 Sold，顯示賣出欄位 */}
                                   {editingProp?.status === 'Sold' && (
                                       <div className="mt-2 border-t pt-2 border-blue-200 bg-blue-100/50 p-2 rounded">
                                           <div className="grid grid-cols-2 gap-2">
-                                              <div><label className="text-xs text-slate-700 font-bold block mb-1">Sale Price (賣出價)</label><input className="border w-full p-2 rounded text-sm font-bold text-green-700" type="number" value={editingProp?.salePrice || ''} onChange={e => setEditingProp({...editingProp, salePrice: Number(e.target.value)} as any)} /></div>
+                                              <div className="relative">
+                                                  <label className="text-xs text-slate-700 font-bold block mb-1">Sale Price (賣出價)</label>
+                                                  <input className="border w-full p-2 rounded text-sm font-bold text-green-700" type="number" value={editingProp?.salePrice || ''} onChange={e => setEditingProp({...editingProp, salePrice: Number(e.target.value)} as any)} />
+                                                  <span className="absolute right-2 top-8 text-xs text-gray-500 pointer-events-none">{formatCurrency(editingProp?.salePrice)}</span>
+                                              </div>
                                               <div><label className="text-xs text-slate-700 font-bold block mb-1">Sale Date (賣出日)</label><input className="border w-full p-2 rounded text-sm" type="date" value={editingProp?.saleDate || ''} onChange={e => setEditingProp({...editingProp, saleDate: e.target.value} as any)} /></div>
                                           </div>
                                       </div>

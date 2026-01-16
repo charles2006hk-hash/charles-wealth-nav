@@ -1618,7 +1618,7 @@ const App: React.FC = () => {
     reader.readAsText(file);
   };
 
-// --- CSV 導入與自動整合邏輯 ---
+// --- CSV 導入與自動整合邏輯 (修正版) ---
   const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1649,18 +1649,17 @@ const App: React.FC = () => {
                 return;
             }
 
-            const batch = writeBatch(db);
+            // 修改點 1: 使用 let 而非 const，因為我們需要重新賦值
+            let batch = writeBatch(db);
             let operationCount = 0;
-            const newPropertiesMap: Record<string, string> = {}; // Name -> ID
+            const newPropertiesMap: Record<string, string> = {}; 
             let newTxCount = 0;
             let dupTxCount = 0;
             let newPropCount = 0;
 
-            // 2. 建立現有數據的快取 (用於去重)
-            // Key: Date_Amount_Property (避免同一天不同車位繳費被誤刪)
+            // 2. 建立現有數據的快取
             const existingTxKeys = new Set(
                 transactions.map(t => {
-                    // 嘗試從 propertyId 找回物業名稱，若無則用 merchant
                     const pName = properties.find(p => p.id === t.propertyId)?.name || t.merchant; 
                     return `${t.date}_${t.amount}_${pName}`;
                 })
@@ -1691,18 +1690,16 @@ const App: React.FC = () => {
                 let propId = existingPropMap.get(propName) || newPropertiesMap[propName];
 
                 if (!propId) {
-                    // 發現新物業！建立它
                     const newPropRef = doc(collection(db, "properties"));
                     propId = newPropRef.id;
                     
                     const newPropData: any = {
                         name: propName,
-                        address: propName, // 暫用名稱當地址，待手動補全
+                        address: propName, 
                         type: propType.includes('自置') ? 'Self-use' : 'Investment',
-                        status: 'Occupied', // 預設為出租/自用中
+                        status: 'Occupied', 
                         currentValue: 0,
                         purchasePrice: 0,
-                        // ... 其他欄位設為 0
                         mortgageLoan: 0, mortgageAmount: 0, outstandingLoan: 0,
                         managementFee: 0, govtRates: 0, govtRent: 0, estRent: 0,
                         tenure: 0, interestRate: 0, bank: '',
@@ -1710,60 +1707,54 @@ const App: React.FC = () => {
                     };
 
                     batch.set(newPropRef, newPropData);
-                    newPropertiesMap[propName] = propId; // 暫存到本地 map 以免重複建立
+                    newPropertiesMap[propName] = propId;
                     newPropCount++;
                     operationCount++;
                 }
 
                 // --- 步驟 B: 檢查重複交易 ---
-                // 這裡使用更精確的 Key: 日期 + 金額 + 物業名稱
                 const txKey = `${date}_${amount}_${propName}`;
                 if (existingTxKeys.has(txKey)) {
                     dupTxCount++;
-                    continue; // 跳過重複
+                    continue; 
                 }
 
                 // --- 步驟 C: 建立交易 ---
                 const newTxRef = doc(collection(db, "transactions"));
                 
-                // 自動分類邏輯
                 let category = 'Other (其他)';
-                if (item.includes('差餉') || item.includes('地租')) category = 'Govt Rates (差餉)'; // 或分開
+                if (item.includes('差餉') || item.includes('地租')) category = 'Govt Rates (差餉)';
                 else if (item.includes('管理費')) category = 'Management Fee (管理費)';
                 else if (item.includes('保險')) category = 'Insurance (保險)';
                 else if (item.includes('維修')) category = 'Repair & Maint (維修)';
 
                 const newTxData: any = {
                     date: date,
-                    amount: amount, // 支出通常是正數，但在系統邏輯中 Expenditure 通常記為數字 (顯示時加負號) 或是負數？
-                                    // 根據您的 App 邏輯：支出類別會自動被視為支出。這裡存絕對值即可。
-                    merchant: item, // 項目名稱作為商戶/詳情
+                    amount: amount,
+                    merchant: item,
                     category: category,
                     member: owner || 'Family',
                     note: `${note} (${method})`,
                     year: new Date(date).getFullYear(),
                     month: new Date(date).getMonth() + 1,
-                    propertyId: propId, // 自動連結物業！
+                    propertyId: propId,
                     isVerified: true
                 };
 
                 batch.set(newTxRef, newTxData);
-                existingTxKeys.add(txKey); // 加入 Key 以防 CSV 本身有重複行
+                existingTxKeys.add(txKey);
                 newTxCount++;
                 operationCount++;
 
-                // Firestore batch limit is 500. Commit if needed.
+                // 修改點 2: 當批次滿了提交後，必須「重新建立」一個新的 batch
                 if (operationCount >= 450) {
                     await batch.commit();
+                    batch = writeBatch(db); // <--- 關鍵修復：建立新批次
                     operationCount = 0;
-                    // Reset batch is complex inside loop with React state, 
-                    // ideally we use a new batch object but here simplified.
-                    // 實務上建議分塊，這裡為簡化假設 CSV 不會超過 500 行操作，
-                    // 或簡單地在此處不重置 batch 物件 (因為 JS 閉包)，
-                    // 若量大建議分多次導入或優化此段。
                 }
             }
 
+            // 提交剩下的操作
             if (operationCount > 0) {
                 await batch.commit();
             }
@@ -1775,7 +1766,9 @@ const App: React.FC = () => {
             alert("匯入失敗: " + err);
         }
     };
-    reader.readAsText(file); // 這裡預設 UTF-8。如果 CSV 是 Excel 輸出的 Big5，可能需要 reader.readAsText(file, 'big5');
+    // 如果您的 CSV 是 Excel 輸出的，通常需要使用 Big5 編碼讀取
+    // reader.readAsText(file); // 原本是 UTF-8
+    reader.readAsText(file, 'big5'); // 建議改為 Big5 以支援中文 CSV
   };
 
   const handleExportJSON = () => {

@@ -2186,28 +2186,108 @@ const App: React.FC = () => {
                         <select className="border rounded px-2 py-1" value={filterMember} onChange={e=>setFilterMember(e.target.value)}><option value="All">All Members</option>{MEMBERS.map(m=><option key={m} value={m}>{m}</option>)}</select>
                         <select className="border rounded px-2 py-1" value={filterYear} onChange={e=>setFilterYear(e.target.value)}><option value="All">All Years</option>{[2024,2025,2026].map(y=><option key={y} value={y}>{y}</option>)}</select>
                       </div>
-                      <table className="w-full text-sm text-left">
-                          <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0"><tr><th className="p-3">Date</th><th className="p-3">Merchant</th><th className="p-3">Amount</th><th className="p-3">Category</th><th className="p-3">Member</th></tr></thead>
-                          <tbody className="divide-y">
-                              {transactions
-                                .filter(t => (filterCategory==='All'||t.category===filterCategory) && (searchTerm===''||(t.merchant || '').toLowerCase().includes(searchTerm.toLowerCase())))
-                                .slice(0, 50).map(t => (
-                                  <tr key={t.id} className="hover:bg-slate-50">
-                                      <td className="p-3">{t.date}</td>
-                                      <td className="p-3 font-medium">
-                                          {t.merchant}
-                                          {t.receiptNo && <div className="text-[9px] text-green-600 mt-1">🧾 {t.receiptNo}</div>}
-                                      </td>
-                                      <td className="p-3 font-mono">{formatCurrency(t.amount)}</td>
-                                      <td className="p-3"><span className="px-2 py-1 bg-gray-100 rounded text-xs">{t.category}</span></td>
-                                      <td className="p-3">{t.member}</td>
-                                      <td className="p-3">
-                                        <button onClick={() => handleOpenReceipt(t)} className={`p-1 rounded border ${t.receiptNo ? 'text-green-600 border-green-200 bg-green-50' : 'text-slate-400 border-slate-200 hover:text-blue-500 hover:border-blue-300'}`}><ICONS.FileText /></button>
-                                      </td>
+                      {/* --- 修改 2: 數據中心列表 (增加編輯/刪除按鈕與物業顯示) --- */}
+                      <div className="border rounded-lg overflow-hidden">
+                          <table className="w-full text-sm text-left">
+                              <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0">
+                                  <tr>
+                                      <th className="p-3">Date</th>
+                                      <th className="p-3">Merchant</th>
+                                      <th className="p-3">Amount</th>
+                                      <th className="p-3">Category</th>
+                                      <th className="p-3">Prop/Member</th>
+                                      <th className="p-3 text-center">Action</th>
                                   </tr>
-                              ))}
-                          </tbody>
-                      </table>
+                              </thead>
+                              <tbody className="divide-y">
+                                  {transactions
+                                    .filter(t => (filterCategory==='All'||t.category===filterCategory) && (searchTerm===''||(t.merchant || '').toLowerCase().includes(searchTerm.toLowerCase())))
+                                    .slice(0, displayLimit)
+                                    .map(t => {
+                                        // 找出這筆交易關聯的物業名稱 (如果有)
+                                        const linkedProp = properties.find(p => p.id === t.propertyId);
+                                        
+                                        return (
+                                          <tr key={t.id} className="hover:bg-slate-50 group">
+                                              <td className="p-3">{t.date}</td>
+                                              <td className="p-3 font-medium">
+                                                  {t.merchant}
+                                                  {t.receiptNo && <div className="text-[9px] text-green-600 mt-1">🧾 {t.receiptNo}</div>}
+                                              </td>
+                                              <td className={`p-3 font-mono font-bold ${((t.category || '').includes('Income') || t.category === 'Property Sale (賣樓收入)') ? 'text-emerald-600' : 'text-slate-600'}`}>
+                                                  {formatCurrency(t.amount)}
+                                              </td>
+                                              <td className="p-3"><span className="px-2 py-1 bg-gray-100 rounded text-xs">{t.category}</span></td>
+                                              <td className="p-3">
+                                                  {linkedProp ? (
+                                                      <span className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded font-bold flex items-center w-fit gap-1">
+                                                          <ICONS.Home /> {linkedProp.name}
+                                                      </span>
+                                                  ) : (
+                                                      <span className="text-slate-500 text-xs">{t.member}</span>
+                                                  )}
+                                              </td>
+                                              <td className="p-3">
+                                                <div className="flex items-center justify-center gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    {/* 開收據按鈕 (僅收入類別顯示) */}
+                                                    {((t.category || '').includes('Income') || t.category?.includes('Sale')) && (
+                                                        <button 
+                                                            onClick={() => handleOpenReceipt(t)} 
+                                                            className={`p-1.5 rounded border hover:bg-slate-100 ${t.receiptNo ? 'text-green-600 border-green-200 bg-green-50' : 'text-slate-400 border-slate-200'}`}
+                                                            title="收據 Receipt"
+                                                        >
+                                                            <ICONS.FileText />
+                                                        </button>
+                                                    )}
+                                                    
+                                                    {/* 編輯按鈕 - 點擊後可修改物業歸屬 */}
+                                                    <button 
+                                                        onClick={() => { setEditingTx(t); setModalMode('transaction'); }} 
+                                                        className="p-1.5 rounded border border-blue-200 text-blue-500 hover:bg-blue-50"
+                                                        title="編輯 Edit"
+                                                    >
+                                                        <ICONS.Edit />
+                                                    </button>
+                                                    
+                                                    {/* 刪除按鈕 */}
+                                                    <button 
+                                                        onClick={() => deleteItem('transactions', t.id)} 
+                                                        className="p-1.5 rounded border border-red-200 text-red-500 hover:bg-red-50"
+                                                        title="刪除 Delete"
+                                                    >
+                                                        <ICONS.Trash />
+                                                    </button>
+                                                </div>
+                                              </td>
+                                          </tr>
+                                        );
+                                    })}
+                              </tbody>
+                          </table>
+                          
+                          {/* 底部加載按鈕 (這部分應該已經存在，確認位置正確即可) */}
+                          <div className="p-4 bg-slate-50 border-t flex justify-center gap-4">
+                              {displayLimit < transactions.length && (
+                                  <>
+                                    <button 
+                                        onClick={() => setDisplayLimit(prev => prev + 100)} 
+                                        className="px-4 py-2 bg-white border border-slate-300 rounded shadow-sm text-sm hover:bg-slate-100 text-slate-600 font-medium"
+                                    >
+                                        載入更多 (Load More +100)
+                                    </button>
+                                    <button 
+                                        onClick={() => setDisplayLimit(transactions.length)} 
+                                        className="px-4 py-2 bg-white border border-slate-300 rounded shadow-sm text-sm hover:bg-slate-100 text-slate-600 font-medium"
+                                    >
+                                        顯示全部 (Show All)
+                                    </button>
+                                  </>
+                              )}
+                              {displayLimit >= transactions.length && transactions.length > 50 && (
+                                  <span className="text-xs text-slate-400 py-2">已顯示所有資料</span>
+                              )}
+                          </div>
+                      </div>
                   </div>
               )}
               
@@ -2282,13 +2362,36 @@ const App: React.FC = () => {
           {/* Modals */}
           {modalMode === 'doc' && <DocModal isOpen={modalMode === 'doc'} onClose={() => setModalMode('none')} docConfig={docConfig} setDocConfig={setDocConfig} handlePrint={handlePrint} properties={properties} transactions={transactions} />}
           
+          {/* --- 修改 1: 交易編輯視窗 (增加物業選擇功能) --- */}
           {modalMode === 'transaction' && (
               <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
                   <div className="bg-white rounded-xl shadow-2xl p-6 w-[500px] animate-in fade-in zoom-in duration-200">
-                        <h3 className="text-lg font-bold mb-4">新增交易 Record</h3>
+                        <h3 className="text-lg font-bold mb-4">{editingTx?.id ? '編輯交易 Edit Record' : '新增交易 New Record'}</h3>
                         <div className="space-y-4">
-                            <input type="date" className="w-full border rounded p-2" value={editingTx?.date} onChange={e=>setEditingTx({...editingTx, date: e.target.value} as any)} />
-                            <input type="text" placeholder="Detail/Merchant" className="w-full border rounded p-2" value={editingTx?.merchant} onChange={e=>setEditingTx({...editingTx, merchant: e.target.value} as any)} />
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 mb-1 block">日期 Date</label>
+                                    <input type="date" className="w-full border rounded p-2" value={editingTx?.date} onChange={e=>setEditingTx({...editingTx, date: e.target.value} as any)} />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 mb-1 block">歸屬物業 Link Property</label>
+                                    <select 
+                                        className="w-full border rounded p-2" 
+                                        value={editingTx?.propertyId || ''} 
+                                        onChange={e=>setEditingTx({...editingTx, propertyId: e.target.value} as any)}
+                                    >
+                                        <option value="">(無 / 一般消費)</option>
+                                        {properties.map(p => (
+                                            <option key={p.id} value={p.id}>{p.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 mb-1 block">商戶/詳情 Merchant</label>
+                                <input type="text" placeholder="Detail/Merchant" className="w-full border rounded p-2" value={editingTx?.merchant} onChange={e=>setEditingTx({...editingTx, merchant: e.target.value} as any)} />
+                            </div>
                             
                             {/* 金額輸入優化 */}
                             <div className="relative">
@@ -2300,7 +2403,6 @@ const App: React.FC = () => {
                                     value={editingTx?.amount} 
                                     onChange={e=>setEditingTx({...editingTx, amount: Number(e.target.value)} as any)} 
                                 />
-                                {/* 千分位預覽 */}
                                 <span className="absolute right-3 top-9 text-sm text-gray-400 font-mono pointer-events-none">
                                     {formatCurrency(editingTx?.amount)}
                                 </span>
@@ -2315,8 +2417,12 @@ const App: React.FC = () => {
                                 </div>
                             </div>
 
-                            <select className="w-full border rounded p-2" value={editingTx?.member} onChange={e=>setEditingTx({...editingTx, member: e.target.value} as any)}>{MEMBERS.map(m=><option key={m} value={m}>{m}</option>)}</select>
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 mb-1 block">成員 Member</label>
+                                <select className="w-full border rounded p-2" value={editingTx?.member} onChange={e=>setEditingTx({...editingTx, member: e.target.value} as any)}>{MEMBERS.map(m=><option key={m} value={m}>{m}</option>)}</select>
+                            </div>
                             
+                            {/* 圖片上傳區塊 */}
                             <div className="border-t pt-3 mt-3">
                                 <label className="block text-sm font-bold text-slate-700 mb-2">附件圖片 (最多10張)</label>
                                 <div className="flex flex-wrap gap-2 mb-2">

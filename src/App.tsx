@@ -1528,6 +1528,7 @@ const App: React.FC = () => {
   const [childType, setChildType] = useState('Vocational');
   const [stressRate, setStressRate] = useState(0);
   const [rentDrop, setRentDrop] = useState(0);
+  const [displayLimit, setDisplayLimit] = useState(50);
 
   useEffect(() => {
     const qTx = query(collection(db, "transactions"), orderBy("date", "desc"));

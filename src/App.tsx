@@ -2119,75 +2119,76 @@ const App: React.FC = () => {
   return (
       <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 text-slate-900 font-sans">
           <style>{`
-            /* 一般介面樣式 */
+            /* 一般介面樣式 (保持不變) */
             ::-webkit-scrollbar { width: 6px; height: 6px; }
             ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
             .modal-overlay { background-color: rgba(0, 0, 0, 0.5); }
             
-            /* --- 🖨️ 列印專用強力修復樣式 --- */
+            /* --- 🖨️ 列印專用強力修復樣式 (Chrome 專用修正) --- */
             @media print {
+                /* 1. 重置頁面設定 */
                 @page { 
                     size: A4; 
-                    margin: 0; 
+                    margin: 10mm; /* 稍微留邊，避免印表機裁切 */
                 }
                 
-                /* 1. 全局重置：確保背景白底，字體黑色，並解除捲動限制 */
-                html, body {
-                    width: 100%;
-                    min-height: 100%;
+                /* 2. 暴力重置所有容器的高度與滾動條 */
+                html, body, #root {
+                    width: 100% !important;
+                    height: auto !important;
+                    overflow: visible !important;
+                    position: static !important;
                     margin: 0 !important;
                     padding: 0 !important;
                     background: white !important;
-                    overflow: visible !important; /* 關鍵：允許內容超出螢幕長度 */
-                    color: black !important;
                 }
 
-                /* 2. 隱藏所有不相關元素 (包含 Modal 外框、背景、按鈕) */
+                /* 3. 隱藏所有內容 (使用 visibility 以保留 DOM 結構) */
                 body * {
-                    visibility: hidden; 
+                    visibility: hidden;
                 }
 
-                /* 3. 排除法：只讓我們的文件容器 "顯形" */
+                /* 4. 排除法：只讓文件容器與其子元素「顯形」 */
                 .doc-print-container, 
                 .doc-print-container * {
                     visibility: visible !important;
+                    color-adjust: exact; 
+                    -webkit-print-color-adjust: exact; /* 強制列印背景色 */
                 }
 
-                /* 4. ⭐️ 核心修復：將文件容器脫離原本的 Modal 結構，強制固定在紙張最上方 */
+                /* 5. ⭐️ 核心：將文件容器脫離 Modal，直接貼到紙張最上方 */
                 .doc-print-container {
                     position: absolute !important;
                     left: 0 !important;
                     top: 0 !important;
-                    width: 100% !important;  
-                    max-width: 210mm !important; /* 限制最大寬度為 A4 */
-                    margin: 0 auto !important;
+                    width: 100% !important;
+                    margin: 0 !important;
                     padding: 0 !important;
                     
-                    /* 移除所有可能導致空白的干擾樣式 */
+                    /* 清除所有可能導致空白的干擾 */
                     background: white !important;
                     border: none !important;
                     box-shadow: none !important;
-                    transform: none !important;
-                    z-index: 9999999 !important; /* 確保在最最最上層 */
+                    z-index: 99999999 !important;
                     
-                    /* 確保多頁列印正常 */
+                    /* 確保高度自動撐開，讓多頁列印正常 */
                     display: block !important;
-                    overflow: visible !important;
                     height: auto !important;
+                    overflow: visible !important;
                 }
 
-                /* 5. 確保每一頁的高度與換頁邏輯 */
+                /* 6. 強制隱藏所有可能擋住內容的 Modal 遮罩與按鈕 */
+                .modal-overlay, .fixed, nav, .sidebar, button {
+                    display: none !important;
+                }
+
+                /* 7. 確保分頁符號有效 */
                 .page-break {
                     page-break-before: always !important;
                     break-before: page !important;
                     display: block !important;
                     position: relative !important;
-                    min-height: 95vh !important; /* 確保內容撐開頁面 */
-                }
-
-                /* 6. 強制隱藏 UI 元素 */
-                .no-print, nav, .sidebar, button, input, select, .modal-overlay {
-                    display: none !important;
+                    clear: both !important;
                 }
             }
           `}</style>

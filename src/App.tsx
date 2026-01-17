@@ -1859,6 +1859,7 @@ const App: React.FC = () => {
   };
 
   const handlePrint = async () => {
+      // 1. 如果是收據，先處理編號邏輯 (保留您原有的邏輯)
       if (docConfig.type === 'receipt' && docConfig.linkedTransactionId) {
            let finalReceiptNo = docConfig.existingReceiptNo;
            if (!finalReceiptNo) {
@@ -1870,8 +1871,52 @@ const App: React.FC = () => {
                } catch (error) { console.error("Error saving receipt no:", error); }
            }
       }
-      setReportMode(true);
-      setTimeout(() => { window.print(); setReportMode(false); }, 500);
+
+      // 2. 核心列印邏輯：複製 DOM 節點
+      // 找到要列印的內容容器
+      const printContent = document.querySelector('.doc-print-container');
+      if (!printContent) {
+          alert("找不到列印內容");
+          return;
+      }
+
+      // 複製節點
+      const clone = printContent.cloneNode(true) as HTMLElement;
+      
+      // 給複製體一個特殊的 ID，方便 CSS 控制
+      clone.id = 'print-clone-root';
+      
+      // 強制設定複製體的樣式，確保它在最上層且樣式正確
+      Object.assign(clone.style, {
+          position: 'absolute',
+          top: '0',
+          left: '0',
+          width: '100%', // 或 '210mm'
+          margin: '0',
+          padding: '0',
+          backgroundColor: 'white',
+          zIndex: '999999',
+          display: 'block',
+          visibility: 'visible'
+      });
+
+      // 將複製體直接掛載到 body 下 (跳脫 #root 和 Modal 的束縛)
+      document.body.appendChild(clone);
+      
+      // 標記 body 進入列印模式 (讓 CSS 隱藏其他東西)
+      document.body.classList.add('printing-mode');
+
+      // 3. 執行列印
+      setTimeout(() => {
+          window.print();
+          
+          // 4. 列印後清理現場
+          document.body.classList.remove('printing-mode');
+          const cloneToRemove = document.getElementById('print-clone-root');
+          if (cloneToRemove) {
+              document.body.removeChild(cloneToRemove);
+          }
+      }, 300); // 稍微延遲確保 DOM 渲染完成
   };
   
   const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2119,76 +2164,59 @@ const App: React.FC = () => {
   return (
       <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 text-slate-900 font-sans">
           <style>{`
-            /* 一般介面樣式 (保持不變) */
+            /* 一般介面樣式 */
             ::-webkit-scrollbar { width: 6px; height: 6px; }
             ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
             .modal-overlay { background-color: rgba(0, 0, 0, 0.5); }
             
-            /* --- 🖨️ 列印專用強力修復樣式 (Chrome 專用修正) --- */
+            /* --- 🖨️ 列印專用樣式 (DOM 複製法) --- */
             @media print {
-                /* 1. 重置頁面設定 */
                 @page { 
                     size: A4; 
-                    margin: 10mm; /* 稍微留邊，避免印表機裁切 */
+                    margin: 0; 
                 }
                 
-                /* 2. 暴力重置所有容器的高度與滾動條 */
-                html, body, #root {
-                    width: 100% !important;
-                    height: auto !important;
-                    overflow: visible !important;
-                    position: static !important;
+                html, body {
+                    height: 100%;
                     margin: 0 !important;
                     padding: 0 !important;
-                    background: white !important;
+                    background: white;
                 }
 
-                /* 3. 隱藏所有內容 (使用 visibility 以保留 DOM 結構) */
-                body * {
-                    visibility: hidden;
-                }
-
-                /* 4. 排除法：只讓文件容器與其子元素「顯形」 */
-                .doc-print-container, 
-                .doc-print-container * {
-                    visibility: visible !important;
-                    color-adjust: exact; 
-                    -webkit-print-color-adjust: exact; /* 強制列印背景色 */
-                }
-
-                /* 5. ⭐️ 核心：將文件容器脫離 Modal，直接貼到紙張最上方 */
-                .doc-print-container {
-                    position: absolute !important;
-                    left: 0 !important;
-                    top: 0 !important;
-                    width: 100% !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
+                /* 當處於列印模式時... */
+                body.printing-mode {
+                    /* 隱藏原本的 App 內容 */
+                    #root {
+                        display: none !important;
+                    }
                     
-                    /* 清除所有可能導致空白的干擾 */
-                    background: white !important;
-                    border: none !important;
-                    box-shadow: none !important;
-                    z-index: 99999999 !important;
-                    
-                    /* 確保高度自動撐開，讓多頁列印正常 */
-                    display: block !important;
-                    height: auto !important;
-                    overflow: visible !important;
-                }
+                    /* 隱藏所有 Modal 殘留 */
+                    .modal-overlay {
+                        display: none !important;
+                    }
 
-                /* 6. 強制隱藏所有可能擋住內容的 Modal 遮罩與按鈕 */
-                .modal-overlay, .fixed, nav, .sidebar, button {
-                    display: none !important;
+                    /* 確保複製出來的節點可見 */
+                    #print-clone-root {
+                        display: block !important;
+                        visibility: visible !important;
+                        position: absolute !important;
+                        left: 0 !important;
+                        top: 0 !important;
+                        width: 100% !important;
+                    }
                 }
-
-                /* 7. 確保分頁符號有效 */
+                
+                /* 強制背景顏色列印 (針對 Chrome) */
+                * {
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                }
+                
+                /* 確保分頁符號有效 */
                 .page-break {
                     page-break-before: always !important;
                     break-before: page !important;
-                    display: block !important;
-                    position: relative !important;
-                    clear: both !important;
+                    min-height: 1px; /* 防止被空內容折疊 */
                 }
             }
           `}</style>

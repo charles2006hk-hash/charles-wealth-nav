@@ -2119,71 +2119,79 @@ const App: React.FC = () => {
   return (
       <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 text-slate-900 font-sans">
           <style>{`
-            /* 一般樣式 */
+            /* 一般介面樣式 */
             ::-webkit-scrollbar { width: 6px; height: 6px; }
             ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
             .modal-overlay { background-color: rgba(0, 0, 0, 0.5); }
             
-            /* --- 列印專用樣式 (核心修復) --- */
+            /* --- 🖨️ 列印專用樣式 (核心修復) --- */
             @media print {
                 @page { 
                     size: A4; 
-                    margin: 0; /* 移除瀏覽器預設頁邊距 */
+                    margin: 0; /* 移除預設頁邊距，讓內容完全掌控 */
                 }
                 
-                body, html { 
-                    margin: 0; 
-                    padding: 0; 
-                    background-color: white; 
+                html, body {
+                    width: 100%;
                     height: 100%;
-                    overflow: visible !important;
+                    margin: 0;
+                    padding: 0;
+                    background: white;
+                    overflow: visible !important; /* 允許內容超出螢幕長度 */
                 }
 
-                /* 步驟 1: 先將所有元素隱藏 (使用 visibility 而非 display，避免破壞結構) */
+                /* 1. 隱藏所有不相關元素 (包含背景雜項) */
                 body * {
                     visibility: hidden;
                 }
 
-                /* 步驟 2: 強制隱藏 UI 元素 (導航、按鈕等) */
-                .no-print, nav, .sidebar, button, input, select {
-                    display: none !important;
-                }
-
-                /* 步驟 3: 只顯示文件容器及其所有子元素 */
+                /* 2. 只顯示我們指定的文件容器 */
                 .doc-print-container, .doc-print-container * {
                     visibility: visible !important;
                 }
 
-                /* 步驟 4: 將文件容器定位到頁面最左上角 */
+                /* 3. ⭐️ 關鍵：將文件容器 "絕對定位" 到紙張最左上角，並強制重設尺寸 */
                 .doc-print-container {
                     position: absolute !important;
                     left: 0 !important;
                     top: 0 !important;
-                    width: 210mm !important; /* 強制 A4 寬度 */
+                    width: 210mm !important;  /* 強制 A4 寬度 */
                     min-height: 297mm !important; /* 強制 A4 高度 */
                     margin: 0 !important;
-                    padding: 20px !important; /* 稍微留白 */
+                    padding: 0 !important;
                     background: white !important;
-                    z-index: 99999 !important;
-                    border: none !important; /* 移除預覽時的藍色邊框 */
-                    box-shadow: none !important; /* 移除陰影 */
+                    z-index: 999999 !important; /* 確保在最上層 */
+                    
+                    /* 移除可能導致空白的邊框或陰影 */
+                    border: none !important;
+                    box-shadow: none !important;
+                    
+                    /* 確保文字不會被截斷 */
+                    overflow: visible !important;
+                    display: block !important;
                 }
 
-                /* 確保 Modal 外層不會擋住內容 */
-                .modal-overlay {
-                    position: absolute !important;
-                    top: 0;
-                    left: 0;
+                /* 4. 針對租約等多頁文件的換頁設定 */
+                .page-break {
+                    page-break-before: always !important;
+                    break-before: page !important;
+                    display: block !important;
+                    min-height: 297mm !important; /* 確保每一頁都佔滿 */
+                    position: relative !important;
+                }
+
+                /* 5. 隱藏 Modal 的外框干擾 (非常重要，避免空白頁) */
+                .modal-overlay, .fixed, .overflow-y-auto {
+                    position: static !important;
+                    overflow: visible !important;
+                    width: auto !important;
+                    height: auto !important;
                     background: none !important;
-                    width: 100%;
-                    height: auto;
-                    overflow: visible;
                 }
                 
-                /* 強制換頁設定 */
-                .page-break { 
-                    page-break-before: always;
-                    margin-top: 0 !important;
+                /* 隱藏導航與按鈕 */
+                .no-print, nav, .sidebar, button, input, select {
+                    display: none !important;
                 }
             }
           `}</style>

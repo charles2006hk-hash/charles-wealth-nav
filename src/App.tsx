@@ -1057,11 +1057,11 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
     if (docConfig.type === 'receipt') {
         const receiptNo = docConfig.existingReceiptNo || `PREVIEW`; 
         const englishAmount = convertNumberToEnglish(docConfig.amount);
-        const isTenant = true; // 預設勾選租客
-        const isRent = true;   // 預設勾選租金
+        const isTenant = true; 
+        const isRent = true;   
 
         return (
-             <div className="w-[210mm] h-[145mm] mx-auto bg-white text-black font-sans relative border-[3px] border-blue-400 p-6 box-border overflow-hidden">
+             <div className="doc-print-container w-[210mm] h-[145mm] mx-auto bg-white text-black font-sans relative border-[3px] border-blue-400 p-6 box-border overflow-hidden">
                 <div className="flex justify-between items-end mb-2">
                     <div className="text-sm font-bold w-1/3">
                         收據編號<br/>
@@ -1163,29 +1163,51 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
         );
     } 
     
-    // 2. 對數單樣式 (Statement)
+    // 2. 對數單樣式 (Statement) - 更新表格內容與自動換行
     if (docConfig.type === 'statement') {
         const filteredTxs = transactions
             .filter(t => t.propertyId === docConfig.propId && (!docConfig.statementDateStart || t.date >= docConfig.statementDateStart) && (!docConfig.statementDateEnd || t.date <= docConfig.statementDateEnd))
             .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
         
         return (
-            <div className="bg-white p-10 w-[210mm] min-h-[297mm] text-black font-serif">
+            <div className="doc-print-container bg-white p-10 w-[210mm] min-h-[297mm] text-black font-serif mx-auto">
                 <h1 className="text-2xl font-bold text-center underline mb-6">RENTAL STATEMENT 租務對數單</h1>
                 <div className="flex justify-between mb-8">
                     <div><p><strong>Property:</strong> {prop.name}</p><p><strong>Address:</strong> {prop.address}</p></div>
                     <div className="text-right"><p><strong>Tenant:</strong> {docConfig.tenant}</p><p><strong>Period:</strong> {docConfig.statementDateStart || 'Start'} to {docConfig.statementDateEnd || 'Now'}</p></div>
                 </div>
-                <table className="w-full border-collapse border border-black text-sm">
-                    <thead><tr className="bg-gray-100"><th className="border border-black p-2">Date</th><th className="border border-black p-2">Description / Note</th><th className="border border-black p-2 text-right">Debit (Due)</th><th className="border border-black p-2 text-right">Credit (Paid)</th></tr></thead>
+                <table className="w-full border-collapse border border-black text-sm table-fixed">
+                    <colgroup>
+                        <col className="w-24" />
+                        <col className="w-auto" />
+                        <col className="w-24" />
+                        <col className="w-24" />
+                    </colgroup>
+                    <thead>
+                        <tr className="bg-gray-100">
+                            <th className="border border-black p-2">Date</th>
+                            <th className="border border-black p-2">Description / Note</th>
+                            <th className="border border-black p-2 text-right">Debit (Due)</th>
+                            <th className="border border-black p-2 text-right">Credit (Paid)</th>
+                        </tr>
+                    </thead>
                     <tbody>
                         {filteredTxs.length === 0 && <tr><td colSpan={4} className="p-4 text-center">No records found for this period.</td></tr>}
                         {filteredTxs.map(t => (
                             <tr key={t.id}>
-                                <td className="border border-black p-2">{t.date}</td>
-                                <td className="border border-black p-2">{(t.category || '')} - {t.note}</td>
-                                <td className="border border-black p-2 text-right">{(t.category || '').includes('Rental Income') ? '' : formatCurrency(t.amount)}</td>
-                                <td className="border border-black p-2 text-right">{(t.category || '').includes('Rental Income') ? formatCurrency(t.amount) : ''}</td>
+                                <td className="border border-black p-2 align-top">{t.date}</td>
+                                {/* 核心修改：增加流水帳 Detail (merchant) 並支援自動換行 */}
+                                <td className="border border-black p-2 align-top break-words whitespace-pre-wrap text-xs">
+                                    <span className="font-bold">{t.category}</span>
+                                    {t.merchant && <span className="block text-slate-700">{t.merchant}</span>}
+                                    {t.note && <span className="block text-slate-500 italic">({t.note})</span>}
+                                </td>
+                                <td className="border border-black p-2 text-right align-top">
+                                    {((t.category || '').includes('Rental Income') || t.category?.includes('Sale')) ? '' : formatCurrency(t.amount)}
+                                </td>
+                                <td className="border border-black p-2 text-right align-top">
+                                    {((t.category || '').includes('Rental Income') || t.category?.includes('Sale')) ? formatCurrency(t.amount) : ''}
+                                </td>
                             </tr>
                         ))}
                     </tbody>
@@ -1245,7 +1267,6 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
              <div className="absolute bottom-4 right-10 text-xs">Page 1 of 4</div>
           </div>
 
-          {/* Page 2 */}
           <div className="w-[210mm] min-h-[297mm] p-10 bg-white mx-auto relative page-break">
              <ol className="list-decimal pl-6 space-y-3 text-sm" start={8}>
                  <li>
@@ -1312,7 +1333,6 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
              <div className="absolute bottom-4 right-10 text-xs">Page 2 of 4</div>
           </div>
 
-          {/* Page 3 */}
           <div className="w-[210mm] min-h-[297mm] p-10 bg-white mx-auto relative page-break">
             <h1 className="text-2xl font-bold text-center mb-8 underline">Schedule I 附表一</h1>
             
@@ -1382,7 +1402,6 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
             <div className="absolute bottom-4 right-10 text-xs">Page 3 of 4</div>
           </div>
 
-          {/* Page 4 */}
           <div className="w-[210mm] min-h-[297mm] p-10 bg-white mx-auto relative page-break">
              <h1 className="text-2xl font-bold text-center mb-8 underline">Schedule II 附表二</h1>
              
@@ -2101,18 +2120,24 @@ const App: React.FC = () => {
       <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 text-slate-900 font-sans">
           <style>{`
             @media print {
-                @page { size: A4; margin: 10mm; }
-                body { background-color: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; overflow: visible !important; height: auto !important; }
-                #root { overflow: visible !important; height: auto !important; }
-                .no-print, nav, .sidebar, .modal-overlay { display: none !important; }
+                @page { size: A4; margin: 0mm; } /* 強制 A4 無邊距 */
+                body { background-color: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                #root > div { display: none; } /* 隱藏所有 React 根內容 */
+                /* 核心修改：只顯示帶有 doc-print-container 的元素 */
                 .doc-print-container { 
-                    display: block !important; position: absolute; top: 0; left: 0; width: 100%; background: white; z-index: 9999; padding: 0;
+                    display: block !important; 
+                    position: absolute; 
+                    top: 0; 
+                    left: 0; 
+                    width: 210mm !important; 
+                    height: auto !important; 
+                    background: white; 
+                    z-index: 9999; 
+                    padding: 0;
+                    margin: 0 auto;
                 }
-                .report-container { display: block !important; width: 100%; box-shadow: none; }
                 .page-break { page-break-before: always; }
-                body.printing-doc #root > div { visibility: hidden; }
-                body.printing-doc .doc-print-container { visibility: visible; }
-                .bg-slate-50 { background-color: #f8fafc !important; }
+                .no-print, nav, .sidebar, .modal-overlay, button { display: none !important; }
             }
             ::-webkit-scrollbar { width: 6px; height: 6px; }
             ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }

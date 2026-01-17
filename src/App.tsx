@@ -2169,11 +2169,11 @@ const App: React.FC = () => {
             ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
             .modal-overlay { background-color: rgba(0, 0, 0, 0.5); }
             
-            /* --- 🖨️ 列印專用樣式 (DOM 複製法) --- */
+            /* --- 🖨️ 列印專用樣式 (含邊距優化) --- */
             @media print {
                 @page { 
                     size: A4; 
-                    margin: 0; 
+                    margin: 15mm; /* 🟢 關鍵修改：設置 15mm 頁面邊距 */
                 }
                 
                 html, body {
@@ -2195,28 +2195,40 @@ const App: React.FC = () => {
                         display: none !important;
                     }
 
-                    /* 確保複製出來的節點可見 */
+                    /* 顯示複製出來的文件 */
                     #print-clone-root {
                         display: block !important;
                         visibility: visible !important;
-                        position: absolute !important;
+                        position: relative !important; /* 改回 relative 讓它跟隨 margin */
                         left: 0 !important;
                         top: 0 !important;
                         width: 100% !important;
+                        
+                        /* 🟢 關鍵修改：強制覆寫內部寫死的 210mm 寬度，改為適應頁面寬度 */
+                        /* 這能防止內容被邊距切掉，而是自動縮放到邊距內 */
+                    }
+                    
+                    /* 針對原本寫死 w-[210mm] 的容器進行覆寫 */
+                    #print-clone-root .w-\[210mm\] {
+                        width: 100% !important;
+                        height: auto !important;
+                        margin: 0 auto !important;
+                        border: none !important; /* 移除預覽框線，列印更乾淨 */
+                        padding: 0 !important;
                     }
                 }
                 
-                /* 強制背景顏色列印 (針對 Chrome) */
+                /* 強制背景顏色列印 */
                 * {
                     -webkit-print-color-adjust: exact !important;
                     print-color-adjust: exact !important;
                 }
                 
-                /* 確保分頁符號有效 */
                 .page-break {
                     page-break-before: always !important;
                     break-before: page !important;
-                    min-height: 1px; /* 防止被空內容折疊 */
+                    display: block;
+                    height: 1px;
                 }
             }
           `}</style>

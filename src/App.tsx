@@ -2124,73 +2124,69 @@ const App: React.FC = () => {
             ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
             .modal-overlay { background-color: rgba(0, 0, 0, 0.5); }
             
-            /* --- 🖨️ 列印專用樣式 (核心修復) --- */
+            /* --- 🖨️ 列印專用強力修復樣式 --- */
             @media print {
                 @page { 
                     size: A4; 
-                    margin: 0; /* 移除預設頁邊距，讓內容完全掌控 */
+                    margin: 0; 
                 }
                 
+                /* 1. 全局重置：確保背景白底，字體黑色，並解除捲動限制 */
                 html, body {
                     width: 100%;
-                    height: 100%;
-                    margin: 0;
-                    padding: 0;
-                    background: white;
-                    overflow: visible !important; /* 允許內容超出螢幕長度 */
+                    min-height: 100%;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    background: white !important;
+                    overflow: visible !important; /* 關鍵：允許內容超出螢幕長度 */
+                    color: black !important;
                 }
 
-                /* 1. 隱藏所有不相關元素 (包含背景雜項) */
+                /* 2. 隱藏所有不相關元素 (包含 Modal 外框、背景、按鈕) */
                 body * {
-                    visibility: hidden;
+                    visibility: hidden; 
                 }
 
-                /* 2. 只顯示我們指定的文件容器 */
-                .doc-print-container, .doc-print-container * {
+                /* 3. 排除法：只讓我們的文件容器 "顯形" */
+                .doc-print-container, 
+                .doc-print-container * {
                     visibility: visible !important;
                 }
 
-                /* 3. ⭐️ 關鍵：將文件容器 "絕對定位" 到紙張最左上角，並強制重設尺寸 */
+                /* 4. ⭐️ 核心修復：將文件容器脫離原本的 Modal 結構，強制固定在紙張最上方 */
                 .doc-print-container {
                     position: absolute !important;
                     left: 0 !important;
                     top: 0 !important;
-                    width: 210mm !important;  /* 強制 A4 寬度 */
-                    min-height: 297mm !important; /* 強制 A4 高度 */
-                    margin: 0 !important;
+                    width: 100% !important;  
+                    max-width: 210mm !important; /* 限制最大寬度為 A4 */
+                    margin: 0 auto !important;
                     padding: 0 !important;
-                    background: white !important;
-                    z-index: 999999 !important; /* 確保在最上層 */
                     
-                    /* 移除可能導致空白的邊框或陰影 */
+                    /* 移除所有可能導致空白的干擾樣式 */
+                    background: white !important;
                     border: none !important;
                     box-shadow: none !important;
+                    transform: none !important;
+                    z-index: 9999999 !important; /* 確保在最最最上層 */
                     
-                    /* 確保文字不會被截斷 */
-                    overflow: visible !important;
+                    /* 確保多頁列印正常 */
                     display: block !important;
+                    overflow: visible !important;
+                    height: auto !important;
                 }
 
-                /* 4. 針對租約等多頁文件的換頁設定 */
+                /* 5. 確保每一頁的高度與換頁邏輯 */
                 .page-break {
                     page-break-before: always !important;
                     break-before: page !important;
                     display: block !important;
-                    min-height: 297mm !important; /* 確保每一頁都佔滿 */
                     position: relative !important;
+                    min-height: 95vh !important; /* 確保內容撐開頁面 */
                 }
 
-                /* 5. 隱藏 Modal 的外框干擾 (非常重要，避免空白頁) */
-                .modal-overlay, .fixed, .overflow-y-auto {
-                    position: static !important;
-                    overflow: visible !important;
-                    width: auto !important;
-                    height: auto !important;
-                    background: none !important;
-                }
-                
-                /* 隱藏導航與按鈕 */
-                .no-print, nav, .sidebar, button, input, select {
+                /* 6. 強制隱藏 UI 元素 */
+                .no-print, nav, .sidebar, button, input, select, .modal-overlay {
                     display: none !important;
                 }
             }

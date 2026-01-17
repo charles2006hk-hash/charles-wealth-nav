@@ -1557,7 +1557,7 @@ const App: React.FC = () => {
       paymentMethod: 'Cash', statementDateStart: '', statementDateEnd: '' 
   });
   
-  const [reportMode, setReportMode] = useState(false);
+  const reportMode = false;
 
   // Filters
   const [ledgerFilter, setLedgerFilter] = useState('');

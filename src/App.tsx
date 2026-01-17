@@ -2119,30 +2119,73 @@ const App: React.FC = () => {
   return (
       <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 text-slate-900 font-sans">
           <style>{`
-            @media print {
-                @page { size: A4; margin: 0mm; } /* 強制 A4 無邊距 */
-                body { background-color: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                #root > div { display: none; } /* 隱藏所有 React 根內容 */
-                /* 核心修改：只顯示帶有 doc-print-container 的元素 */
-                .doc-print-container { 
-                    display: block !important; 
-                    position: absolute; 
-                    top: 0; 
-                    left: 0; 
-                    width: 210mm !important; 
-                    height: auto !important; 
-                    background: white; 
-                    z-index: 9999; 
-                    padding: 0;
-                    margin: 0 auto;
-                }
-                .page-break { page-break-before: always; }
-                .no-print, nav, .sidebar, .modal-overlay, button { display: none !important; }
-            }
+            /* 一般樣式 */
             ::-webkit-scrollbar { width: 6px; height: 6px; }
             ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
             .modal-overlay { background-color: rgba(0, 0, 0, 0.5); }
-            .paper { background: white; box-shadow: 0 0 10px rgba(0,0,0,0.1); padding: 40px; min-height: 800px; font-family: "Times New Roman", "MingLiU", serif; }
+            
+            /* --- 列印專用樣式 (核心修復) --- */
+            @media print {
+                @page { 
+                    size: A4; 
+                    margin: 0; /* 移除瀏覽器預設頁邊距 */
+                }
+                
+                body, html { 
+                    margin: 0; 
+                    padding: 0; 
+                    background-color: white; 
+                    height: 100%;
+                    overflow: visible !important;
+                }
+
+                /* 步驟 1: 先將所有元素隱藏 (使用 visibility 而非 display，避免破壞結構) */
+                body * {
+                    visibility: hidden;
+                }
+
+                /* 步驟 2: 強制隱藏 UI 元素 (導航、按鈕等) */
+                .no-print, nav, .sidebar, button, input, select {
+                    display: none !important;
+                }
+
+                /* 步驟 3: 只顯示文件容器及其所有子元素 */
+                .doc-print-container, .doc-print-container * {
+                    visibility: visible !important;
+                }
+
+                /* 步驟 4: 將文件容器定位到頁面最左上角 */
+                .doc-print-container {
+                    position: absolute !important;
+                    left: 0 !important;
+                    top: 0 !important;
+                    width: 210mm !important; /* 強制 A4 寬度 */
+                    min-height: 297mm !important; /* 強制 A4 高度 */
+                    margin: 0 !important;
+                    padding: 20px !important; /* 稍微留白 */
+                    background: white !important;
+                    z-index: 99999 !important;
+                    border: none !important; /* 移除預覽時的藍色邊框 */
+                    box-shadow: none !important; /* 移除陰影 */
+                }
+
+                /* 確保 Modal 外層不會擋住內容 */
+                .modal-overlay {
+                    position: absolute !important;
+                    top: 0;
+                    left: 0;
+                    background: none !important;
+                    width: 100%;
+                    height: auto;
+                    overflow: visible;
+                }
+                
+                /* 強制換頁設定 */
+                .page-break { 
+                    page-break-before: always;
+                    margin-top: 0 !important;
+                }
+            }
           `}</style>
 
           {!reportMode && (

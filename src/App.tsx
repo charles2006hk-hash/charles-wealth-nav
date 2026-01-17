@@ -65,7 +65,8 @@ interface Property {
   owner: string; 
   ownershipType: 'Self-owned' | 'Managed'; 
   tags: string[]; 
-  
+  lastViewed?: number;
+
   purchaseDate: string;       
   purchasePrice: number; 
   purchaseAgent: string;      
@@ -647,23 +648,45 @@ const PropertyDashboard = ({
 
     // --- 邏輯：計算篩選後的物業列表 ---
     const filteredProps = useMemo(() => {
-        return propStats.filter((p: any) => {
-            // 1. 狀態篩選
+        // 1. 先執行篩選 (Filter) - 保持不變
+        let result = propStats.filter((p: any) => {
             if (filterStatus === 'Held' && p.status === 'Sold') return false;
             if (filterStatus === 'Sold' && p.status !== 'Sold') return false;
-
-            // 2. 業權篩選
             if (filterOwnership !== 'All' && p.ownershipType !== filterOwnership) return false;
-
-            // 3. 時間篩選
             if (filterYear !== 'All') {
                 const dateTarget = timeType === 'Purchase' ? p.purchaseDate : p.saleDate;
-                if (!dateTarget) return false; // 如果沒日期資料就被濾掉
+                if (!dateTarget) return false;
                 const year = new Date(dateTarget).getFullYear().toString();
                 if (year !== filterYear) return false;
             }
-
             return true;
+        });
+
+        // 2. 再執行排序 (Sort) - 修改此處
+        return result.sort((a: any, b: any) => {
+            // 優先級 1: 狀態 (已售出永遠沈底)
+            const isSoldA = a.status === 'Sold';
+            const isSoldB = b.status === 'Sold';
+            if (isSoldA !== isSoldB) {
+                return isSoldA ? 1 : -1;
+            }
+
+            // 優先級 2: 最近查看 (只針對持有中的物業)
+            // 剛點過的物業 (lastViewed 較大) 會排在最前面
+            if (!isSoldA) {
+                const viewA = a.lastViewed || 0;
+                const viewB = b.lastViewed || 0;
+                // 如果兩者查看時間不同，新的在前
+                if (viewA !== viewB) {
+                    return viewB - viewA; 
+                }
+            }
+
+            // 優先級 3: 原始時間排序 (買入/賣出日期)
+            const dateA = new Date(isSoldA ? (a.saleDate || '1900-01-01') : (a.purchaseDate || '1900-01-01')).getTime();
+            const dateB = new Date(isSoldB ? (b.saleDate || '1900-01-01') : (b.purchaseDate || '1900-01-01')).getTime();
+            
+            return dateB - dateA;
         });
     }, [propStats, filterStatus, filterOwnership, timeType, filterYear]);
 
@@ -1769,6 +1792,20 @@ const App: React.FC = () => {
       } catch(e) { alert(e); }
   }
   
+  const handleSelectProperty = async (id: string) => {
+      // 1. 打開詳情頁
+      setPropertyViewId(id);
+      
+      // 2. 背景更新該物業的 lastViewed 時間 (不影響 UI 操作)
+      try {
+          await updateDoc(doc(db, "properties", id), { 
+              lastViewed: Date.now() 
+          });
+      } catch (e) {
+          console.error("更新排序失敗 (但不影響使用):", e);
+      }
+  };
+
   const handleDeleteProperty = async (id: string) => {
       if(window.confirm('確定刪除此物業？ (此操作無法復原)')) {
           await deleteDoc(doc(db, "properties", id));
@@ -2125,7 +2162,7 @@ const App: React.FC = () => {
                       setStressRate={setStressRate}
                       rentDrop={rentDrop}
                       setRentDrop={setRentDrop}
-                      onSelectProperty={setPropertyViewId}
+                      onSelectProperty={handleSelectProperty}
                       setEditingProp={setEditingProp}
                       setModalMode={setModalMode}
                       initializeDefaults={initializeDefaults}

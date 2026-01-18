@@ -132,6 +132,10 @@ interface DocConfig {
   statementDateEnd?: string;
   linkedTransactionId?: string; 
   existingReceiptNo?: string;
+  // --- 新增：對帳單專用設定 ---
+  showDebitCredit?: boolean; // 是否顯示 Debit/Credit 欄位
+  showRowNotes?: boolean;    // 是否顯示流水帳備註
+  statementFooterNote?: string; // 表格下方的自定義備註
 }
 
 interface InsurancePolicy {
@@ -236,7 +240,7 @@ const convertNumberToEnglish = (n: number) => {
 
 const formatCurrency = (val: any) => {
     const num = Number(val);
-    if (isNaN(num)) return '$0';
+    if (isNaN(num)) return '$0.';
     return `$${num.toLocaleString()}`;
 };
 
@@ -1164,54 +1168,124 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
     } 
     
     // 2. 對數單樣式 (Statement) - 更新表格內容與自動換行
+    // 2. 對數單樣式 (Statement) - 更新表格統計與顯示邏輯
     if (docConfig.type === 'statement') {
         const filteredTxs = transactions
             .filter(t => t.propertyId === docConfig.propId && (!docConfig.statementDateStart || t.date >= docConfig.statementDateStart) && (!docConfig.statementDateEnd || t.date <= docConfig.statementDateEnd))
             .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
         
+        // 計算總結
+        let totalDebit = 0;
+        let totalCredit = 0;
+        
+        filteredTxs.forEach(t => {
+            const isIncome = (t.category || '').includes('Rental Income') || t.category?.includes('Sale');
+            if (isIncome) totalCredit += t.amount;
+            else totalDebit += t.amount;
+        });
+
+        const netBalance = totalCredit - totalDebit;
+        const showDC = docConfig.showDebitCredit !== false; // 預設顯示
+        const showNotes = docConfig.showRowNotes !== false; // 預設顯示
+
         return (
-            <div className="doc-print-container bg-white p-10 w-[210mm] min-h-[297mm] text-black font-serif mx-auto">
+            <div className="doc-print-container bg-white p-10 w-[210mm] min-h-[297mm] text-black font-serif mx-auto relative">
                 <h1 className="text-2xl font-bold text-center underline mb-6">RENTAL STATEMENT 租務對數單</h1>
-                <div className="flex justify-between mb-8">
-                    <div><p><strong>Property:</strong> {prop.name}</p><p><strong>Address:</strong> {prop.address}</p></div>
-                    <div className="text-right"><p><strong>Tenant:</strong> {docConfig.tenant}</p><p><strong>Period:</strong> {docConfig.statementDateStart || 'Start'} to {docConfig.statementDateEnd || 'Now'}</p></div>
+                
+                <div className="flex justify-between mb-8 text-sm">
+                    <div className="w-1/2">
+                        <p className="mb-1"><span className="font-bold inline-block w-20">Property:</span> {prop.name}</p>
+                        <p><span className="font-bold inline-block w-20">Address:</span> {prop.address}</p>
+                    </div>
+                    <div className="w-1/2 text-right">
+                        <p className="mb-1"><span className="font-bold">Tenant:</span> {docConfig.tenant}</p>
+                        <p><span className="font-bold">Period:</span> {docConfig.statementDateStart || 'Start'} to {docConfig.statementDateEnd || 'Now'}</p>
+                        <p className="mt-2 text-xs text-gray-500">Generated on: {new Date().toLocaleDateString()}</p>
+                    </div>
                 </div>
+
                 <table className="w-full border-collapse border border-black text-sm table-fixed">
                     <colgroup>
                         <col className="w-24" />
                         <col className="w-auto" />
-                        <col className="w-24" />
-                        <col className="w-24" />
+                        {showDC && <col className="w-28" />}
+                        {showDC && <col className="w-28" />}
                     </colgroup>
                     <thead>
                         <tr className="bg-gray-100">
-                            <th className="border border-black p-2">Date</th>
-                            <th className="border border-black p-2">Description / Note</th>
-                            <th className="border border-black p-2 text-right">Debit (Due)</th>
-                            <th className="border border-black p-2 text-right">Credit (Paid)</th>
+                            <th className="border border-black p-2 text-left">Date</th>
+                            <th className="border border-black p-2 text-left">Description / Particulars</th>
+                            {showDC && <th className="border border-black p-2 text-right">Debit (Dr)</th>}
+                            {showDC && <th className="border border-black p-2 text-right">Credit (Cr)</th>}
                         </tr>
                     </thead>
                     <tbody>
-                        {filteredTxs.length === 0 && <tr><td colSpan={4} className="p-4 text-center">No records found for this period.</td></tr>}
-                        {filteredTxs.map(t => (
-                            <tr key={t.id}>
-                                <td className="border border-black p-2 align-top">{t.date}</td>
-                                {/* 核心修改：增加流水帳 Detail (merchant) 並支援自動換行 */}
-                                <td className="border border-black p-2 align-top break-words whitespace-pre-wrap text-xs">
-                                    <span className="font-bold">{t.category}</span>
-                                    {t.merchant && <span className="block text-slate-700">{t.merchant}</span>}
-                                    {t.note && <span className="block text-slate-500 italic">({t.note})</span>}
-                                </td>
-                                <td className="border border-black p-2 text-right align-top">
-                                    {((t.category || '').includes('Rental Income') || t.category?.includes('Sale')) ? '' : formatCurrency(t.amount)}
-                                </td>
-                                <td className="border border-black p-2 text-right align-top">
-                                    {((t.category || '').includes('Rental Income') || t.category?.includes('Sale')) ? formatCurrency(t.amount) : ''}
-                                </td>
-                            </tr>
-                        ))}
+                        {filteredTxs.length === 0 && <tr><td colSpan={showDC ? 4 : 2} className="p-4 text-center">No records found for this period.</td></tr>}
+                        
+                        {filteredTxs.map(t => {
+                            const isIncome = (t.category || '').includes('Rental Income') || t.category?.includes('Sale');
+                            return (
+                                <tr key={t.id}>
+                                    <td className="border border-black p-2 align-top">{t.date}</td>
+                                    <td className="border border-black p-2 align-top break-words whitespace-pre-wrap">
+                                        <span className="font-bold block">{t.category}</span>
+                                        {t.merchant && <span className="block text-slate-700">{t.merchant}</span>}
+                                        {showNotes && t.note && <span className="block text-slate-500 italic text-xs mt-1">Note: {t.note}</span>}
+                                    </td>
+                                    {showDC && (
+                                        <td className="border border-black p-2 text-right align-top text-slate-600">
+                                            {!isIncome ? formatCurrency(t.amount) : ''}
+                                        </td>
+                                    )}
+                                    {showDC && (
+                                        <td className="border border-black p-2 text-right align-top text-black font-medium">
+                                            {isIncome ? formatCurrency(t.amount) : ''}
+                                        </td>
+                                    )}
+                                </tr>
+                            );
+                        })}
+
+                        {/* 空白填充行 (讓表格好看一點) */}
+                        <tr className="h-4 border-l border-r border-black"><td colSpan={showDC ? 4 : 2}></td></tr>
                     </tbody>
+                    
+                    {/* 底部統計區 */}
+                    <tfoot>
+                        {/* 統計行 */}
+                        <tr className="bg-gray-50 font-bold border-t-2 border-black">
+                            <td className="border border-black p-2 text-right" colSpan={2}>
+                                Total ({filteredTxs.length} items):
+                            </td>
+                            {showDC && <td className="border border-black p-2 text-right">{formatCurrency(totalDebit)}</td>}
+                            {showDC && <td className="border border-black p-2 text-right">{formatCurrency(totalCredit)}</td>}
+                        </tr>
+                        
+                        {/* 結餘行 */}
+                        <tr className="bg-gray-100 font-bold text-lg">
+                            <td className="border border-black p-2 text-right" colSpan={showDC ? 3 : 1}>
+                                Net Balance (結餘):
+                            </td>
+                            <td className={`border border-black p-2 text-right ${netBalance >= 0 ? 'text-black' : 'text-red-600'}`}>
+                                {formatCurrency(netBalance)}
+                            </td>
+                        </tr>
+                    </tfoot>
                 </table>
+
+                {/* 底部備註區 */}
+                {docConfig.statementFooterNote && (
+                    <div className="mt-6 border p-4 bg-slate-50 text-sm">
+                        <p className="font-bold underline mb-1">Notes / Remarks:</p>
+                        <p className="whitespace-pre-wrap">{docConfig.statementFooterNote}</p>
+                    </div>
+                )}
+                
+                {/* 簽名區 (可選) */}
+                <div className="mt-12 flex justify-between">
+                    <div className="w-1/3 border-t border-black pt-2 text-center text-xs">Prepared By</div>
+                    <div className="w-1/3 border-t border-black pt-2 text-center text-xs">Received & Confirmed By</div>
+                </div>
             </div>
         );
     }
@@ -1492,10 +1566,35 @@ const DocModal: React.FC<DocModalProps> = ({
                         }}>{properties.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
                         
                         {docConfig.type === 'statement' && (
-                             <div className="p-3 bg-blue-50 rounded text-sm space-y-2">
-                                 <p className="font-bold text-blue-800">對數設定</p>
-                                 <div><label className="text-xs">Start Date</label><input type="date" className="w-full border rounded" value={docConfig.statementDateStart} onChange={e=>setDocConfig({...docConfig, statementDateStart: e.target.value})} /></div>
-                                 <div><label className="text-xs">End Date</label><input type="date" className="w-full border rounded" value={docConfig.statementDateEnd} onChange={e=>setDocConfig({...docConfig, statementDateEnd: e.target.value})} /></div>
+                             <div className="p-3 bg-blue-50 rounded text-sm space-y-3 border border-blue-100">
+                                 <p className="font-bold text-blue-800 border-b border-blue-200 pb-1">對數單設定 Statement Options</p>
+                                 
+                                 {/* 日期範圍 */}
+                                 <div><label className="text-xs block text-blue-600">Start Date</label><input type="date" className="w-full border rounded text-xs p-1" value={docConfig.statementDateStart} onChange={e=>setDocConfig({...docConfig, statementDateStart: e.target.value})} /></div>
+                                 <div><label className="text-xs block text-blue-600">End Date</label><input type="date" className="w-full border rounded text-xs p-1" value={docConfig.statementDateEnd} onChange={e=>setDocConfig({...docConfig, statementDateEnd: e.target.value})} /></div>
+                                 
+                                 {/* 新增：顯示選項 */}
+                                 <div className="space-y-1 pt-2">
+                                     <label className="flex items-center gap-2 text-xs cursor-pointer">
+                                         <input type="checkbox" checked={docConfig.showDebitCredit !== false} onChange={e=>setDocConfig({...docConfig, showDebitCredit: e.target.checked})} />
+                                         顯示 Debit/Credit 數值
+                                     </label>
+                                     <label className="flex items-center gap-2 text-xs cursor-pointer">
+                                         <input type="checkbox" checked={docConfig.showRowNotes !== false} onChange={e=>setDocConfig({...docConfig, showRowNotes: e.target.checked})} />
+                                         顯示交易備註 (Detail)
+                                     </label>
+                                 </div>
+
+                                 {/* 新增：底部備註輸入 */}
+                                 <div>
+                                     <label className="text-xs block text-blue-600 font-bold mb-1">底部備註 Footer Note</label>
+                                     <textarea 
+                                         className="w-full border rounded text-xs p-1 h-16" 
+                                         placeholder="例如: 請於收到後七天內付款..."
+                                         value={docConfig.statementFooterNote || ''}
+                                         onChange={e=>setDocConfig({...docConfig, statementFooterNote: e.target.value})}
+                                     />
+                                 </div>
                              </div>
                         )}
                         

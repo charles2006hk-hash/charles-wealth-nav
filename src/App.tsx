@@ -1186,7 +1186,6 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
 
         const netBalance = totalCredit - totalDebit;
         
-        // --- 核心修改：獨立變數控制 ---
         const showDebit = docConfig.showDebit !== false; 
         const showCredit = docConfig.showCredit !== false;
         const showNotes = docConfig.showRowNotes !== false;
@@ -1239,14 +1238,12 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
                                         {showNotes && t.note && <span className="block text-slate-500 italic text-xs mt-1">Note: {t.note}</span>}
                                     </td>
                                     
-                                    {/* Debit 欄位：如果是支出才顯示，如果是收入則留白 */}
                                     {showDebit && (
                                         <td className="border border-black p-2 text-right align-top text-slate-600">
                                             {!isIncome ? formatCurrency(t.amount) : ''}
                                         </td>
                                     )}
                                     
-                                    {/* Credit 欄位：如果是收入才顯示，如果是支出則留白 */}
                                     {showCredit && (
                                         <td className="border border-black p-2 text-right align-top text-black font-medium">
                                             {isIncome ? formatCurrency(t.amount) : ''}
@@ -1576,7 +1573,15 @@ const DocModal: React.FC<DocModalProps> = ({
                         }}>{properties.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
                         
                         {docConfig.type === 'statement' && (
-                             <div className="space-y-2 pt-2 border-t border-blue-200 mt-2">
+                             <div className="p-3 bg-blue-50 rounded text-sm space-y-3 border border-blue-100">
+                                 <p className="font-bold text-blue-800 border-b border-blue-200 pb-1">對數單設定 Statement Options</p>
+                                 
+                                 {/* 日期範圍 */}
+                                 <div><label className="text-xs block text-blue-600">Start Date</label><input type="date" className="w-full border rounded text-xs p-1" value={docConfig.statementDateStart} onChange={e=>setDocConfig({...docConfig, statementDateStart: e.target.value})} /></div>
+                                 <div><label className="text-xs block text-blue-600">End Date</label><input type="date" className="w-full border rounded text-xs p-1" value={docConfig.statementDateEnd} onChange={e=>setDocConfig({...docConfig, statementDateEnd: e.target.value})} /></div>
+                                 
+                                 {/* 新增：顯示選項 (改為獨立控制 Debit/Credit) */}
+                                 <div className="space-y-2 pt-2 border-t border-blue-200 mt-2">
                                      <div className="flex gap-4">
                                          <label className="flex items-center gap-2 text-xs cursor-pointer font-bold text-slate-700">
                                              <input 
@@ -1584,7 +1589,7 @@ const DocModal: React.FC<DocModalProps> = ({
                                                  checked={docConfig.showDebit !== false} // 預設為 true
                                                  onChange={e=>setDocConfig({...docConfig, showDebit: e.target.checked})} 
                                              />
-                                             顯示 Debit (支出)
+                                             顯示 Debit
                                          </label>
                                          <label className="flex items-center gap-2 text-xs cursor-pointer font-bold text-slate-700">
                                              <input 
@@ -1592,7 +1597,7 @@ const DocModal: React.FC<DocModalProps> = ({
                                                  checked={docConfig.showCredit !== false} // 預設為 true
                                                  onChange={e=>setDocConfig({...docConfig, showCredit: e.target.checked})} 
                                              />
-                                             顯示 Credit (收入)
+                                             顯示 Credit
                                          </label>
                                      </div>
                                      

@@ -133,7 +133,8 @@ interface DocConfig {
   linkedTransactionId?: string; 
   existingReceiptNo?: string;
   // --- 新增：對帳單專用設定 ---
-  showDebitCredit?: boolean; // 是否顯示 Debit/Credit 欄位
+  showDebit?: boolean;  // 獨立控制 Debit
+  showCredit?: boolean; // 獨立控制 Credit
   showRowNotes?: boolean;    // 是否顯示流水帳備註
   statementFooterNote?: string; // 表格下方的自定義備註
 }
@@ -241,7 +242,7 @@ const convertNumberToEnglish = (n: number) => {
 const formatCurrency = (val: any) => {
     const num = Number(val);
     if (isNaN(num)) return '$0.';
-    return `$${num.toLocaleString()}`;
+    return `$${num.toLocaleString()}.`;
 };
 
 const calculateDuration = (start: string, end?: string) => {
@@ -1167,8 +1168,7 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
         );
     } 
     
-    // 2. 對數單樣式 (Statement) - 更新表格內容與自動換行
-    // 2. 對數單樣式 (Statement) - 更新表格統計與顯示邏輯
+    // 2. 對數單樣式 (Statement) - 支援獨立顯示 Debit/Credit
     if (docConfig.type === 'statement') {
         const filteredTxs = transactions
             .filter(t => t.propertyId === docConfig.propId && (!docConfig.statementDateStart || t.date >= docConfig.statementDateStart) && (!docConfig.statementDateEnd || t.date <= docConfig.statementDateEnd))
@@ -1185,8 +1185,14 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
         });
 
         const netBalance = totalCredit - totalDebit;
-        const showDC = docConfig.showDebitCredit !== false; // 預設顯示
-        const showNotes = docConfig.showRowNotes !== false; // 預設顯示
+        
+        // --- 核心修改：獨立變數控制 ---
+        const showDebit = docConfig.showDebit !== false; 
+        const showCredit = docConfig.showCredit !== false;
+        const showNotes = docConfig.showRowNotes !== false;
+
+        // 計算表格欄位數 (Date + Desc + (Debit?) + (Credit?))
+        const colCount = 2 + (showDebit ? 1 : 0) + (showCredit ? 1 : 0);
 
         return (
             <div className="doc-print-container bg-white p-10 w-[210mm] min-h-[297mm] text-black font-serif mx-auto relative">
@@ -1208,19 +1214,19 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
                     <colgroup>
                         <col className="w-24" />
                         <col className="w-auto" />
-                        {showDC && <col className="w-28" />}
-                        {showDC && <col className="w-28" />}
+                        {showDebit && <col className="w-28" />}
+                        {showCredit && <col className="w-28" />}
                     </colgroup>
                     <thead>
                         <tr className="bg-gray-100">
                             <th className="border border-black p-2 text-left">Date</th>
                             <th className="border border-black p-2 text-left">Description / Particulars</th>
-                            {showDC && <th className="border border-black p-2 text-right">Debit (Dr)</th>}
-                            {showDC && <th className="border border-black p-2 text-right">Credit (Cr)</th>}
+                            {showDebit && <th className="border border-black p-2 text-right">Debit (Dr)</th>}
+                            {showCredit && <th className="border border-black p-2 text-right">Credit (Cr)</th>}
                         </tr>
                     </thead>
                     <tbody>
-                        {filteredTxs.length === 0 && <tr><td colSpan={showDC ? 4 : 2} className="p-4 text-center">No records found for this period.</td></tr>}
+                        {filteredTxs.length === 0 && <tr><td colSpan={colCount} className="p-4 text-center">No records found for this period.</td></tr>}
                         
                         {filteredTxs.map(t => {
                             const isIncome = (t.category || '').includes('Rental Income') || t.category?.includes('Sale');
@@ -1232,12 +1238,16 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
                                         {t.merchant && <span className="block text-slate-700">{t.merchant}</span>}
                                         {showNotes && t.note && <span className="block text-slate-500 italic text-xs mt-1">Note: {t.note}</span>}
                                     </td>
-                                    {showDC && (
+                                    
+                                    {/* Debit 欄位：如果是支出才顯示，如果是收入則留白 */}
+                                    {showDebit && (
                                         <td className="border border-black p-2 text-right align-top text-slate-600">
                                             {!isIncome ? formatCurrency(t.amount) : ''}
                                         </td>
                                     )}
-                                    {showDC && (
+                                    
+                                    {/* Credit 欄位：如果是收入才顯示，如果是支出則留白 */}
+                                    {showCredit && (
                                         <td className="border border-black p-2 text-right align-top text-black font-medium">
                                             {isIncome ? formatCurrency(t.amount) : ''}
                                         </td>
@@ -1246,8 +1256,8 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
                             );
                         })}
 
-                        {/* 空白填充行 (讓表格好看一點) */}
-                        <tr className="h-4 border-l border-r border-black"><td colSpan={showDC ? 4 : 2}></td></tr>
+                        {/* 空白填充行 */}
+                        <tr className="h-4 border-l border-r border-black"><td colSpan={colCount}></td></tr>
                     </tbody>
                     
                     {/* 底部統計區 */}
@@ -1257,13 +1267,13 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
                             <td className="border border-black p-2 text-right" colSpan={2}>
                                 Total ({filteredTxs.length} items):
                             </td>
-                            {showDC && <td className="border border-black p-2 text-right">{formatCurrency(totalDebit)}</td>}
-                            {showDC && <td className="border border-black p-2 text-right">{formatCurrency(totalCredit)}</td>}
+                            {showDebit && <td className="border border-black p-2 text-right">{formatCurrency(totalDebit)}</td>}
+                            {showCredit && <td className="border border-black p-2 text-right">{formatCurrency(totalCredit)}</td>}
                         </tr>
                         
-                        {/* 結餘行 */}
+                        {/* 結餘行 - Net Balance 顯示在最右邊顯示的那個欄位 */}
                         <tr className="bg-gray-100 font-bold text-lg">
-                            <td className="border border-black p-2 text-right" colSpan={showDC ? 3 : 1}>
+                            <td className="border border-black p-2 text-right" colSpan={colCount - 1}>
                                 Net Balance (結餘):
                             </td>
                             <td className={`border border-black p-2 text-right ${netBalance >= 0 ? 'text-black' : 'text-red-600'}`}>
@@ -1281,7 +1291,7 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
                     </div>
                 )}
                 
-                {/* 簽名區 (可選) */}
+                {/* 簽名區 */}
                 <div className="mt-12 flex justify-between">
                     <div className="w-1/3 border-t border-black pt-2 text-center text-xs">Prepared By</div>
                     <div className="w-1/3 border-t border-black pt-2 text-center text-xs">Received & Confirmed By</div>
@@ -1566,22 +1576,29 @@ const DocModal: React.FC<DocModalProps> = ({
                         }}>{properties.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
                         
                         {docConfig.type === 'statement' && (
-                             <div className="p-3 bg-blue-50 rounded text-sm space-y-3 border border-blue-100">
-                                 <p className="font-bold text-blue-800 border-b border-blue-200 pb-1">對數單設定 Statement Options</p>
-                                 
-                                 {/* 日期範圍 */}
-                                 <div><label className="text-xs block text-blue-600">Start Date</label><input type="date" className="w-full border rounded text-xs p-1" value={docConfig.statementDateStart} onChange={e=>setDocConfig({...docConfig, statementDateStart: e.target.value})} /></div>
-                                 <div><label className="text-xs block text-blue-600">End Date</label><input type="date" className="w-full border rounded text-xs p-1" value={docConfig.statementDateEnd} onChange={e=>setDocConfig({...docConfig, statementDateEnd: e.target.value})} /></div>
-                                 
-                                 {/* 新增：顯示選項 */}
-                                 <div className="space-y-1 pt-2">
-                                     <label className="flex items-center gap-2 text-xs cursor-pointer">
-                                         <input type="checkbox" checked={docConfig.showDebitCredit !== false} onChange={e=>setDocConfig({...docConfig, showDebitCredit: e.target.checked})} />
-                                         顯示 Debit/Credit 數值
-                                     </label>
-                                     <label className="flex items-center gap-2 text-xs cursor-pointer">
+                             <div className="space-y-2 pt-2 border-t border-blue-200 mt-2">
+                                     <div className="flex gap-4">
+                                         <label className="flex items-center gap-2 text-xs cursor-pointer font-bold text-slate-700">
+                                             <input 
+                                                 type="checkbox" 
+                                                 checked={docConfig.showDebit !== false} // 預設為 true
+                                                 onChange={e=>setDocConfig({...docConfig, showDebit: e.target.checked})} 
+                                             />
+                                             顯示 Debit (支出)
+                                         </label>
+                                         <label className="flex items-center gap-2 text-xs cursor-pointer font-bold text-slate-700">
+                                             <input 
+                                                 type="checkbox" 
+                                                 checked={docConfig.showCredit !== false} // 預設為 true
+                                                 onChange={e=>setDocConfig({...docConfig, showCredit: e.target.checked})} 
+                                             />
+                                             顯示 Credit (收入)
+                                         </label>
+                                     </div>
+                                     
+                                     <label className="flex items-center gap-2 text-xs cursor-pointer text-slate-600">
                                          <input type="checkbox" checked={docConfig.showRowNotes !== false} onChange={e=>setDocConfig({...docConfig, showRowNotes: e.target.checked})} />
-                                         顯示交易備註 (Detail)
+                                         顯示交易備註 (Detail Note)
                                      </label>
                                  </div>
 

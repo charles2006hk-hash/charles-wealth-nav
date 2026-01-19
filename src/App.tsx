@@ -2243,7 +2243,7 @@ const App: React.FC = () => {
     if (!file) return;
     
     // 提示用戶
-    if(!window.confirm("系統將匯入並自動清洗數據（過濾亂碼與雜訊），確定繼續？")) return;
+    if(!window.confirm("系統將匯入並執行「智慧配對」（自動連結租客與物業），確定繼續？")) return;
     
     const reader = new FileReader();
     reader.onload = async (ev) => {
@@ -2259,39 +2259,66 @@ const App: React.FC = () => {
             list.forEach((item: any) => {
                 const docRef = doc(collection(db, "transactions"));
                 
-                // --- 步驟 1: 清洗商家名稱 ---
+                // --- 步驟 1: 基礎清洗 ---
                 const rawMerchant = item.merchant || '';
                 const cleanMerchant = cleanMerchantText(rawMerchant);
                 const finalMerchant = cleanMerchant || rawMerchant || 'Transaction';
-
-                // --- 步驟 2: 自動分類 ---
-                let category = item.category || 'Other (其他)';
+                
+                // 轉成小寫方便比對
                 const searchStr = (finalMerchant + (item.note || '')).toLowerCase();
 
-                if (category === 'General' || category === 'Other') {
-                    if (searchStr.includes('serenity') || searchStr.includes('management')) category = 'Management Fee (管理費)';
-                    else if (searchStr.includes('rent') || searchStr.includes('租') || searchStr.includes('income')) category = 'Rental Income (租金收入)';
+                let category = item.category || 'Other (其他)';
+                let propId = item.propertyId || '';
+
+                // --- 步驟 2: 智慧配對邏輯 (Smart Matching) ---
+
+                // A. 租客配對 -> 租金收入 (Rental Income)
+                // 邏輯：如果是「收入」(Amount > 0)，且描述包含「租客名字」
+                if (item.amount > 0) {
+                    // 在所有租約中尋找名字匹配的
+                    const matchedLease = leases.find(l => 
+                        l.tenantName && searchStr.includes(l.tenantName.toLowerCase())
+                    );
+                    
+                    if (matchedLease) {
+                        category = 'Rental Income (租金收入)';
+                        propId = matchedLease.propertyId; // 自動連結到該租約的物業
+                    }
+                }
+
+                // B. 物業配對 -> 管理費 (Management Fee)
+                // 邏輯：如果是「支出」(Amount < 0)，且描述包含「物業名稱」
+                if (item.amount < 0) {
+                    const matchedProp = properties.find(p => 
+                        p.name && searchStr.includes(p.name.toLowerCase())
+                    );
+                    
+                    if (matchedProp) {
+                        propId = matchedProp.id; // 自動連結物業
+                        
+                        // 如果還沒被分類，通常這就是管理費
+                        if (category === 'General' || category === 'Other (其他)') {
+                            category = 'Management Fee (管理費)';
+                        }
+                    }
+                }
+
+                // --- 步驟 3: 關鍵字補強 (Fallback) ---
+                // 如果上面沒配對到，再用關鍵字猜測
+                if (category === 'General' || category === 'Other (其他)') {
+                    if (searchStr.includes('rent') || searchStr.includes('租') || searchStr.includes('income')) category = 'Rental Income (租金收入)';
                     else if (searchStr.includes('rates') || searchStr.includes('差餉')) category = 'Govt Rates (差餉)';
+                    else if (searchStr.includes('management') || searchStr.includes('mgt')) category = 'Management Fee (管理費)';
                     else if (searchStr.includes('insurance') || searchStr.includes('prudential') || searchStr.includes('aia')) category = 'Insurance (保險)';
                     else if (searchStr.includes('interest') || searchStr.includes('利息')) category = 'Bank Interest (利息)';
                 }
                 
-                // --- 步驟 3: 自動配對物業 ---
-                let propId = item.propertyId || '';
-                if (!propId) {
-                    if (searchStr.includes('serenity')) {
-                         const p = properties.find(x => x.name.toLowerCase().includes('serenity'));
-                         if (p) propId = p.id;
-                    }
-                }
-
-                // --- 核心修正：使用 delete 來移除 ID ---
-                // 這樣做不會產生 "unused variable" 錯誤
-                const itemData = { ...item }; // 先複製一份資料
-                delete itemData.id;           // 從複製的資料中刪除 id 欄位
+                // --- 步驟 4: 寫入資料庫 ---
+                const itemData = { ...item }; 
+                delete itemData.id; // 移除 JSON 原始 ID，使用 Firestore 自動生成的 ID
 
                 batch.set(docRef, {
-                    ...itemData, // 將剩餘的資料填入
+                    ...itemData, 
                     merchant: finalMerchant, 
                     category: category,
                     propertyId: propId,
@@ -2303,7 +2330,7 @@ const App: React.FC = () => {
             });
             
             await batch.commit();
-            alert(`成功匯入 ${count} 筆交易！\n系統已自動過濾了名稱中的金額與亂碼。`);
+            alert(`成功匯入 ${count} 筆交易！\n系統已自動根據租客與物業名稱進行分類。`);
             
         } catch (err) { alert("匯入失敗: " + err); }
     };

@@ -2285,10 +2285,6 @@ const App: React.FC = () => {
             
             await batch.commit();
             alert(`成功匯入 ${count} 筆交易！\n系統已自動過濾了名稱中的金額與亂碼。`);
-            // 重新讀取數據以更新畫面
-            const q = query(collection(db, "transactions")); 
-            // (如果您有 setTransactions，可以在這裡呼叫，或者讓 React 的 onSnapshot 自動更新)
-            
         } catch (err) { alert("匯入失敗: " + err); }
     };
     reader.readAsText(file);

@@ -2240,18 +2240,13 @@ const App: React.FC = () => {
             list.forEach((item: any) => {
                 const docRef = doc(collection(db, "transactions"));
                 
-                // --- 步驟 1: 清洗商家名稱 (關鍵修改) ---
-                // 這裡會把 "C 30111... 5,000.00" 這種亂文字洗成乾淨的描述
+                // --- 步驟 1: 清洗商家名稱 ---
                 const rawMerchant = item.merchant || '';
                 const cleanMerchant = cleanMerchantText(rawMerchant);
-                
-                // 如果清洗後變空了 (例如原本只有 "B/F Balance")，就給個預設值
                 const finalMerchant = cleanMerchant || rawMerchant || 'Transaction';
 
-                // --- 步驟 2: 自動分類 (Auto-Categorization) ---
+                // --- 步驟 2: 自動分類 ---
                 let category = item.category || 'Other (其他)';
-                
-                // 組合所有可用的文字來進行關鍵字判斷
                 const searchStr = (finalMerchant + (item.note || '')).toLowerCase();
 
                 if (category === 'General' || category === 'Other') {
@@ -2271,11 +2266,14 @@ const App: React.FC = () => {
                     }
                 }
 
-                const { id, ...itemData } = item;
+                // --- 核心修正：使用 delete 來移除 ID ---
+                // 這樣做不會產生 "unused variable" 錯誤
+                const itemData = { ...item }; // 先複製一份資料
+                delete itemData.id;           // 從複製的資料中刪除 id 欄位
 
                 batch.set(docRef, {
-                    ...item,
-                    merchant: finalMerchant, // 使用清洗後的名稱
+                    ...itemData, // 將剩餘的資料填入
+                    merchant: finalMerchant, 
                     category: category,
                     propertyId: propId,
                     year: new Date(item.date).getFullYear(),
@@ -2287,6 +2285,7 @@ const App: React.FC = () => {
             
             await batch.commit();
             alert(`成功匯入 ${count} 筆交易！\n系統已自動過濾了名稱中的金額與亂碼。`);
+            
         } catch (err) { alert("匯入失敗: " + err); }
     };
     reader.readAsText(file);

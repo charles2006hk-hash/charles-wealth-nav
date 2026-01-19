@@ -2193,10 +2193,39 @@ const App: React.FC = () => {
     }
   };
 
+  // --- 輔助函數：清洗銀行流水雜訊 ---
+  const cleanMerchantText = (text: string) => {
+      if (!text) return '';
+      let clean = text;
+
+      // 1. 移除金額 (例如: 12,800.00, 5,000.00, 182.00)
+      // 避免把金額當成商家名稱
+      clean = clean.replace(/\b[\d,]+\.\d{2}\b/g, '');
+
+      // 2. 移除日期代碼 (例如: 03JAN, 30DEC22, 19 Dec)
+      // 這些是銀行內部的交易日期標記，不需要顯示在名稱中
+      clean = clean.replace(/\b\d{1,2}\s?(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[A-Z0-9]*\b/ig, '');
+
+      // 3. 移除常見無意義的銀行術語
+      clean = clean.replace(/\b(CR TO|TRF|TRANSFER|ATM|B\/F BALANCE|M\/T|FPS)\b/ig, '');
+
+      // 4. 移除長串的參考編號 (例如: N3011185286...)
+      // 通常超過 8 位的連續數字/字母組合都是銀行編號
+      clean = clean.replace(/\b[A-Z0-9]{8,}\b/g, '');
+
+      // 5. 整理多餘的空格 (將多個空白縮減為一個)
+      clean = clean.replace(/\s+/g, ' ').trim();
+
+      return clean;
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if(!window.confirm("確定要將此 JSON 檔案匯入？")) return;
+    
+    // 提示用戶
+    if(!window.confirm("系統將匯入並自動清洗數據（過濾亂碼與雜訊），確定繼續？")) return;
+    
     const reader = new FileReader();
     reader.onload = async (ev) => {
         try {
@@ -2204,10 +2233,62 @@ const App: React.FC = () => {
             if (typeof result !== 'string') return;
             const json = JSON.parse(result);
             const list = Array.isArray(json) ? json : (json.data || []);
+            
             const batch = writeBatch(db);
-            list.forEach((item: any) => { const docRef = doc(collection(db, "transactions")); batch.set(docRef, item); });
+            let count = 0;
+
+            list.forEach((item: any) => {
+                const docRef = doc(collection(db, "transactions"));
+                
+                // --- 步驟 1: 清洗商家名稱 (關鍵修改) ---
+                // 這裡會把 "C 30111... 5,000.00" 這種亂文字洗成乾淨的描述
+                const rawMerchant = item.merchant || '';
+                const cleanMerchant = cleanMerchantText(rawMerchant);
+                
+                // 如果清洗後變空了 (例如原本只有 "B/F Balance")，就給個預設值
+                const finalMerchant = cleanMerchant || rawMerchant || 'Transaction';
+
+                // --- 步驟 2: 自動分類 (Auto-Categorization) ---
+                let category = item.category || 'Other (其他)';
+                
+                // 組合所有可用的文字來進行關鍵字判斷
+                const searchStr = (finalMerchant + (item.note || '')).toLowerCase();
+
+                if (category === 'General' || category === 'Other') {
+                    if (searchStr.includes('serenity') || searchStr.includes('management')) category = 'Management Fee (管理費)';
+                    else if (searchStr.includes('rent') || searchStr.includes('租') || searchStr.includes('income')) category = 'Rental Income (租金收入)';
+                    else if (searchStr.includes('rates') || searchStr.includes('差餉')) category = 'Govt Rates (差餉)';
+                    else if (searchStr.includes('insurance') || searchStr.includes('prudential') || searchStr.includes('aia')) category = 'Insurance (保險)';
+                    else if (searchStr.includes('interest') || searchStr.includes('利息')) category = 'Bank Interest (利息)';
+                }
+                
+                // --- 步驟 3: 自動配對物業 ---
+                let propId = item.propertyId || '';
+                if (!propId) {
+                    if (searchStr.includes('serenity')) {
+                         const p = properties.find(x => x.name.toLowerCase().includes('serenity'));
+                         if (p) propId = p.id;
+                    }
+                }
+
+                batch.set(docRef, {
+                    ...item,
+                    merchant: finalMerchant, // 使用清洗後的名稱
+                    category: category,
+                    propertyId: propId,
+                    year: new Date(item.date).getFullYear(),
+                    month: new Date(item.date).getMonth() + 1
+                });
+                
+                count++;
+            });
+            
             await batch.commit();
-            alert(`成功匯入 ${list.length} 筆記錄！`);
+            alert(`成功匯入 ${count} 筆交易！\n系統已自動過濾了名稱中的金額與亂碼。`);
+            // 重新讀取數據以更新畫面
+            const q = query(collection(db, "transactions")); 
+            // (如果您有 setTransactions，可以在這裡呼叫，或者讓 React 的 onSnapshot 自動更新)
+            
         } catch (err) { alert("匯入失敗: " + err); }
     };
     reader.readAsText(file);

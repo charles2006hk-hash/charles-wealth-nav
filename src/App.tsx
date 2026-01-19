@@ -1696,13 +1696,13 @@ const App: React.FC = () => {
   useEffect(() => {
     const qTx = query(collection(db, "transactions"), orderBy("date", "desc"));
     const unsubTx = onSnapshot(qTx, s => 
-        setTransactions(s.docs.map(d => ({id: d.id, ...d.data()} as Transaction))));
+        setTransactions(s.docs.map(d => ({...d.data(), id: d.id} as Transaction))));
     
     const unsubProp = onSnapshot(collection(db, "properties"), s => 
         setProperties(s.docs.map(d => ({ ...d.data(), id: d.id } as Property))));
     
     const unsubLease = onSnapshot(collection(db, "leases"), s => 
-        setLeases(s.docs.map(d => ({id: d.id, ...d.data()} as Lease))));
+        setLeases(s.docs.map(d => ({...d.data(), id: d.id} as Lease)))); // 這裡也建議改一下確保安全
     
     const unsubEdu = onSnapshot(doc(db, "settings", "education"), (docSnap) => {
       if (docSnap.exists()) {
@@ -2271,6 +2271,8 @@ const App: React.FC = () => {
                     }
                 }
 
+                const { id, ...itemData } = item;
+
                 batch.set(docRef, {
                     ...item,
                     merchant: finalMerchant, // 使用清洗後的名稱
@@ -2513,6 +2515,28 @@ const App: React.FC = () => {
                       <div className="flex justify-between items-center mb-6">
                         <p className="text-slate-500">所有交易紀錄一覽 Table of All Transactions</p>
                         <div className="flex gap-2">
+                            {/* --- 新增：手動添加按鈕 --- */}
+                            <button 
+                                onClick={() => { 
+                                    setEditingTx({ 
+                                        id: '', 
+                                        date: new Date().toISOString().split('T')[0], 
+                                        merchant: '', 
+                                        amount: 0, 
+                                        category: 'General', 
+                                        member: 'Charles', 
+                                        note: '', 
+                                        year: new Date().getFullYear(), 
+                                        month: new Date().getMonth() + 1,
+                                        attachments: [] 
+                                    } as Transaction); 
+                                    setModalMode('transaction'); 
+                                }} 
+                                className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 flex items-center gap-2 shadow-sm font-bold"
+                            >
+                                <ICONS.Plus /> 新增紀錄 Add Manual
+                            </button>
+
                             <button onClick={handleClearData} className="px-3 py-1 bg-red-100 text-red-600 text-xs rounded hover:bg-red-200 flex items-center gap-2 border border-red-200">
                                 <ICONS.Trash /> 清空所有數據 Reset Data
                             </button>

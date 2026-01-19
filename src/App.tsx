@@ -1693,6 +1693,25 @@ const App: React.FC = () => {
   const [rentDrop, setRentDrop] = useState(0);
   const [displayLimit, setDisplayLimit] = useState(50);
 
+// --- 新增：動態計算篩選清單 (Dynamic Filters) ---
+  const uniqueYears = useMemo(() => {
+      const years = new Set(transactions.map(t => t.year));
+      years.add(new Date().getFullYear()); // 確保包含今年
+      return Array.from(years).sort((a, b) => b - a); // 降序排列 (2025, 2024...)
+  }, [transactions]);
+
+  const uniqueMembers = useMemo(() => {
+      const mems = new Set(transactions.map(t => t.member).filter(Boolean));
+      MEMBERS.forEach(m => mems.add(m)); // 包含預設成員
+      return Array.from(mems).sort();
+  }, [transactions]);
+
+  const uniqueCategories = useMemo(() => {
+      const cats = new Set(transactions.map(t => t.category).filter(Boolean));
+      CATEGORIES.forEach(c => cats.add(c)); // 包含預設類別
+      return Array.from(cats).sort();
+  }, [transactions]);
+
   useEffect(() => {
     const qTx = query(collection(db, "transactions"), orderBy("date", "desc"));
     const unsubTx = onSnapshot(qTx, s => 
@@ -2509,12 +2528,14 @@ const App: React.FC = () => {
               )}
 
               {activeTab === 'data' && (
-                  <div className="bg-white p-10 rounded-xl shadow animate-in fade-in">
-                      <h2 className="text-2xl font-bold mb-4">數據中心 Data Hub</h2>
-                      <div className="flex justify-between items-center mb-6">
-                        <p className="text-slate-500">所有交易紀錄一覽 Table of All Transactions</p>
-                        <div className="flex gap-2">
-                            {/* --- 新增：手動添加按鈕 --- */}
+                  <div className="bg-white p-6 md:p-10 rounded-xl shadow animate-in fade-in h-full flex flex-col">
+                      <div className="flex flex-wrap justify-between items-center mb-6 gap-4">
+                        <div>
+                            <h2 className="text-2xl font-bold text-slate-800">數據中心 Data Hub</h2>
+                            <p className="text-slate-500 text-sm">所有交易紀錄一覽 Table of All Transactions</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            {/* 手動新增按鈕 */}
                             <button 
                                 onClick={() => { 
                                     setEditingTx({ 
@@ -2531,132 +2552,173 @@ const App: React.FC = () => {
                                     } as Transaction); 
                                     setModalMode('transaction'); 
                                 }} 
-                                className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 flex items-center gap-2 shadow-sm font-bold"
+                                className="px-3 py-2 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 flex items-center gap-2 shadow-sm font-bold transition-colors"
                             >
-                                <ICONS.Plus /> 新增紀錄 Add Manual
+                                <ICONS.Plus /> 新增 Add
                             </button>
 
-                            <button onClick={handleClearData} className="px-3 py-1 bg-red-100 text-red-600 text-xs rounded hover:bg-red-200 flex items-center gap-2 border border-red-200">
-                                <ICONS.Trash /> 清空所有數據 Reset Data
+                            <button onClick={handleClearData} className="px-3 py-2 bg-white text-red-600 text-xs rounded hover:bg-red-50 flex items-center gap-2 border border-red-200 transition-colors">
+                                <ICONS.Trash /> 清空 Reset
                             </button>
-                            <label className="flex items-center gap-2 px-3 py-1 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-700 cursor-pointer shadow-sm">
-                                <ICONS.Upload /> 匯入物業 CSV
+                            <label className="flex items-center gap-2 px-3 py-2 bg-indigo-50 text-indigo-700 text-xs rounded hover:bg-indigo-100 cursor-pointer border border-indigo-200 transition-colors">
+                                <ICONS.Upload /> CSV
                                 <input type="file" className="hidden" onChange={handleCSVUpload} accept=".csv" />
                             </label>
-                            <label className="flex items-center gap-2 px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 cursor-pointer">
-                                <ICONS.Upload /> 匯入 Import JSON
+                            <label className="flex items-center gap-2 px-3 py-2 bg-green-50 text-green-700 text-xs rounded hover:bg-green-100 cursor-pointer border border-green-200 transition-colors">
+                                <ICONS.Upload /> JSON
                                 <input type="file" className="hidden" onChange={handleFileUpload} accept=".json" />
                             </label>
-                            <button onClick={handleExportJSON} className="px-3 py-1 bg-slate-600 text-white text-xs rounded hover:bg-slate-700 flex items-center gap-2">
-                                <ICONS.Download /> 導出 Export JSON
+                            <button onClick={handleExportJSON} className="px-3 py-2 bg-slate-100 text-slate-600 text-xs rounded hover:bg-slate-200 flex items-center gap-2 border border-slate-200 transition-colors">
+                                <ICONS.Download /> 導出
                             </button>
                         </div>
                       </div>
-                      <div className="flex gap-4 mb-4">
-                        <input type="text" placeholder="Search..." className="border rounded px-2 py-1 text-sm" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-                        <select className="border rounded px-2 py-1" value={filterCategory} onChange={e=>setFilterCategory(e.target.value)}><option value="All">All Categories</option>{CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select>
-                        <select className="border rounded px-2 py-1" value={filterMember} onChange={e=>setFilterMember(e.target.value)}><option value="All">All Members</option>{MEMBERS.map(m=><option key={m} value={m}>{m}</option>)}</select>
-                        <select className="border rounded px-2 py-1" value={filterYear} onChange={e=>setFilterYear(e.target.value)}><option value="All">All Years</option>{[2024,2025,2026].map(y=><option key={y} value={y}>{y}</option>)}</select>
+
+                      {/* --- 篩選工具列 --- */}
+                      <div className="flex flex-wrap gap-3 mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100 items-center">
+                        <div className="relative flex-1 min-w-[200px]">
+                            <ICONS.Search />
+                            <input 
+                                type="text" 
+                                placeholder="Search merchant or amount..." 
+                                className="pl-8 border rounded px-3 py-1.5 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" 
+                                value={searchTerm} 
+                                onChange={e => setSearchTerm(e.target.value)} 
+                            />
+                        </div>
+                        
+                        {/* 動態類別篩選 */}
+                        <select className="border rounded px-3 py-1.5 text-sm bg-white min-w-[140px]" value={filterCategory} onChange={e=>setFilterCategory(e.target.value)}>
+                            <option value="All">所有類別 (All Cats)</option>
+                            {uniqueCategories.map(c=><option key={c} value={c}>{c}</option>)}
+                        </select>
+
+                        {/* 動態成員篩選 */}
+                        <select className="border rounded px-3 py-1.5 text-sm bg-white min-w-[120px]" value={filterMember} onChange={e=>setFilterMember(e.target.value)}>
+                            <option value="All">所有成員 (All)</option>
+                            {uniqueMembers.map(m=><option key={m} value={m}>{m}</option>)}
+                        </select>
+
+                        {/* 動態年份篩選 */}
+                        <select className="border rounded px-3 py-1.5 text-sm bg-white min-w-[100px]" value={filterYear} onChange={e=>setFilterYear(e.target.value)}>
+                            <option value="All">所有年份</option>
+                            {uniqueYears.map(y=><option key={y} value={y}>{y}</option>)}
+                        </select>
                       </div>
-                      {/* --- 修改 2: 數據中心列表 (增加編輯/刪除按鈕與物業顯示) --- */}
-                      <div className="border rounded-lg overflow-hidden">
-                          <table className="w-full text-sm text-left">
-                              <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0">
-                                  <tr>
-                                      <th className="p-3">Date</th>
-                                      <th className="p-3">Merchant</th>
-                                      <th className="p-3">Amount</th>
-                                      <th className="p-3">Category</th>
-                                      <th className="p-3">Prop/Member</th>
-                                      <th className="p-3 text-center">Action</th>
-                                  </tr>
-                              </thead>
-                              <tbody className="divide-y">
-                                  {transactions
-                                    .filter(t => (filterCategory==='All'||t.category===filterCategory) && (searchTerm===''||(t.merchant || '').toLowerCase().includes(searchTerm.toLowerCase())))
-                                    .slice(0, displayLimit)
-                                    .map(t => {
-                                        // 找出這筆交易關聯的物業名稱 (如果有)
-                                        const linkedProp = properties.find(p => p.id === t.propertyId);
-                                        
-                                        return (
-                                          <tr key={t.id} className="hover:bg-slate-50 group">
-                                              <td className="p-3">{t.date}</td>
-                                              <td className="p-3 font-medium">
-                                                  {t.merchant}
-                                                  {t.receiptNo && <div className="text-[9px] text-green-600 mt-1">🧾 {t.receiptNo}</div>}
-                                              </td>
-                                              <td className={`p-3 font-mono font-bold ${((t.category || '').includes('Income') || t.category === 'Property Sale (賣樓收入)') ? 'text-emerald-600' : 'text-slate-600'}`}>
-                                                  {formatCurrency(t.amount)}
-                                              </td>
-                                              <td className="p-3"><span className="px-2 py-1 bg-gray-100 rounded text-xs">{t.category}</span></td>
-                                              <td className="p-3">
-                                                  {linkedProp ? (
-                                                      <span className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded font-bold flex items-center w-fit gap-1">
-                                                          <ICONS.Home /> {linkedProp.name}
-                                                      </span>
-                                                  ) : (
-                                                      <span className="text-slate-500 text-xs">{t.member}</span>
-                                                  )}
-                                              </td>
-                                              <td className="p-3">
-                                                <div className="flex items-center justify-center gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    {/* 開收據按鈕 (僅收入類別顯示) */}
-                                                    {((t.category || '').includes('Income') || t.category?.includes('Sale')) && (
+
+                      {/* --- 數據表格 --- */}
+                      <div className="border rounded-lg overflow-hidden flex-1 flex flex-col bg-white">
+                          <div className="overflow-auto flex-1">
+                              <table className="w-full text-sm text-left border-collapse">
+                                  <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0 z-10 shadow-sm">
+                                      <tr>
+                                          <th className="p-3 whitespace-nowrap w-28">Date</th>
+                                          <th className="p-3 whitespace-nowrap">Merchant / Detail</th>
+                                          <th className="p-3 whitespace-nowrap text-right">Amount</th>
+                                          <th className="p-3 whitespace-nowrap w-40">Category</th>
+                                          <th className="p-3 whitespace-nowrap w-32">Prop/Member</th>
+                                          <th className="p-3 whitespace-nowrap text-center w-32">Action</th>
+                                      </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-100">
+                                      {transactions
+                                        .filter(t => {
+                                            const matchesCat = filterCategory === 'All' || t.category === filterCategory;
+                                            const matchesMem = filterMember === 'All' || t.member === filterMember;
+                                            const matchesYear = filterYear === 'All' || t.year === parseInt(filterYear);
+                                            
+                                            // 搜尋邏輯：同時搜尋名稱 和 金額
+                                            const term = searchTerm.toLowerCase();
+                                            const matchesSearch = searchTerm === '' || 
+                                                (t.merchant || '').toLowerCase().includes(term) || 
+                                                (t.amount || 0).toString().includes(term);
+
+                                            return matchesCat && matchesMem && matchesYear && matchesSearch;
+                                        })
+                                        .slice(0, displayLimit)
+                                        .map(t => {
+                                            const linkedProp = properties.find(p => p.id === t.propertyId);
+                                            
+                                            return (
+                                              <tr key={t.id} className="hover:bg-blue-50/50 group transition-colors">
+                                                  {/* 1. 日期 (不換行) */}
+                                                  <td className="p-3 whitespace-nowrap text-slate-600 font-mono text-xs">{t.date}</td>
+                                                  
+                                                  {/* 2. 商戶 (限制寬度，超過省略) */}
+                                                  <td className="p-3 max-w-[300px]" title={t.merchant + (t.note ? ` (${t.note})` : '')}>
+                                                      <div className="flex items-center gap-2">
+                                                          <span className="truncate font-medium text-slate-700 block">{t.merchant}</span>
+                                                          {t.receiptNo && <span className="flex-shrink-0 text-[9px] text-green-600 bg-green-50 px-1 rounded border border-green-100">🧾 {t.receiptNo}</span>}
+                                                      </div>
+                                                      {t.note && <div className="text-[10px] text-slate-400 truncate">{t.note}</div>}
+                                                  </td>
+
+                                                  {/* 3. 金額 (靠右，不換行) */}
+                                                  <td className={`p-3 text-right whitespace-nowrap font-mono font-bold ${((t.category || '').includes('Income') || t.category?.includes('Sale')) ? 'text-emerald-600' : 'text-slate-700'}`}>
+                                                      {formatCurrency(t.amount)}
+                                                  </td>
+
+                                                  {/* 4. 類別 (不換行) */}
+                                                  <td className="p-3 whitespace-nowrap">
+                                                      <span className="px-2 py-1 bg-slate-100 rounded text-xs text-slate-600 border border-slate-200">{t.category}</span>
+                                                  </td>
+
+                                                  {/* 5. 物業/成員 (不換行) */}
+                                                  <td className="p-3 whitespace-nowrap">
+                                                      {linkedProp ? (
+                                                          <span className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded font-bold flex items-center w-fit gap-1 border border-blue-100">
+                                                              <ICONS.Home /> {linkedProp.name}
+                                                          </span>
+                                                      ) : (
+                                                          <span className="text-slate-500 text-xs px-2 py-1">{t.member}</span>
+                                                      )}
+                                                  </td>
+
+                                                  {/* 6. 操作按鈕 (Flex排列，保持一行) */}
+                                                  <td className="p-3 whitespace-nowrap">
+                                                    <div className="flex items-center justify-center gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        {((t.category || '').includes('Income') || t.category?.includes('Sale')) && (
+                                                            <button 
+                                                                onClick={() => handleOpenReceipt(t)} 
+                                                                className={`p-1.5 rounded hover:bg-white border ${t.receiptNo ? 'text-green-600 border-green-200 bg-green-50' : 'text-slate-400 border-transparent hover:border-slate-200'}`}
+                                                                title="收據"
+                                                            >
+                                                                <ICONS.FileText />
+                                                            </button>
+                                                        )}
                                                         <button 
-                                                            onClick={() => handleOpenReceipt(t)} 
-                                                            className={`p-1.5 rounded border hover:bg-slate-100 ${t.receiptNo ? 'text-green-600 border-green-200 bg-green-50' : 'text-slate-400 border-slate-200'}`}
-                                                            title="收據 Receipt"
+                                                            onClick={() => { setEditingTx(t); setModalMode('transaction'); }} 
+                                                            className="p-1.5 rounded text-blue-500 hover:bg-white hover:border-blue-200 border border-transparent"
+                                                            title="編輯"
                                                         >
-                                                            <ICONS.FileText />
+                                                            <ICONS.Edit />
                                                         </button>
-                                                    )}
-                                                    
-                                                    {/* 編輯按鈕 - 點擊後可修改物業歸屬 */}
-                                                    <button 
-                                                        onClick={() => { setEditingTx(t); setModalMode('transaction'); }} 
-                                                        className="p-1.5 rounded border border-blue-200 text-blue-500 hover:bg-blue-50"
-                                                        title="編輯 Edit"
-                                                    >
-                                                        <ICONS.Edit />
-                                                    </button>
-                                                    
-                                                    {/* 刪除按鈕 */}
-                                                    <button 
-                                                        onClick={() => deleteItem('transactions', t.id)} 
-                                                        className="p-1.5 rounded border border-red-200 text-red-500 hover:bg-red-50"
-                                                        title="刪除 Delete"
-                                                    >
-                                                        <ICONS.Trash />
-                                                    </button>
-                                                </div>
-                                              </td>
-                                          </tr>
-                                        );
-                                    })}
-                              </tbody>
-                          </table>
+                                                        <button 
+                                                            onClick={() => deleteItem('transactions', t.id)} 
+                                                            className="p-1.5 rounded text-red-400 hover:text-red-600 hover:bg-white hover:border-red-200 border border-transparent"
+                                                            title="刪除"
+                                                        >
+                                                            <ICONS.Trash />
+                                                        </button>
+                                                    </div>
+                                                  </td>
+                                              </tr>
+                                            );
+                                        })}
+                                  </tbody>
+                              </table>
+                          </div>
                           
-                          {/* 底部加載按鈕 (這部分應該已經存在，確認位置正確即可) */}
-                          <div className="p-4 bg-slate-50 border-t flex justify-center gap-4">
-                              {displayLimit < transactions.length && (
+                          {/* 底部加載更多 */}
+                          <div className="p-3 bg-slate-50 border-t flex justify-center gap-4 text-xs">
+                              {displayLimit < transactions.length ? (
                                   <>
-                                    <button 
-                                        onClick={() => setDisplayLimit(prev => prev + 100)} 
-                                        className="px-4 py-2 bg-white border border-slate-300 rounded shadow-sm text-sm hover:bg-slate-100 text-slate-600 font-medium"
-                                    >
-                                        載入更多 (Load More +100)
-                                    </button>
-                                    <button 
-                                        onClick={() => setDisplayLimit(transactions.length)} 
-                                        className="px-4 py-2 bg-white border border-slate-300 rounded shadow-sm text-sm hover:bg-slate-100 text-slate-600 font-medium"
-                                    >
-                                        顯示全部 (Show All)
-                                    </button>
+                                    <button onClick={() => setDisplayLimit(prev => prev + 100)} className="text-blue-600 hover:underline">載入更多 (+100)</button>
+                                    <span className="text-slate-300">|</span>
+                                    <button onClick={() => setDisplayLimit(transactions.length)} className="text-slate-500 hover:text-slate-700">顯示全部</button>
                                   </>
-                              )}
-                              {displayLimit >= transactions.length && transactions.length > 50 && (
-                                  <span className="text-xs text-slate-400 py-2">已顯示所有資料</span>
+                              ) : (
+                                  <span className="text-slate-400">已顯示所有資料 ({transactions.length} 筆)</span>
                               )}
                           </div>
                       </div>

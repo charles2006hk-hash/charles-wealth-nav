@@ -2358,44 +2358,6 @@ const App: React.FC = () => {
       document.body.removeChild(link);
   };
 
-  // --- 輔助函數：清洗銀行流水雜訊 ---
-  const cleanMerchantText = (text: string) => {
-      if (!text) return '';
-      let clean = text;
-
-      // 1. 移除金額 (例如: 12,800.00, 5,000.00, 182.00)
-      // 避免把金額當成商家名稱
-      clean = clean.replace(/\b[\d,]+\.\d{2}\b/g, '');
-
-      // 2. 移除日期代碼 (例如: 03JAN, 30DEC22, 19 Dec)
-      // 這些是銀行內部的交易日期標記，不需要顯示在名稱中
-      clean = clean.replace(/\b\d{1,2}\s?(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[A-Z0-9]*\b/ig, '');
-
-      // 3. 移除常見無意義的銀行術語
-      clean = clean.replace(/\b(CR TO|TRF|TRANSFER|ATM|B\/F BALANCE|M\/T|FPS)\b/ig, '');
-
-      // 4. 移除長串的參考編號 (例如: N3011185286...)
-      // 通常超過 8 位的連續數字/字母組合都是銀行編號
-      clean = clean.replace(/\b[A-Z0-9]{8,}\b/g, '');
-
-      // 5. 整理多餘的空格 (將多個空白縮減為一個)
-      clean = clean.replace(/\s+/g, ' ').trim();
-
-      return clean;
-  };
-
-
-  const handleExportJSON = () => {
-      const jsonString = JSON.stringify({ meta: { generated: new Date() }, data: transactions }, null, 2);
-      const blob = new Blob([jsonString], { type: 'application/json' });
-      const href = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = href;
-      link.download = `Charles_Finance_Data.json`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-  };
 
   const handleUpdateCategory = async (id: string, newCat: string) => {
       try { await updateDoc(doc(db, "transactions", id), { category: newCat }); } catch (e) { console.error(e); }

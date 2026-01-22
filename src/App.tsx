@@ -2243,7 +2243,7 @@ const App: React.FC = () => {
     if (!file) return;
     
     // 提示用戶
-    if(!window.confirm("系統將匯入並執行「智慧配對」（自動連結租客與物業），確定繼續？")) return;
+    if(!window.confirm("系統將執行：\n1. 防重覆檢查 (跳過已存在資料)\n2. 智慧配對 (自動分類租金/管理費)\n\n確定繼續？")) return;
     
     const reader = new FileReader();
     reader.onload = async (ev) => {
@@ -2253,16 +2253,35 @@ const App: React.FC = () => {
             const json = JSON.parse(result);
             const list = Array.isArray(json) ? json : (json.data || []);
             
+            // --- A. 建立現有資料的指紋庫 (用於比對重複) ---
+            // 指紋格式: "2023-01-01_10000_LUI KA WAI"
+            const existing fingerprints = new Set(
+                transactions.map(t => `${t.date}_${t.amount}_${t.merchant.trim()}`)
+            );
+
             const batch = writeBatch(db);
-            let count = 0;
+            let newCount = 0;
+            let dupCount = 0;
 
             list.forEach((item: any) => {
-                const docRef = doc(collection(db, "transactions"));
-                
-                // --- 步驟 1: 基礎清洗 ---
+                // --- 步驟 1: 基礎清洗 (必須先清洗，才能產生正確指紋) ---
                 const rawMerchant = item.merchant || '';
                 const cleanMerchant = cleanMerchantText(rawMerchant);
                 const finalMerchant = cleanMerchant || rawMerchant || 'Transaction';
+                
+                // --- 步驟 2: 防重覆檢查 (Deduplication) ---
+                // 產生這筆新資料的指紋
+                const itemFingerprint = `${item.date}_${item.amount}_${finalMerchant.trim()}`;
+                
+                // 如果指紋已存在，跳過此筆 (視為重複)
+                if (existing fingerprints.has(itemFingerprint)) {
+                    dupCount++;
+                    return; // 直接結束這一輪迴圈，不執行下面的 batch.set
+                }
+
+                // 如果不重複，繼續執行智慧配對與寫入...
+                
+                const docRef = doc(collection(db, "transactions"));
                 
                 // 轉成小寫方便比對
                 const searchStr = (finalMerchant + (item.note || '')).toLowerCase();
@@ -2270,41 +2289,33 @@ const App: React.FC = () => {
                 let category = item.category || 'Other (其他)';
                 let propId = item.propertyId || '';
 
-                // --- 步驟 2: 智慧配對邏輯 (Smart Matching) ---
+                // --- 步驟 3: 智慧配對邏輯 ---
 
-                // A. 租客配對 -> 租金收入 (Rental Income)
-                // 邏輯：如果是「收入」(Amount > 0)，且描述包含「租客名字」
+                // A. 租客配對 -> 租金收入
                 if (item.amount > 0) {
-                    // 在所有租約中尋找名字匹配的
                     const matchedLease = leases.find(l => 
                         l.tenantName && searchStr.includes(l.tenantName.toLowerCase())
                     );
-                    
                     if (matchedLease) {
                         category = 'Rental Income (租金收入)';
-                        propId = matchedLease.propertyId; // 自動連結到該租約的物業
+                        propId = matchedLease.propertyId;
                     }
                 }
 
-                // B. 物業配對 -> 管理費 (Management Fee)
-                // 邏輯：如果是「支出」(Amount < 0)，且描述包含「物業名稱」
+                // B. 物業配對 -> 管理費
                 if (item.amount < 0) {
                     const matchedProp = properties.find(p => 
                         p.name && searchStr.includes(p.name.toLowerCase())
                     );
-                    
                     if (matchedProp) {
-                        propId = matchedProp.id; // 自動連結物業
-                        
-                        // 如果還沒被分類，通常這就是管理費
+                        propId = matchedProp.id;
                         if (category === 'General' || category === 'Other (其他)') {
                             category = 'Management Fee (管理費)';
                         }
                     }
                 }
 
-                // --- 步驟 3: 關鍵字補強 (Fallback) ---
-                // 如果上面沒配對到，再用關鍵字猜測
+                // --- 步驟 4: 關鍵字補強 ---
                 if (category === 'General' || category === 'Other (其他)') {
                     if (searchStr.includes('rent') || searchStr.includes('租') || searchStr.includes('income')) category = 'Rental Income (租金收入)';
                     else if (searchStr.includes('rates') || searchStr.includes('差餉')) category = 'Govt Rates (差餉)';
@@ -2313,9 +2324,9 @@ const App: React.FC = () => {
                     else if (searchStr.includes('interest') || searchStr.includes('利息')) category = 'Bank Interest (利息)';
                 }
                 
-                // --- 步驟 4: 寫入資料庫 ---
+                // --- 步驟 5: 準備寫入 ---
                 const itemData = { ...item }; 
-                delete itemData.id; // 移除 JSON 原始 ID，使用 Firestore 自動生成的 ID
+                delete itemData.id; 
 
                 batch.set(docRef, {
                     ...itemData, 
@@ -2326,11 +2337,15 @@ const App: React.FC = () => {
                     month: new Date(item.date).getMonth() + 1
                 });
                 
-                count++;
+                newCount++;
             });
             
-            await batch.commit();
-            alert(`成功匯入 ${count} 筆交易！\n系統已自動根據租客與物業名稱進行分類。`);
+            if (newCount > 0) {
+                await batch.commit();
+                alert(`匯入完成！\n\n✅ 成功新增: ${newCount} 筆\n🚫 自動略過重複: ${dupCount} 筆\n\n系統已執行智慧分類與配對。`);
+            } else {
+                alert(`沒有新增任何資料。\n\n所有 ${dupCount} 筆資料都已存在於系統中 (重複)。`);
+            }
             
         } catch (err) { alert("匯入失敗: " + err); }
     };

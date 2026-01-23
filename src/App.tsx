@@ -1743,6 +1743,26 @@ const App: React.FC = () => {
     return () => { unsubTx(); unsubProp(); unsubLease(); unsubEdu(); unsubSettings(); };
   }, []);
   
+useEffect(() => {
+    // 設定 Favicon (瀏覽器分頁圖標)
+    let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.getElementsByTagName('head')[0].appendChild(link);
+    }
+    link.href = '/logo.png'; // 確保您的 public 資料夾有 logo.png
+
+    // 設定 Apple Touch Icon (iPhone 桌面圖標)
+    let appleLink = document.querySelector("link[rel~='apple-touch-icon']") as HTMLLinkElement;
+    if (!appleLink) {
+      appleLink = document.createElement('link');
+      appleLink.rel = 'apple-touch-icon';
+      document.getElementsByTagName('head')[0].appendChild(appleLink);
+    }
+    appleLink.href = '/logo.png';
+  }, []);
+  
   const updateSettings = async (newSettings: AppSettings) => {
       setSettings(newSettings);
       await setDoc(doc(db, "settings", "general"), newSettings);
@@ -2612,154 +2632,189 @@ const App: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* --- 篩選工具列 --- */}
-                      <div className="flex flex-wrap gap-3 mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100 items-center">
-                        <div className="relative flex-1 min-w-[200px]">
-                            <ICONS.Search />
-                            <input 
-                                type="text" 
-                                placeholder="Search merchant or amount..." 
-                                className="pl-8 border rounded px-3 py-1.5 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" 
-                                value={searchTerm} 
-                                onChange={e => setSearchTerm(e.target.value)} 
-                            />
-                        </div>
-                        
-                        {/* 動態類別篩選 */}
-                        <select className="border rounded px-3 py-1.5 text-sm bg-white min-w-[140px]" value={filterCategory} onChange={e=>setFilterCategory(e.target.value)}>
-                            <option value="All">所有類別 (All Cats)</option>
-                            {uniqueCategories.map(c=><option key={c} value={c}>{c}</option>)}
-                        </select>
+                      {/* --- [新增] 數據統計儀表板 --- */}
+                      {(() => {
+                          // 將過濾邏輯提取出來，以便計算數量
+                          const filteredDataList = transactions.filter(t => {
+                              const matchesCat = filterCategory === 'All' || t.category === filterCategory;
+                              const matchesMem = filterMember === 'All' || t.member === filterMember;
+                              const matchesYear = filterYear === 'All' || t.year === parseInt(filterYear);
+                              const term = searchTerm.toLowerCase();
+                              const matchesSearch = searchTerm === '' || 
+                                  (t.merchant || '').toLowerCase().includes(term) || 
+                                  (t.amount || 0).toString().includes(term);
+                              return matchesCat && matchesMem && matchesYear && matchesSearch;
+                          });
 
-                        {/* 動態成員篩選 */}
-                        <select className="border rounded px-3 py-1.5 text-sm bg-white min-w-[120px]" value={filterMember} onChange={e=>setFilterMember(e.target.value)}>
-                            <option value="All">所有成員 (All)</option>
-                            {uniqueMembers.map(m=><option key={m} value={m}>{m}</option>)}
-                        </select>
+                          return (
+                              <>
+                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                                      <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 flex flex-col">
+                                          <span className="text-[10px] text-slate-500 font-bold uppercase">Total Records (總數)</span>
+                                          <span className="text-xl font-bold text-slate-700">{transactions.length} <span className="text-xs font-normal text-slate-400">筆</span></span>
+                                      </div>
+                                      <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 flex flex-col">
+                                          <span className="text-[10px] text-blue-500 font-bold uppercase">Filtered (篩選後)</span>
+                                          <span className="text-xl font-bold text-blue-700">{filteredDataList.length} <span className="text-xs font-normal text-blue-400">筆</span></span>
+                                      </div>
+                                      <div className="bg-emerald-50 p-3 rounded-lg border border-emerald-100 flex flex-col">
+                                          <span className="text-[10px] text-emerald-600 font-bold uppercase">Source (資料來源)</span>
+                                          <div className="flex items-center gap-1 mt-1">
+                                              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                                              <span className="text-sm font-bold text-emerald-800">Firebase Cloud</span>
+                                          </div>
+                                      </div>
+                                      <div className="bg-indigo-50 p-3 rounded-lg border border-indigo-100 flex flex-col">
+                                          <span className="text-[10px] text-indigo-600 font-bold uppercase">Display Limit</span>
+                                          <span className="text-sm font-bold text-indigo-800 mt-1">
+                                              {Math.min(displayLimit, filteredDataList.length)} / {filteredDataList.length}
+                                          </span>
+                                      </div>
+                                  </div>
 
-                        {/* 動態年份篩選 */}
-                        <select className="border rounded px-3 py-1.5 text-sm bg-white min-w-[100px]" value={filterYear} onChange={e=>setFilterYear(e.target.value)}>
-                            <option value="All">所有年份</option>
-                            {uniqueYears.map(y=><option key={y} value={y}>{y}</option>)}
-                        </select>
-                      </div>
+                                  {/* --- 篩選工具列 --- */}
+                                  <div className="flex flex-wrap gap-3 mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100 items-center">
+                                    <div className="relative flex-1 min-w-[200px]">
+                                        <ICONS.Search />
+                                        <input 
+                                            type="text" 
+                                            placeholder="Search merchant or amount..." 
+                                            className="pl-8 border rounded px-3 py-1.5 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" 
+                                            value={searchTerm} 
+                                            onChange={e => setSearchTerm(e.target.value)} 
+                                        />
+                                    </div>
+                                    
+                                    <select className="border rounded px-3 py-1.5 text-sm bg-white min-w-[140px]" value={filterCategory} onChange={e=>setFilterCategory(e.target.value)}>
+                                        <option value="All">所有類別 (All Cats)</option>
+                                        {uniqueCategories.map(c=><option key={c} value={c}>{c}</option>)}
+                                    </select>
 
-                      {/* --- 數據表格 --- */}
-                      <div className="border rounded-lg overflow-hidden flex-1 flex flex-col bg-white">
-                          <div className="overflow-auto flex-1">
-                              <table className="w-full text-sm text-left border-collapse">
-                                  <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0 z-10 shadow-sm">
-                                      <tr>
-                                          <th className="p-3 whitespace-nowrap w-28">Date</th>
-                                          <th className="p-3 whitespace-nowrap">Merchant / Detail</th>
-                                          <th className="p-3 whitespace-nowrap text-right">Amount</th>
-                                          <th className="p-3 whitespace-nowrap w-40">Category</th>
-                                          <th className="p-3 whitespace-nowrap w-32">Prop/Member</th>
-                                          <th className="p-3 whitespace-nowrap text-center w-32">Action</th>
-                                      </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-slate-100">
-                                      {transactions
-                                        .filter(t => {
-                                            const matchesCat = filterCategory === 'All' || t.category === filterCategory;
-                                            const matchesMem = filterMember === 'All' || t.member === filterMember;
-                                            const matchesYear = filterYear === 'All' || t.year === parseInt(filterYear);
-                                            
-                                            // 搜尋邏輯：同時搜尋名稱 和 金額
-                                            const term = searchTerm.toLowerCase();
-                                            const matchesSearch = searchTerm === '' || 
-                                                (t.merchant || '').toLowerCase().includes(term) || 
-                                                (t.amount || 0).toString().includes(term);
+                                    <select className="border rounded px-3 py-1.5 text-sm bg-white min-w-[120px]" value={filterMember} onChange={e=>setFilterMember(e.target.value)}>
+                                        <option value="All">所有成員 (All)</option>
+                                        {uniqueMembers.map(m=><option key={m} value={m}>{m}</option>)}
+                                    </select>
 
-                                            return matchesCat && matchesMem && matchesYear && matchesSearch;
-                                        })
-                                        .slice(0, displayLimit)
-                                        .map(t => {
-                                            const linkedProp = properties.find(p => p.id === t.propertyId);
-                                            
-                                            return (
-                                              <tr key={t.id} className="hover:bg-blue-50/50 group transition-colors">
-                                                  {/* 1. 日期 (不換行) */}
-                                                  <td className="p-3 whitespace-nowrap text-slate-600 font-mono text-xs">{t.date}</td>
-                                                  
-                                                  {/* 2. 商戶 (限制寬度，超過省略) */}
-                                                  <td className="p-3 max-w-[300px]" title={t.merchant + (t.note ? ` (${t.note})` : '')}>
-                                                      <div className="flex items-center gap-2">
-                                                          <span className="truncate font-medium text-slate-700 block">{t.merchant}</span>
-                                                          {t.receiptNo && <span className="flex-shrink-0 text-[9px] text-green-600 bg-green-50 px-1 rounded border border-green-100">🧾 {t.receiptNo}</span>}
-                                                      </div>
-                                                      {t.note && <div className="text-[10px] text-slate-400 truncate">{t.note}</div>}
-                                                  </td>
+                                    <select className="border rounded px-3 py-1.5 text-sm bg-white min-w-[100px]" value={filterYear} onChange={e=>setFilterYear(e.target.value)}>
+                                        <option value="All">所有年份</option>
+                                        {uniqueYears.map(y=><option key={y} value={y}>{y}</option>)}
+                                    </select>
+                                  </div>
 
-                                                  {/* 3. 金額 (靠右，不換行) */}
-                                                  <td className={`p-3 text-right whitespace-nowrap font-mono font-bold ${((t.category || '').includes('Income') || t.category?.includes('Sale')) ? 'text-emerald-600' : 'text-slate-700'}`}>
-                                                      {formatCurrency(t.amount)}
-                                                  </td>
+                                  {/* --- 數據表格 --- */}
+                                  <div className="border rounded-lg overflow-hidden flex-1 flex flex-col bg-white">
+                                      <div className="overflow-auto flex-1">
+                                          <table className="w-full text-sm text-left border-collapse">
+                                              <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0 z-10 shadow-sm">
+                                                  <tr>
+                                                      <th className="p-3 whitespace-nowrap w-28">Date</th>
+                                                      <th className="p-3 whitespace-nowrap">Merchant / Detail</th>
+                                                      <th className="p-3 whitespace-nowrap text-right">Amount</th>
+                                                      <th className="p-3 whitespace-nowrap w-40">Category</th>
+                                                      <th className="p-3 whitespace-nowrap w-32">Prop/Member</th>
+                                                      <th className="p-3 whitespace-nowrap text-center w-20">Source</th>
+                                                      <th className="p-3 whitespace-nowrap text-center w-32">Action</th>
+                                                  </tr>
+                                              </thead>
+                                              <tbody className="divide-y divide-slate-100">
+                                                  {filteredDataList
+                                                    .slice(0, displayLimit)
+                                                    .map(t => {
+                                                        const linkedProp = properties.find(p => p.id === t.propertyId);
+                                                        
+                                                        return (
+                                                          <tr key={t.id} className="hover:bg-blue-50/50 group transition-colors">
+                                                              {/* 1. 日期 */}
+                                                              <td className="p-3 whitespace-nowrap text-slate-600 font-mono text-xs">{t.date}</td>
+                                                              
+                                                              {/* 2. 商戶 */}
+                                                              <td className="p-3 max-w-[300px]" title={t.merchant + (t.note ? ` (${t.note})` : '')}>
+                                                                  <div className="flex items-center gap-2">
+                                                                      <span className="truncate font-medium text-slate-700 block">{t.merchant}</span>
+                                                                      {t.receiptNo && <span className="flex-shrink-0 text-[9px] text-green-600 bg-green-50 px-1 rounded border border-green-100">🧾 {t.receiptNo}</span>}
+                                                                  </div>
+                                                                  {t.note && <div className="text-[10px] text-slate-400 truncate">{t.note}</div>}
+                                                              </td>
 
-                                                  {/* 4. 類別 (不換行) */}
-                                                  <td className="p-3 whitespace-nowrap">
-                                                      <span className="px-2 py-1 bg-slate-100 rounded text-xs text-slate-600 border border-slate-200">{t.category}</span>
-                                                  </td>
+                                                              {/* 3. 金額 */}
+                                                              <td className={`p-3 text-right whitespace-nowrap font-mono font-bold ${((t.category || '').includes('Income') || t.category?.includes('Sale')) ? 'text-emerald-600' : 'text-slate-700'}`}>
+                                                                  {formatCurrency(t.amount)}
+                                                              </td>
 
-                                                  {/* 5. 物業/成員 (不換行) */}
-                                                  <td className="p-3 whitespace-nowrap">
-                                                      {linkedProp ? (
-                                                          <span className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded font-bold flex items-center w-fit gap-1 border border-blue-100">
-                                                              <ICONS.Home /> {linkedProp.name}
-                                                          </span>
-                                                      ) : (
-                                                          <span className="text-slate-500 text-xs px-2 py-1">{t.member}</span>
-                                                      )}
-                                                  </td>
+                                                              {/* 4. 類別 */}
+                                                              <td className="p-3 whitespace-nowrap">
+                                                                  <span className="px-2 py-1 bg-slate-100 rounded text-xs text-slate-600 border border-slate-200">{t.category}</span>
+                                                              </td>
 
-                                                  {/* 6. 操作按鈕 (Flex排列，保持一行) */}
-                                                  <td className="p-3 whitespace-nowrap">
-                                                    <div className="flex items-center justify-center gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        {((t.category || '').includes('Income') || t.category?.includes('Sale')) && (
-                                                            <button 
-                                                                onClick={() => handleOpenReceipt(t)} 
-                                                                className={`p-1.5 rounded hover:bg-white border ${t.receiptNo ? 'text-green-600 border-green-200 bg-green-50' : 'text-slate-400 border-transparent hover:border-slate-200'}`}
-                                                                title="收據"
-                                                            >
-                                                                <ICONS.FileText />
-                                                            </button>
-                                                        )}
-                                                        <button 
-                                                            onClick={() => { setEditingTx(t); setModalMode('transaction'); }} 
-                                                            className="p-1.5 rounded text-blue-500 hover:bg-white hover:border-blue-200 border border-transparent"
-                                                            title="編輯"
-                                                        >
-                                                            <ICONS.Edit />
-                                                        </button>
-                                                        <button 
-                                                            onClick={() => deleteItem('transactions', t.id)} 
-                                                            className="p-1.5 rounded text-red-400 hover:text-red-600 hover:bg-white hover:border-red-200 border border-transparent"
-                                                            title="刪除"
-                                                        >
-                                                            <ICONS.Trash />
-                                                        </button>
-                                                    </div>
-                                                  </td>
-                                              </tr>
-                                            );
-                                        })}
-                                  </tbody>
-                              </table>
-                          </div>
-                          
-                          {/* 底部加載更多 */}
-                          <div className="p-3 bg-slate-50 border-t flex justify-center gap-4 text-xs">
-                              {displayLimit < transactions.length ? (
-                                  <>
-                                    <button onClick={() => setDisplayLimit(prev => prev + 100)} className="text-blue-600 hover:underline">載入更多 (+100)</button>
-                                    <span className="text-slate-300">|</span>
-                                    <button onClick={() => setDisplayLimit(transactions.length)} className="text-slate-500 hover:text-slate-700">顯示全部</button>
-                                  </>
-                              ) : (
-                                  <span className="text-slate-400">已顯示所有資料 ({transactions.length} 筆)</span>
-                              )}
-                          </div>
-                      </div>
+                                                              {/* 5. 物業/成員 */}
+                                                              <td className="p-3 whitespace-nowrap">
+                                                                  {linkedProp ? (
+                                                                      <span className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded font-bold flex items-center w-fit gap-1 border border-blue-100">
+                                                                          <ICONS.Home /> {linkedProp.name}
+                                                                      </span>
+                                                                  ) : (
+                                                                      <span className="text-slate-500 text-xs px-2 py-1">{t.member}</span>
+                                                                  )}
+                                                              </td>
+
+                                                              {/* 6. [新增] 來源顯示 */}
+                                                              <td className="p-3 whitespace-nowrap text-center">
+                                                                <span className="text-[10px] text-slate-400 border px-1 rounded bg-slate-50">
+                                                                    DB
+                                                                </span>
+                                                              </td>
+
+                                                              {/* 7. 操作按鈕 */}
+                                                              <td className="p-3 whitespace-nowrap">
+                                                                <div className="flex items-center justify-center gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                    {((t.category || '').includes('Income') || t.category?.includes('Sale')) && (
+                                                                        <button 
+                                                                            onClick={() => handleOpenReceipt(t)} 
+                                                                            className={`p-1.5 rounded hover:bg-white border ${t.receiptNo ? 'text-green-600 border-green-200 bg-green-50' : 'text-slate-400 border-transparent hover:border-slate-200'}`}
+                                                                            title="收據"
+                                                                        >
+                                                                            <ICONS.FileText />
+                                                                        </button>
+                                                                    )}
+                                                                    <button 
+                                                                        onClick={() => { setEditingTx(t); setModalMode('transaction'); }} 
+                                                                        className="p-1.5 rounded text-blue-500 hover:bg-white hover:border-blue-200 border border-transparent"
+                                                                        title="編輯"
+                                                                    >
+                                                                        <ICONS.Edit />
+                                                                    </button>
+                                                                    <button 
+                                                                        onClick={() => deleteItem('transactions', t.id)} 
+                                                                        className="p-1.5 rounded text-red-400 hover:text-red-600 hover:bg-white hover:border-red-200 border border-transparent"
+                                                                        title="刪除"
+                                                                    >
+                                                                        <ICONS.Trash />
+                                                                    </button>
+                                                                </div>
+                                                              </td>
+                                                          </tr>
+                                                        );
+                                                    })}
+                                              </tbody>
+                                          </table>
+                                      </div>
+                                      
+                                      {/* 底部加載更多 */}
+                                      <div className="p-3 bg-slate-50 border-t flex justify-center gap-4 text-xs">
+                                          {displayLimit < filteredDataList.length ? (
+                                              <>
+                                                <button onClick={() => setDisplayLimit(prev => prev + 100)} className="text-blue-600 hover:underline">載入更多 (+100)</button>
+                                                <span className="text-slate-300">|</span>
+                                                <button onClick={() => setDisplayLimit(filteredDataList.length)} className="text-slate-500 hover:text-slate-700">顯示全部</button>
+                                              </>
+                                          ) : (
+                                              <span className="text-slate-400">已顯示所有資料 ({filteredDataList.length} 筆)</span>
+                                          )}
+                                      </div>
+                                  </div>
+                              </>
+                          );
+                      })()}
                   </div>
               )}
               

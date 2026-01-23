@@ -640,31 +640,35 @@ const SettingsView = ({ settings, setSettings, updateSettings }: { settings: App
 };
 
 // --- [新增] 智能批量歸類模態視窗 ---
-const BulkClassifyModal = ({ isOpen, onClose, templateTx, transactions, onConfirmBatch }: any) => {
+// --- [修改] 智能批量歸類模態視窗 (加入 Prop/Member) ---
+const BulkClassifyModal = ({ isOpen, onClose, templateTx, transactions, properties, onConfirmBatch }: any) => {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-    const [targetCategory, setTargetCategory] = useState(templateTx?.category || 'General');
+    const [targetCategory, setTargetCategory] = useState('');
+    const [targetPropertyId, setTargetPropertyId] = useState('');
+    const [targetMember, setTargetMember] = useState('');
     const [candidates, setCandidates] = useState<Transaction[]>([]);
 
-    // 當打開視窗時，自動搜尋相似交易
+    // 當打開視窗時，自動搜尋相似交易並初始化設定
     useEffect(() => {
         if (isOpen && templateTx) {
-            const searchName = templateTx.merchant.toLowerCase().replace(/[0-9]/g, '').trim().substring(0, 4); // 取前4個字元做模糊比對
+            // 1. 初始化目標值 (預設帶入範本的值)
+            setTargetCategory(templateTx.category || 'General');
+            setTargetPropertyId(templateTx.propertyId || '');
+            setTargetMember(templateTx.member || 'Family');
+
+            // 2. 搜尋相似交易
+            const searchName = templateTx.merchant.toLowerCase().replace(/[0-9]/g, '').trim().substring(0, 4);
             const searchAmount = templateTx.amount;
             
             const matches = transactions.filter((t: Transaction) => {
                 if (t.id === templateTx.id) return false; // 排除自己
-                
                 const nameMatch = t.merchant.toLowerCase().includes(searchName);
                 const amountMatch = t.amount === searchAmount;
-                
-                // 智能邏輯：如果名稱相似 OR (金額相同 AND 還是未分類/其他)
                 return nameMatch || (amountMatch && (t.category === 'Other (其他)' || t.category === 'General'));
             });
 
             setCandidates(matches);
-            // 預設全選
             setSelectedIds(new Set(matches.map((t:any) => t.id)));
-            setTargetCategory(templateTx.category);
         }
     }, [isOpen, templateTx, transactions]);
 
@@ -676,7 +680,8 @@ const BulkClassifyModal = ({ isOpen, onClose, templateTx, transactions, onConfir
     };
 
     const handleConfirm = () => {
-        onConfirmBatch(Array.from(selectedIds), targetCategory);
+        // 傳遞所有新的設定值 (Category, Property, Member)
+        onConfirmBatch(Array.from(selectedIds), targetCategory, targetPropertyId, targetMember);
         onClose();
     };
 
@@ -691,26 +696,50 @@ const BulkClassifyModal = ({ isOpen, onClose, templateTx, transactions, onConfir
                             <ICONS.Data /> 智能批量歸類 Smart Batch
                         </h3>
                         <p className="text-xs text-slate-500 mt-1">
-                            系統偵測到 <b>{candidates.length}</b> 筆與 <span className="font-bold text-slate-800">{templateTx.merchant} (${templateTx.amount})</span> 相似的交易。
+                            以 <span className="font-bold text-slate-800">{templateTx.merchant} (${templateTx.amount})</span> 為範本
                         </p>
                     </div>
                     <button onClick={onClose} className="text-slate-400 hover:text-slate-600">✕</button>
                 </div>
 
-                <div className="flex items-center gap-4 mb-4 bg-indigo-50 p-3 rounded-lg border border-indigo-100">
-                    <span className="text-sm font-bold text-indigo-900">將選取的交易統一歸類為：</span>
-                    <select 
-                        className="border border-indigo-300 rounded px-3 py-1 text-sm font-bold text-indigo-700 flex-1"
-                        value={targetCategory}
-                        onChange={(e) => setTargetCategory(e.target.value)}
-                    >
-                        {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
+                {/* --- 新增：批量設定區域 (Category + Property + Member) --- */}
+                <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100 mb-4 grid grid-cols-3 gap-4">
+                    <div>
+                        <label className="block text-xs font-bold text-indigo-900 mb-1">歸類 Category</label>
+                        <select 
+                            className="w-full border border-indigo-300 rounded px-2 py-1.5 text-sm"
+                            value={targetCategory}
+                            onChange={(e) => setTargetCategory(e.target.value)}
+                        >
+                            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-indigo-900 mb-1">物業 Property</label>
+                        <select 
+                            className="w-full border border-indigo-300 rounded px-2 py-1.5 text-sm"
+                            value={targetPropertyId}
+                            onChange={(e) => setTargetPropertyId(e.target.value)}
+                        >
+                            <option value="">(不指定 / None)</option>
+                            {properties.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-indigo-900 mb-1">成員 Member</label>
+                        <select 
+                            className="w-full border border-indigo-300 rounded px-2 py-1.5 text-sm"
+                            value={targetMember}
+                            onChange={(e) => setTargetMember(e.target.value)}
+                        >
+                            {MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
+                        </select>
+                    </div>
                 </div>
 
                 <div className="flex-1 overflow-y-auto border rounded-lg">
                     <table className="w-full text-sm text-left">
-                        <thead className="bg-slate-50 text-slate-500 sticky top-0">
+                        <thead className="bg-slate-50 text-slate-500 sticky top-0 z-10">
                             <tr>
                                 <th className="p-3 w-10">
                                     <input type="checkbox" 
@@ -720,20 +749,22 @@ const BulkClassifyModal = ({ isOpen, onClose, templateTx, transactions, onConfir
                                 </th>
                                 <th className="p-3">Date</th>
                                 <th className="p-3">Merchant</th>
-                                <th className="p-3">Original Cat.</th>
                                 <th className="p-3 text-right">Amount</th>
+                                <th className="p-3">Current Status</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y">
                             {candidates.map((t: any) => (
-                                <tr key={t.id} className={selectedIds.has(t.id) ? 'bg-indigo-50/50' : ''}>
+                                <tr key={t.id} className={selectedIds.has(t.id) ? 'bg-indigo-50/50' : 'hover:bg-slate-50'}>
                                     <td className="p-3">
                                         <input type="checkbox" checked={selectedIds.has(t.id)} onChange={() => handleToggle(t.id)} />
                                     </td>
                                     <td className="p-3 text-xs font-mono text-slate-500">{t.date}</td>
                                     <td className="p-3 font-medium">{t.merchant}</td>
-                                    <td className="p-3 text-xs text-slate-400">{t.category}</td>
-                                    <td className={`p-3 text-right font-mono ${t.amount > 0 ? 'text-green-600' : 'text-red-500'}`}>{t.amount}</td>
+                                    <td className={`p-3 text-right font-mono ${t.amount > 0 ? 'text-green-600' : 'text-red-500'}`}>{formatCurrency(t.amount)}</td>
+                                    <td className="p-3 text-xs text-slate-400">
+                                        {t.category} / {t.member}
+                                    </td>
                                 </tr>
                             ))}
                             {candidates.length === 0 && (
@@ -1816,15 +1847,25 @@ const App: React.FC = () => {
   const [displayLimit, setDisplayLimit] = useState(50);
 
 // ... 其他函數
-  const handleBatchUpdate = async (ids: string[], newCategory: string) => {
+  const handleBatchUpdate = async (ids: string[], newCategory: string, newPropertyId: string, newMember: string) => {
       if (ids.length === 0) return;
-      if (!window.confirm(`確定要將 ${ids.length} 筆交易歸類為 "${newCategory}" ?`)) return;
+      
+      const confirmMsg = `確定要批量更新 ${ids.length} 筆交易嗎？\n\n` +
+                         `• 類別: ${newCategory}\n` +
+                         `• 物業: ${newPropertyId ? '指定物業' : '(無)'}\n` +
+                         `• 成員: ${newMember}`;
+                         
+      if (!window.confirm(confirmMsg)) return;
 
       try {
           const batch = writeBatch(db);
           ids.forEach(id => {
               const ref = doc(db, "transactions", id);
-              batch.update(ref, { category: newCategory });
+              batch.update(ref, { 
+                  category: newCategory,
+                  propertyId: newPropertyId,
+                  member: newMember
+              });
           });
           await batch.commit();
           alert("批量更新成功！");
@@ -3323,7 +3364,8 @@ useEffect(() => {
     isOpen={isBulkModalOpen} 
     onClose={() => setIsBulkModalOpen(false)} 
     templateTx={bulkTemplateTx} 
-    transactions={transactions} 
+    transactions={transactions}
+    properties={properties}  // <--- [新增] 傳入物業列表
     onConfirmBatch={handleBatchUpdate} 
 />
       </div>

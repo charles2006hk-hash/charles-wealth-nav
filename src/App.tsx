@@ -639,6 +639,125 @@ const SettingsView = ({ settings, setSettings, updateSettings }: { settings: App
     );
 };
 
+// --- [新增] 智能批量歸類模態視窗 ---
+const BulkClassifyModal = ({ isOpen, onClose, templateTx, transactions, onConfirmBatch }: any) => {
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [targetCategory, setTargetCategory] = useState(templateTx?.category || 'General');
+    const [candidates, setCandidates] = useState<Transaction[]>([]);
+
+    // 當打開視窗時，自動搜尋相似交易
+    useEffect(() => {
+        if (isOpen && templateTx) {
+            const searchName = templateTx.merchant.toLowerCase().replace(/[0-9]/g, '').trim().substring(0, 4); // 取前4個字元做模糊比對
+            const searchAmount = templateTx.amount;
+            
+            const matches = transactions.filter((t: Transaction) => {
+                if (t.id === templateTx.id) return false; // 排除自己
+                
+                const nameMatch = t.merchant.toLowerCase().includes(searchName);
+                const amountMatch = t.amount === searchAmount;
+                
+                // 智能邏輯：如果名稱相似 OR (金額相同 AND 還是未分類/其他)
+                return nameMatch || (amountMatch && (t.category === 'Other (其他)' || t.category === 'General'));
+            });
+
+            setCandidates(matches);
+            // 預設全選
+            setSelectedIds(new Set(matches.map((t:any) => t.id)));
+            setTargetCategory(templateTx.category);
+        }
+    }, [isOpen, templateTx, transactions]);
+
+    const handleToggle = (id: string) => {
+        const newSet = new Set(selectedIds);
+        if (newSet.has(id)) newSet.delete(id);
+        else newSet.add(id);
+        setSelectedIds(newSet);
+    };
+
+    const handleConfirm = () => {
+        onConfirmBatch(Array.from(selectedIds), targetCategory);
+        onClose();
+    };
+
+    if (!isOpen || !templateTx) return null;
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
+            <div className="bg-white rounded-xl shadow-2xl p-6 w-[800px] max-h-[90vh] flex flex-col animate-in fade-in zoom-in duration-200">
+                <div className="flex justify-between items-start mb-4 border-b pb-2">
+                    <div>
+                        <h3 className="text-xl font-bold flex items-center gap-2 text-indigo-700">
+                            <ICONS.Data /> 智能批量歸類 Smart Batch
+                        </h3>
+                        <p className="text-xs text-slate-500 mt-1">
+                            系統偵測到 <b>{candidates.length}</b> 筆與 <span className="font-bold text-slate-800">{templateTx.merchant} (${templateTx.amount})</span> 相似的交易。
+                        </p>
+                    </div>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600">✕</button>
+                </div>
+
+                <div className="flex items-center gap-4 mb-4 bg-indigo-50 p-3 rounded-lg border border-indigo-100">
+                    <span className="text-sm font-bold text-indigo-900">將選取的交易統一歸類為：</span>
+                    <select 
+                        className="border border-indigo-300 rounded px-3 py-1 text-sm font-bold text-indigo-700 flex-1"
+                        value={targetCategory}
+                        onChange={(e) => setTargetCategory(e.target.value)}
+                    >
+                        {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                </div>
+
+                <div className="flex-1 overflow-y-auto border rounded-lg">
+                    <table className="w-full text-sm text-left">
+                        <thead className="bg-slate-50 text-slate-500 sticky top-0">
+                            <tr>
+                                <th className="p-3 w-10">
+                                    <input type="checkbox" 
+                                        checked={selectedIds.size === candidates.length && candidates.length > 0}
+                                        onChange={(e) => setSelectedIds(e.target.checked ? new Set(candidates.map((t:any)=>t.id)) : new Set())} 
+                                    />
+                                </th>
+                                <th className="p-3">Date</th>
+                                <th className="p-3">Merchant</th>
+                                <th className="p-3">Original Cat.</th>
+                                <th className="p-3 text-right">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                            {candidates.map((t: any) => (
+                                <tr key={t.id} className={selectedIds.has(t.id) ? 'bg-indigo-50/50' : ''}>
+                                    <td className="p-3">
+                                        <input type="checkbox" checked={selectedIds.has(t.id)} onChange={() => handleToggle(t.id)} />
+                                    </td>
+                                    <td className="p-3 text-xs font-mono text-slate-500">{t.date}</td>
+                                    <td className="p-3 font-medium">{t.merchant}</td>
+                                    <td className="p-3 text-xs text-slate-400">{t.category}</td>
+                                    <td className={`p-3 text-right font-mono ${t.amount > 0 ? 'text-green-600' : 'text-red-500'}`}>{t.amount}</td>
+                                </tr>
+                            ))}
+                            {candidates.length === 0 && (
+                                <tr><td colSpan={5} className="p-8 text-center text-slate-400">沒有找到其他相似的交易</td></tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div className="flex justify-end gap-2 mt-4 pt-2 border-t">
+                    <button onClick={onClose} className="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded">取消</button>
+                    <button 
+                        onClick={handleConfirm} 
+                        disabled={selectedIds.size === 0}
+                        className="px-4 py-2 bg-indigo-600 text-white font-bold rounded hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
+                    >
+                        <ICONS.Edit /> 確認修改 ({selectedIds.size} 筆)
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const PropertyDashboard = ({ 
     properties, totalValuation, totalMonthlyRent, propStats, 
     stressRate, setStressRate, rentDrop, setRentDrop, 
@@ -1680,6 +1799,9 @@ const App: React.FC = () => {
   
   const reportMode = false;
 
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const [bulkTemplateTx, setBulkTemplateTx] = useState<Transaction | null>(null);
+
   // Filters
   const [ledgerFilter, setLedgerFilter] = useState('');
   const [filterYear, setFilterYear] = useState('All');
@@ -1692,6 +1814,25 @@ const App: React.FC = () => {
   const [stressRate, setStressRate] = useState(0);
   const [rentDrop, setRentDrop] = useState(0);
   const [displayLimit, setDisplayLimit] = useState(50);
+
+// ... 其他函數
+  const handleBatchUpdate = async (ids: string[], newCategory: string) => {
+      if (ids.length === 0) return;
+      if (!window.confirm(`確定要將 ${ids.length} 筆交易歸類為 "${newCategory}" ?`)) return;
+
+      try {
+          const batch = writeBatch(db);
+          ids.forEach(id => {
+              const ref = doc(db, "transactions", id);
+              batch.update(ref, { category: newCategory });
+          });
+          await batch.commit();
+          alert("批量更新成功！");
+      } catch (e) {
+          console.error(e);
+          alert("更新失敗，請檢查網絡");
+      }
+  };
 
 // --- 新增：動態計算篩選清單 (Dynamic Filters) ---
   const uniqueYears = useMemo(() => {
@@ -2765,33 +2906,50 @@ useEffect(() => {
                                                               </td>
 
                                                               {/* 7. 操作按鈕 */}
-                                                              <td className="p-3 whitespace-nowrap">
-                                                                <div className="flex items-center justify-center gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                    {((t.category || '').includes('Income') || t.category?.includes('Sale')) && (
-                                                                        <button 
-                                                                            onClick={() => handleOpenReceipt(t)} 
-                                                                            className={`p-1.5 rounded hover:bg-white border ${t.receiptNo ? 'text-green-600 border-green-200 bg-green-50' : 'text-slate-400 border-transparent hover:border-slate-200'}`}
-                                                                            title="收據"
-                                                                        >
-                                                                            <ICONS.FileText />
-                                                                        </button>
-                                                                    )}
-                                                                    <button 
-                                                                        onClick={() => { setEditingTx(t); setModalMode('transaction'); }} 
-                                                                        className="p-1.5 rounded text-blue-500 hover:bg-white hover:border-blue-200 border border-transparent"
-                                                                        title="編輯"
-                                                                    >
-                                                                        <ICONS.Edit />
-                                                                    </button>
-                                                                    <button 
-                                                                        onClick={() => deleteItem('transactions', t.id)} 
-                                                                        className="p-1.5 rounded text-red-400 hover:text-red-600 hover:bg-white hover:border-red-200 border border-transparent"
-                                                                        title="刪除"
-                                                                    >
-                                                                        <ICONS.Trash />
-                                                                    </button>
-                                                                </div>
-                                                              </td>
+                                                              {/* 6. 操作按鈕 (Flex排列，保持一行) - [已修改] 加入智能批量按鈕 */}
+<td className="p-3 whitespace-nowrap">
+  <div className="flex items-center justify-center gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
+      
+      {/* [新增] 智能批量歸類按鈕 (Magic Wand) */}
+      <button 
+          onClick={() => { setBulkTemplateTx(t); setIsBulkModalOpen(true); }}
+          className="p-1.5 rounded text-indigo-500 hover:bg-indigo-50 hover:border-indigo-200 border border-transparent transition-colors"
+          title="智能批量歸類 (Smart Batch)"
+      >
+          {/* 魔法棒 Icon */}
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M9 3v4"/><path d="M3 5h4"/><path d="M3 9h4"/></svg>
+      </button>
+
+      {/* 原有的收據按鈕 */}
+      {((t.category || '').includes('Income') || t.category?.includes('Sale')) && (
+          <button 
+              onClick={() => handleOpenReceipt(t)} 
+              className={`p-1.5 rounded hover:bg-white border ${t.receiptNo ? 'text-green-600 border-green-200 bg-green-50' : 'text-slate-400 border-transparent hover:border-slate-200'}`}
+              title="收據"
+          >
+              <ICONS.FileText />
+          </button>
+      )}
+      
+      {/* 原有的編輯按鈕 */}
+      <button 
+          onClick={() => { setEditingTx(t); setModalMode('transaction'); }} 
+          className="p-1.5 rounded text-blue-500 hover:bg-white hover:border-blue-200 border border-transparent"
+          title="編輯"
+      >
+          <ICONS.Edit />
+      </button>
+      
+      {/* 原有的刪除按鈕 */}
+      <button 
+          onClick={() => deleteItem('transactions', t.id)} 
+          className="p-1.5 rounded text-red-400 hover:text-red-600 hover:bg-white hover:border-red-200 border border-transparent"
+          title="刪除"
+      >
+          <ICONS.Trash />
+      </button>
+  </div>
+</td>
                                                           </tr>
                                                         );
                                                     })}
@@ -3161,6 +3319,13 @@ useEffect(() => {
                   </div>
               </div>
           )}
+          <BulkClassifyModal 
+    isOpen={isBulkModalOpen} 
+    onClose={() => setIsBulkModalOpen(false)} 
+    templateTx={bulkTemplateTx} 
+    transactions={transactions} 
+    onConfirmBatch={handleBatchUpdate} 
+/>
       </div>
   );
 };

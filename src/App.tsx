@@ -24,6 +24,53 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
+useEffect(() => {
+    // 假設您已將 logo.png 放入 public 資料夾
+    const logoPath = "/logo.png"; 
+
+    // 設定 favicon
+    let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.getElementsByTagName('head')[0].appendChild(link);
+    }
+    link.href = logoPath;
+
+    // 設定 Apple Touch Icon (iPhone 桌面)
+    let appleLink = document.querySelector("link[rel='apple-touch-icon']") as HTMLLinkElement;
+    if (!appleLink) {
+      appleLink = document.createElement('link');
+      appleLink.rel = 'apple-touch-icon';
+      document.getElementsByTagName('head')[0].appendChild(appleLink);
+    }
+    appleLink.href = logoPath;
+  }, []);
+
+  // ==========================================
+  // [新增功能 2] 計算數據中心統計資訊
+  // ==========================================
+  const dataStats = useMemo(() => {
+    const totalCount = transactions.length; // 總筆數
+    // 假設 filteredTransactions 是您目前用於顯示的變數
+    // 如果您原本用的是其他變數名，請替換這裡
+    const currentList = filteredTransactions; 
+    const filteredCount = currentList.length; // 過濾後筆數
+    
+    // 有效筆數 (例如: 金額不為0 且 類別不是 Ignore)
+    const validCount = transactions.filter(t => t.amount !== 0 && t.category !== 'Ignore').length;
+    
+    // 計算當前顯示列表的總金額
+    const currentIncome = currentList.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0);
+    const currentExpense = currentList.filter(t => t.amount < 0).reduce((sum, t) => sum + t.amount, 0);
+
+    // 來源統計 (計算有多少筆是自動導入的)
+    const importedCount = currentList.filter(t => t.note && t.note.includes("Imported")).length;
+
+    return { totalCount, filteredCount, validCount, currentIncome, currentExpense, importedCount };
+  }, [transactions, filteredTransactions]);
+
+
 // --- 2. 類型定義 (Types) ---
 interface Transaction {
   id: string; 
@@ -2565,203 +2612,166 @@ const App: React.FC = () => {
                   <SettingsView settings={settings} setSettings={setSettings} updateSettings={updateSettings} />
               )}
 
-              {activeTab === 'data' && (
-                  <div className="bg-white p-6 md:p-10 rounded-xl shadow animate-in fade-in h-full flex flex-col">
-                      <div className="flex flex-wrap justify-between items-center mb-6 gap-4">
-                        <div>
-                            <h2 className="text-2xl font-bold text-slate-800">數據中心 Data Hub</h2>
-                            <p className="text-slate-500 text-sm">所有交易紀錄一覽 Table of All Transactions</p>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                            {/* 手動新增按鈕 */}
-                            <button 
-                                onClick={() => { 
-                                    setEditingTx({ 
-                                        id: '', 
-                                        date: new Date().toISOString().split('T')[0], 
-                                        merchant: '', 
-                                        amount: 0, 
-                                        category: 'General', 
-                                        member: 'Charles', 
-                                        note: '', 
-                                        year: new Date().getFullYear(), 
-                                        month: new Date().getMonth() + 1,
-                                        attachments: [] 
-                                    } as Transaction); 
-                                    setModalMode('transaction'); 
-                                }} 
-                                className="px-3 py-2 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 flex items-center gap-2 shadow-sm font-bold transition-colors"
-                            >
-                                <ICONS.Plus /> 新增 Add
-                            </button>
-
-                            <button onClick={handleClearData} className="px-3 py-2 bg-white text-red-600 text-xs rounded hover:bg-red-50 flex items-center gap-2 border border-red-200 transition-colors">
-                                <ICONS.Trash /> 清空 Reset
-                            </button>
-                            <label className="flex items-center gap-2 px-3 py-2 bg-indigo-50 text-indigo-700 text-xs rounded hover:bg-indigo-100 cursor-pointer border border-indigo-200 transition-colors">
-                                <ICONS.Upload /> CSV
-                                <input type="file" className="hidden" onChange={handleCSVUpload} accept=".csv" />
-                            </label>
-                            <label className="flex items-center gap-2 px-3 py-2 bg-green-50 text-green-700 text-xs rounded hover:bg-green-100 cursor-pointer border border-green-200 transition-colors">
-                                <ICONS.Upload /> JSON
-                                <input type="file" className="hidden" onChange={handleFileUpload} accept=".json" />
-                            </label>
-                            <button onClick={handleExportJSON} className="px-3 py-2 bg-slate-100 text-slate-600 text-xs rounded hover:bg-slate-200 flex items-center gap-2 border border-slate-200 transition-colors">
-                                <ICONS.Download /> 導出
-                            </button>
-                        </div>
-                      </div>
-
-                      {/* --- 篩選工具列 --- */}
-                      <div className="flex flex-wrap gap-3 mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100 items-center">
-                        <div className="relative flex-1 min-w-[200px]">
-                            <ICONS.Search />
-                            <input 
-                                type="text" 
-                                placeholder="Search merchant or amount..." 
-                                className="pl-8 border rounded px-3 py-1.5 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" 
-                                value={searchTerm} 
-                                onChange={e => setSearchTerm(e.target.value)} 
-                            />
-                        </div>
-                        
-                        {/* 動態類別篩選 */}
-                        <select className="border rounded px-3 py-1.5 text-sm bg-white min-w-[140px]" value={filterCategory} onChange={e=>setFilterCategory(e.target.value)}>
-                            <option value="All">所有類別 (All Cats)</option>
-                            {uniqueCategories.map(c=><option key={c} value={c}>{c}</option>)}
-                        </select>
-
-                        {/* 動態成員篩選 */}
-                        <select className="border rounded px-3 py-1.5 text-sm bg-white min-w-[120px]" value={filterMember} onChange={e=>setFilterMember(e.target.value)}>
-                            <option value="All">所有成員 (All)</option>
-                            {uniqueMembers.map(m=><option key={m} value={m}>{m}</option>)}
-                        </select>
-
-                        {/* 動態年份篩選 */}
-                        <select className="border rounded px-3 py-1.5 text-sm bg-white min-w-[100px]" value={filterYear} onChange={e=>setFilterYear(e.target.value)}>
-                            <option value="All">所有年份</option>
-                            {uniqueYears.map(y=><option key={y} value={y}>{y}</option>)}
-                        </select>
-                      </div>
-
-                      {/* --- 數據表格 --- */}
-                      <div className="border rounded-lg overflow-hidden flex-1 flex flex-col bg-white">
-                          <div className="overflow-auto flex-1">
-                              <table className="w-full text-sm text-left border-collapse">
-                                  <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0 z-10 shadow-sm">
-                                      <tr>
-                                          <th className="p-3 whitespace-nowrap w-28">Date</th>
-                                          <th className="p-3 whitespace-nowrap">Merchant / Detail</th>
-                                          <th className="p-3 whitespace-nowrap text-right">Amount</th>
-                                          <th className="p-3 whitespace-nowrap w-40">Category</th>
-                                          <th className="p-3 whitespace-nowrap w-32">Prop/Member</th>
-                                          <th className="p-3 whitespace-nowrap text-center w-32">Action</th>
-                                      </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-slate-100">
-                                      {transactions
-                                        .filter(t => {
-                                            const matchesCat = filterCategory === 'All' || t.category === filterCategory;
-                                            const matchesMem = filterMember === 'All' || t.member === filterMember;
-                                            const matchesYear = filterYear === 'All' || t.year === parseInt(filterYear);
-                                            
-                                            // 搜尋邏輯：同時搜尋名稱 和 金額
-                                            const term = searchTerm.toLowerCase();
-                                            const matchesSearch = searchTerm === '' || 
-                                                (t.merchant || '').toLowerCase().includes(term) || 
-                                                (t.amount || 0).toString().includes(term);
-
-                                            return matchesCat && matchesMem && matchesYear && matchesSearch;
-                                        })
-                                        .slice(0, displayLimit)
-                                        .map(t => {
-                                            const linkedProp = properties.find(p => p.id === t.propertyId);
-                                            
-                                            return (
-                                              <tr key={t.id} className="hover:bg-blue-50/50 group transition-colors">
-                                                  {/* 1. 日期 (不換行) */}
-                                                  <td className="p-3 whitespace-nowrap text-slate-600 font-mono text-xs">{t.date}</td>
-                                                  
-                                                  {/* 2. 商戶 (限制寬度，超過省略) */}
-                                                  <td className="p-3 max-w-[300px]" title={t.merchant + (t.note ? ` (${t.note})` : '')}>
-                                                      <div className="flex items-center gap-2">
-                                                          <span className="truncate font-medium text-slate-700 block">{t.merchant}</span>
-                                                          {t.receiptNo && <span className="flex-shrink-0 text-[9px] text-green-600 bg-green-50 px-1 rounded border border-green-100">🧾 {t.receiptNo}</span>}
-                                                      </div>
-                                                      {t.note && <div className="text-[10px] text-slate-400 truncate">{t.note}</div>}
-                                                  </td>
-
-                                                  {/* 3. 金額 (靠右，不換行) */}
-                                                  <td className={`p-3 text-right whitespace-nowrap font-mono font-bold ${((t.category || '').includes('Income') || t.category?.includes('Sale')) ? 'text-emerald-600' : 'text-slate-700'}`}>
-                                                      {formatCurrency(t.amount)}
-                                                  </td>
-
-                                                  {/* 4. 類別 (不換行) */}
-                                                  <td className="p-3 whitespace-nowrap">
-                                                      <span className="px-2 py-1 bg-slate-100 rounded text-xs text-slate-600 border border-slate-200">{t.category}</span>
-                                                  </td>
-
-                                                  {/* 5. 物業/成員 (不換行) */}
-                                                  <td className="p-3 whitespace-nowrap">
-                                                      {linkedProp ? (
-                                                          <span className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded font-bold flex items-center w-fit gap-1 border border-blue-100">
-                                                              <ICONS.Home /> {linkedProp.name}
-                                                          </span>
-                                                      ) : (
-                                                          <span className="text-slate-500 text-xs px-2 py-1">{t.member}</span>
-                                                      )}
-                                                  </td>
-
-                                                  {/* 6. 操作按鈕 (Flex排列，保持一行) */}
-                                                  <td className="p-3 whitespace-nowrap">
-                                                    <div className="flex items-center justify-center gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        {((t.category || '').includes('Income') || t.category?.includes('Sale')) && (
-                                                            <button 
-                                                                onClick={() => handleOpenReceipt(t)} 
-                                                                className={`p-1.5 rounded hover:bg-white border ${t.receiptNo ? 'text-green-600 border-green-200 bg-green-50' : 'text-slate-400 border-transparent hover:border-slate-200'}`}
-                                                                title="收據"
-                                                            >
-                                                                <ICONS.FileText />
-                                                            </button>
-                                                        )}
-                                                        <button 
-                                                            onClick={() => { setEditingTx(t); setModalMode('transaction'); }} 
-                                                            className="p-1.5 rounded text-blue-500 hover:bg-white hover:border-blue-200 border border-transparent"
-                                                            title="編輯"
-                                                        >
-                                                            <ICONS.Edit />
-                                                        </button>
-                                                        <button 
-                                                            onClick={() => deleteItem('transactions', t.id)} 
-                                                            className="p-1.5 rounded text-red-400 hover:text-red-600 hover:bg-white hover:border-red-200 border border-transparent"
-                                                            title="刪除"
-                                                        >
-                                                            <ICONS.Trash />
-                                                        </button>
-                                                    </div>
-                                                  </td>
-                                              </tr>
-                                            );
-                                        })}
-                                  </tbody>
-                              </table>
-                          </div>
-                          
-                          {/* 底部加載更多 */}
-                          <div className="p-3 bg-slate-50 border-t flex justify-center gap-4 text-xs">
-                              {displayLimit < transactions.length ? (
-                                  <>
-                                    <button onClick={() => setDisplayLimit(prev => prev + 100)} className="text-blue-600 hover:underline">載入更多 (+100)</button>
-                                    <span className="text-slate-300">|</span>
-                                    <button onClick={() => setDisplayLimit(transactions.length)} className="text-slate-500 hover:text-slate-700">顯示全部</button>
-                                  </>
-                              ) : (
-                                  <span className="text-slate-400">已顯示所有資料 ({transactions.length} 筆)</span>
-                              )}
-                          </div>
-                      </div>
+              {/* 數據中心區塊開始 */}
+          {activeTab === 'data' && (
+            <div className="space-y-4">
+              
+              {/* [新增功能] 1. 統計資訊儀表板 */}
+              <div className="bg-white p-4 rounded-xl shadow-sm border border-blue-100">
+                <div className="flex items-center gap-2 mb-3 border-b pb-2">
+                  <span className="bg-blue-600 text-white text-xs px-2 py-0.5 rounded-full">數據概覽</span>
+                  <span className="text-xs text-gray-500">來源: Firebase Cloud</span>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-gray-600">
+                      <span>資料庫總筆數:</span>
+                      <span className="font-bold text-gray-900">{dataStats.totalCount}</span>
+                    </div>
+                    <div className="flex justify-between text-gray-600">
+                      <span>有效交易數:</span>
+                      <span className="font-bold text-gray-900">{dataStats.validCount}</span>
+                    </div>
+                    <div className="flex justify-between text-gray-600">
+                      <span>自動導入(本頁):</span>
+                      <span className="font-bold text-blue-600">{dataStats.importedCount}</span>
+                    </div>
                   </div>
-              )}
+                  
+                  <div className="space-y-1 border-l pl-4">
+                    <div className="flex justify-between text-gray-600">
+                      <span>當前顯示:</span>
+                      <span className="font-bold text-gray-900">{dataStats.filteredCount} 筆</span>
+                    </div>
+                    <div className="flex justify-between text-green-700">
+                      <span>收入總計:</span>
+                      <span>+${dataStats.currentIncome.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between text-red-600">
+                      <span>支出總計:</span>
+                      <span>-${Math.abs(dataStats.currentExpense).toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* [保留功能] 2. 工具列：搜尋與上下載按鈕 */}
+              <div className="flex flex-col sm:flex-row gap-3 justify-between items-center bg-gray-50 p-3 rounded-lg border border-gray-200">
+                 {/* 搜尋框 */}
+                 <div className="relative w-full sm:flex-1">
+                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                     <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                     </svg>
+                   </div>
+                   <input 
+                     type="text" 
+                     placeholder="搜尋商家、備註、金額..." 
+                     className="w-full pl-9 p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                     value={searchTerm}
+                     onChange={(e) => setSearchTerm(e.target.value)}
+                   />
+                 </div>
+
+                 {/* 功能按鈕群組 (JSON/CSV) */}
+                 <div className="flex gap-2 w-full sm:w-auto">
+                    {/* 下載 JSON */}
+                    <button 
+                      onClick={handleExport} // 請確認您的函數名稱是否為 handleExport
+                      className="flex-1 sm:flex-none flex items-center justify-center gap-1 bg-white border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-xs hover:bg-gray-50 transition-colors"
+                      title="備份數據 (JSON)"
+                    >
+                      <span>⬇ JSON</span>
+                    </button>
+
+                    {/* 上傳 JSON */}
+                    <label className="flex-1 sm:flex-none flex items-center justify-center gap-1 bg-white border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-xs hover:bg-gray-50 transition-colors cursor-pointer" title="還原數據">
+                      <span>⬆ JSON</span>
+                      <input 
+                        type="file" 
+                        accept=".json"
+                        onChange={handleImport} // 請確認您的函數名稱是否為 handleImport
+                        className="hidden"
+                      />
+                    </label>
+
+                    {/* 下載 CSV */}
+                    <button 
+                      onClick={exportToCSV} // 請確認您的函數名稱是否為 exportToCSV
+                      className="flex-1 sm:flex-none flex items-center justify-center gap-1 bg-green-600 text-white px-3 py-2 rounded-lg text-xs hover:bg-green-700 transition-colors shadow-sm"
+                      title="匯出 Excel 格式"
+                    >
+                      <span>📊 CSV</span>
+                    </button>
+                 </div>
+              </div>
+
+              {/* [新增功能] 3. 交易列表 (顯示來源/帳戶) */}
+              <div className="space-y-3">
+                {filteredTransactions.map((t) => (
+                  <div key={t.id} className="bg-white p-3 rounded-lg shadow-sm border border-gray-100 relative group">
+                    {/* 第一行: 日期與金額 */}
+                    <div className="flex justify-between items-start mb-1">
+                      <div className="flex flex-col">
+                        <span className="text-xs text-gray-400 font-mono">{t.date}</span>
+                        <span className="font-medium text-gray-800 text-base">{t.merchant}</span>
+                      </div>
+                      <span className={`font-bold ${t.amount > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {t.amount > 0 ? '+' : ''}{t.amount.toLocaleString()}
+                      </span>
+                    </div>
+
+                    {/* 第二行: 分類、成員、來源標示 */}
+                    <div className="flex justify-between items-center text-xs mt-2">
+                      <div className="flex gap-2">
+                        <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
+                          {t.category}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded border ${t.member === 'Joint' ? 'border-purple-200 text-purple-600' : 'border-gray-200 text-gray-500'}`}>
+                          {t.member}
+                        </span>
+                      </div>
+                      
+                      {/* 顯示來源/帳戶 */}
+                      <div className="flex flex-col items-end">
+                        <span className="text-gray-400 scale-90 origin-right font-medium">
+                          {t.account || '未知帳戶'}
+                        </span>
+                        {/* 如果有 Note 且包含 Imported，顯示藍色標籤，否則顯示灰色備註 */}
+                        {t.note && (
+                          <span className={`text-[10px] truncate max-w-[120px] ${t.note.includes('Imported') ? 'text-blue-500 bg-blue-50 px-1 rounded' : 'text-gray-400'}`}>
+                            {t.note}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 刪除按鈕 */}
+                    <button 
+                      onClick={() => handleDelete(t.id)}
+                      className="absolute top-2 right-2 text-gray-300 hover:text-red-500 p-1 rounded-full hover:bg-red-50 transition-colors"
+                      title="刪除"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+
+                {filteredTransactions.length === 0 && (
+                  <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+                    <svg className="w-12 h-12 mb-3 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <p>沒有符合搜尋條件的資料</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          {/* 數據中心區塊結束 */}
               
               {activeTab === 'insurance' && (
                   <div className="space-y-6 animate-in fade-in">

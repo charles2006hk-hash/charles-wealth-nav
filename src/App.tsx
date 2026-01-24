@@ -619,7 +619,6 @@ const OverviewDashboard = ({ transactions, properties, leases }: any) => {
 
 const SettingsView = ({ settings, setSettings, updateSettings }: { settings: AppSettings, setSettings: (s: AppSettings) => void, updateSettings: (s: AppSettings) => void }) => {
     
-    // 1. 既有的簡易字串列表移除邏輯 (保持不變，用於銀行、業主等)
     const removeItem = (type: keyof AppSettings, item: string) => {
         // @ts-ignore
         const newSettings = { ...settings, [type]: settings[type].filter((x: string) => x !== item) };
@@ -627,41 +626,33 @@ const SettingsView = ({ settings, setSettings, updateSettings }: { settings: App
         updateSettings(newSettings);
     };
 
-    // 2. 既有的簡易字串列表新增邏輯 (保持不變)
     const handleAdd = (type: keyof AppSettings, val: string) => {
         if (val) {
             // @ts-ignore
-            const newSettings = { ...settings, [type]: [...settings[type], val] };
+            const newSettings = { ...settings, [type]: [...(settings[type] || []), val] };
             setSettings(newSettings);
             updateSettings(newSettings);
         }
     };
 
-    // --- 3. 新增：類別 (Category) 專用狀態 ---
+    // --- 類別管理狀態 ---
     const [newCatName, setNewCatName] = useState('');
     const [newCatType, setNewCatType] = useState<'Income' | 'Expense'>('Expense');
 
-    // 新增類別函數
     const addCategory = () => {
         if (!newCatName.trim()) return;
-        
-        // 檢查重複
         if (settings.categories?.some(c => c.name === newCatName)) {
             alert('此類別名稱已存在');
             return;
         }
-
         const newEntry = { name: newCatName, type: newCatType };
-        // 確保 categories 陣列存在
         const currentCats = settings.categories || [];
         const newSettings = { ...settings, categories: [...currentCats, newEntry] };
-        
         setSettings(newSettings);
         updateSettings(newSettings);
-        setNewCatName(''); // 清空輸入框
+        setNewCatName('');
     };
 
-    // 移除類別函數
     const removeCategory = (nameToRemove: string) => {
         if(!window.confirm(`確定刪除類別 "${nameToRemove}" 嗎？`)) return;
         const newSettings = { 
@@ -672,11 +663,30 @@ const SettingsView = ({ settings, setSettings, updateSettings }: { settings: App
         updateSettings(newSettings);
     };
 
+    // --- ✅ 新增：強制重置預設分類按鈕 ---
+    const handleResetCategories = () => {
+        if (!window.confirm("確定要重置所有分類為「系統預設值」嗎？\n(您手動新增的自訂分類將會消失)")) return;
+        
+        const newSettings = { ...settings, categories: DEFAULT_CATEGORIES };
+        setSettings(newSettings);
+        updateSettings(newSettings);
+        alert("已成功重置分類！");
+    };
+
     return (
         <div className="space-y-8 animate-in fade-in pb-10">
-            <h2 className="text-2xl font-bold mb-4 text-slate-800">系統設定 System Settings</h2>
+            <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold text-slate-800">系統設定 System Settings</h2>
+                {/* 重置按鈕 */}
+                <button 
+                    onClick={handleResetCategories}
+                    className="text-xs bg-slate-200 hover:bg-slate-300 text-slate-600 px-3 py-1 rounded flex items-center gap-1"
+                >
+                    <ICONS.Data /> 初始化/重置預設分類
+                </button>
+            </div>
             
-            {/* --- 新增：收支類別管理區塊 (置頂) --- */}
+            {/* 收支類別管理區塊 */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                 <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-700">
                     <ICONS.Tag /> 收支類別管理 (Transaction Categories)
@@ -688,7 +698,7 @@ const SettingsView = ({ settings, setSettings, updateSettings }: { settings: App
                         <label className="text-xs font-bold text-slate-400 block mb-1">類別名稱 Name</label>
                         <input 
                             className="border rounded px-3 py-2 text-sm w-full focus:ring-2 focus:ring-blue-500 outline-none" 
-                            placeholder="例如: 車位租金, 裝修費..." 
+                            placeholder="例如: 車位租金..." 
                             value={newCatName}
                             onChange={e => setNewCatName(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && addCategory()}
@@ -713,30 +723,36 @@ const SettingsView = ({ settings, setSettings, updateSettings }: { settings: App
                 </div>
 
                 {/* 列表顯示區 */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 max-h-[400px] overflow-y-auto pr-2">
-                    {settings.categories?.map((cat) => (
-                        <div key={cat.name} className="flex justify-between items-center bg-white border border-slate-200 px-3 py-2.5 rounded-lg text-sm group hover:shadow-md transition-all hover:border-blue-300">
-                            <div className="flex items-center gap-2 overflow-hidden">
-                                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${cat.type === 'Income' ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
-                                <span className="truncate font-medium text-slate-700" title={cat.name}>{cat.name}</span>
+                {(!settings.categories || settings.categories.length === 0) ? (
+                    <div className="text-center py-8 text-slate-400 bg-slate-50 rounded-lg border border-dashed">
+                        目前沒有分類資料，請點擊右上角「初始化/重置預設分類」
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 max-h-[400px] overflow-y-auto pr-2">
+                        {settings.categories.map((cat) => (
+                            <div key={cat.name} className="flex justify-between items-center bg-white border border-slate-200 px-3 py-2.5 rounded-lg text-sm group hover:shadow-md transition-all hover:border-blue-300">
+                                <div className="flex items-center gap-2 overflow-hidden">
+                                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${cat.type === 'Income' ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
+                                    <span className="truncate font-medium text-slate-700" title={cat.name}>{cat.name}</span>
+                                </div>
+                                <div className="flex items-center gap-2 flex-shrink-0">
+                                    <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${cat.type === 'Income' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                                        {cat.type === 'Income' ? '收入' : '支出'}
+                                    </span>
+                                    <button 
+                                        onClick={() => removeCategory(cat.name)} 
+                                        className="text-slate-300 hover:text-red-500 p-1 rounded hover:bg-red-50 transition-colors"
+                                    >
+                                        <ICONS.Trash />
+                                    </button>
+                                </div>
                             </div>
-                            <div className="flex items-center gap-2 flex-shrink-0">
-                                <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${cat.type === 'Income' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                                    {cat.type === 'Income' ? '收入' : '支出'}
-                                </span>
-                                <button 
-                                    onClick={() => removeCategory(cat.name)} 
-                                    className="text-slate-300 hover:text-red-500 p-1 rounded hover:bg-red-50 transition-colors"
-                                >
-                                    <ICONS.Trash />
-                                </button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
+                        ))}
+                    </div>
+                )}
             </div>
 
-            {/* --- 原有的通用設定 (銀行、保險、業主...) --- */}
+            {/* 通用設定區塊 */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {[
                     { key: 'banks', title: '銀行列表 (Banks)' },
@@ -764,7 +780,7 @@ const SettingsView = ({ settings, setSettings, updateSettings }: { settings: App
                         </div>
                         <div className="space-y-2 overflow-y-auto flex-1 max-h-48 pr-1">
                             {/* @ts-ignore */}
-                            {settings[section.key]?.map((item: string) => (
+                            {(settings[section.key] || []).map((item: string) => (
                                 <div key={item} className="flex justify-between items-center bg-slate-50 px-3 py-2 rounded-md text-sm group hover:bg-slate-100 border border-transparent hover:border-slate-200">
                                     <span>{item}</span>
                                     <button 

@@ -2063,17 +2063,7 @@ const getTxType = (catName: string) => {
     return () => { unsubTx(); unsubProp(); unsubLease(); unsubEdu(); unsubSettings(); };
   }, []);
 
-    const unsubSettings = onSnapshot(doc(db, "settings", "general"), (docSnap) => {
-        if (docSnap.exists()) {
-            setSettings(docSnap.data() as AppSettings);
-        } else {
-            setDoc(doc(db, "settings", "general"), INITIAL_SETTINGS);
-        }
-    });
-
-    setDataLoaded(true);
-    return () => { unsubTx(); unsubProp(); unsubLease(); unsubEdu(); unsubSettings(); };
-  }, []);
+    
   
 useEffect(() => {
     // 設定 Favicon (瀏覽器分頁圖標)

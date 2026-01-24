@@ -190,8 +190,11 @@ const ICONS = {
 
 // --- Constants ---
 const DEFAULT_CATEGORIES: CategoryConfig[] = [
+  // 收入類
   { name: 'Rental Income (租金收入)', type: 'Income' },
   { name: 'Property Sale (賣樓收入)', type: 'Income' },
+  
+  // 物業支出類
   { name: 'Management Fee (管理費)', type: 'Expense' },
   { name: 'Govt Rates (差餉)', type: 'Expense' },
   { name: 'Govt Rent (地租)', type: 'Expense' },
@@ -202,9 +205,17 @@ const DEFAULT_CATEGORIES: CategoryConfig[] = [
   { name: 'Agent Fee (招租佣金)', type: 'Expense' },
   { name: 'Insurance (保險)', type: 'Expense' },
   { name: 'Utilities (水電煤)', type: 'Expense' },
-  { name: 'Other (其他)', type: 'Expense' },
+  
+  // 一般/家庭支出類
+  { name: 'Credit Card', type: 'Expense' },
   { name: 'Education', type: 'Expense' },
-  // ... 其他您可以自行補充
+  { name: 'Transport', type: 'Expense' },
+  { name: 'Telecom', type: 'Expense' },
+  { name: 'Shopping', type: 'Expense' },
+  { name: 'Dining', type: 'Expense' },
+  { name: 'Medical', type: 'Expense' },
+  { name: 'General', type: 'Expense' },
+  { name: 'Other (其他)', type: 'Expense' }
 ];
 
 const CATEGORIES = [
@@ -231,7 +242,7 @@ const INITIAL_EDUCATION_DB: Record<string, EduConfig> = {
 };
 
 const INITIAL_SETTINGS: AppSettings = {
-    banks: ['BOC', 'HSBC', 'SCB', 'Hang Seng'],
+    banks: ['BOC', 'HSBC', 'OCBC', 'Hang Seng'],
     insuranceCompanies: ['AIA', 'Prudential', 'Manulife'],
     owners: ['Charles', 'Carmen', 'Joint'],
     agents: ['Midland', 'Centaline', 'Ricacorp'],

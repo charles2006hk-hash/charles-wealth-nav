@@ -3012,21 +3012,96 @@ useEffect(() => {
           {/* Modals - 全部加入 md:w-[] 響應式寬度 */}
           {modalMode === 'doc' && <DocModal isOpen={modalMode === 'doc'} onClose={() => setModalMode('none')} docConfig={docConfig} setDocConfig={setDocConfig} handlePrint={handlePrint} properties={properties} transactions={transactions} />}
           
+          {/* --- 交易編輯視窗 (Transaction Modal) --- */}
           {modalMode === 'transaction' && (
               <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
-                  {/* [修改] 寬度響應式 w-[90%] md:w-[500px] */}
-                  <div className="bg-white rounded-xl shadow-2xl p-6 w-[90%] md:w-[500px] max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in duration-200">
+                  <div className="bg-white rounded-xl shadow-2xl p-6 w-[500px] animate-in fade-in zoom-in duration-200">
                         <h3 className="text-lg font-bold mb-4">{editingTx?.id ? '編輯交易 Edit Record' : '新增交易 New Record'}</h3>
                         <div className="space-y-4">
                             <div className="grid grid-cols-2 gap-4">
-                                <div><label className="text-xs font-bold text-slate-500 mb-1 block">日期 Date</label><input type="date" className="w-full border rounded p-2" value={editingTx?.date} onChange={e=>setEditingTx({...editingTx, date: e.target.value} as any)} /></div>
-                                <div><label className="text-xs font-bold text-slate-500 mb-1 block">歸屬物業 Link Property</label><select className="w-full border rounded p-2" value={editingTx?.propertyId || ''} onChange={e=>setEditingTx({...editingTx, propertyId: e.target.value} as any)}><option value="">(無 / 一般消費)</option>{properties.map(p => (<option key={p.id} value={p.id}>{p.name}</option>))}</select></div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 mb-1 block">日期 Date</label>
+                                    <input type="date" className="w-full border rounded p-2" value={editingTx?.date} onChange={e=>setEditingTx({...editingTx, date: e.target.value} as any)} />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 mb-1 block">歸屬物業 Link Property</label>
+                                    <select 
+                                        className="w-full border rounded p-2" 
+                                        value={editingTx?.propertyId || ''} 
+                                        onChange={e=>setEditingTx({...editingTx, propertyId: e.target.value} as any)}
+                                    >
+                                        <option value="">(無 / 一般消費)</option>
+                                        {properties.map(p => (
+                                            <option key={p.id} value={p.id}>{p.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
                             </div>
-                            <div><label className="text-xs font-bold text-slate-500 mb-1 block">商戶/詳情 Merchant</label><input type="text" placeholder="Detail/Merchant" className="w-full border rounded p-2" value={editingTx?.merchant} onChange={e=>setEditingTx({...editingTx, merchant: e.target.value} as any)} /></div>
-                            <div className="relative"><label className="text-xs font-bold text-slate-500 mb-1 block">金額 Amount (輸入數字即可)</label><input type="number" placeholder="0" className="w-full border rounded p-2 pr-24 font-mono text-lg" value={editingTx?.amount} onChange={e=>setEditingTx({...editingTx, amount: Number(e.target.value)} as any)} /><span className="absolute right-3 top-9 text-sm text-gray-400 font-mono pointer-events-none">{formatCurrency(editingTx?.amount)}</span></div>
-                            <div><label className="text-xs font-bold text-slate-500 mb-1 block">類別 Category (決定正負)</label><select className="w-full border rounded p-2" value={editingTx?.category} onChange={e=>setEditingTx({...editingTx, category: e.target.value} as any)}>{CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select><div className={`text-xs mt-1 font-bold ${((editingTx?.category||'').includes('Income') || editingTx?.category?.includes('Sale')) ? 'text-emerald-600' : 'text-red-500'}`}>此筆將記錄為: {((editingTx?.category||'').includes('Income') || editingTx?.category?.includes('Sale')) ? '(+) 收入 Income' : '(-) 支出 Expense'}</div></div>
-                            <div><label className="text-xs font-bold text-slate-500 mb-1 block">成員 Member</label><select className="w-full border rounded p-2" value={editingTx?.member} onChange={e=>setEditingTx({...editingTx, member: e.target.value} as any)}>{MEMBERS.map(m=><option key={m} value={m}>{m}</option>)}</select></div>
-                            <div className="border-t pt-3 mt-3"><label className="block text-sm font-bold text-slate-700 mb-2">附件圖片 (最多10張)</label><div className="flex flex-wrap gap-2 mb-2">{editingTx?.attachments?.map((img, idx) => (<div key={idx} className="relative w-16 h-16"><img src={img} className="w-full h-full object-cover rounded border" alt="upload" /><button onClick={()=>handleRemoveImage(idx, 'transaction')} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs"><ICONS.X /></button></div>))}<label className="w-16 h-16 flex items-center justify-center border-2 border-dashed border-gray-300 rounded cursor-pointer hover:bg-gray-50 text-gray-400"><ICONS.Plus /><input type="file" className="hidden" accept="image/*" multiple onChange={(e)=>handleImageUpload(e, 'transaction')} /></label></div></div>
+
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 mb-1 block">商戶/詳情 Merchant</label>
+                                <input type="text" placeholder="Detail/Merchant" className="w-full border rounded p-2" value={editingTx?.merchant} onChange={e=>setEditingTx({...editingTx, merchant: e.target.value} as any)} />
+                            </div>
+                            
+                            {/* 金額輸入優化 */}
+                            <div className="relative">
+                                <label className="text-xs font-bold text-slate-500 mb-1 block">金額 Amount (輸入數字即可)</label>
+                                <input 
+                                    type="number" 
+                                    placeholder="0" 
+                                    className="w-full border rounded p-2 pr-24 font-mono text-lg" 
+                                    value={editingTx?.amount} 
+                                    onChange={e=>setEditingTx({...editingTx, amount: Number(e.target.value)} as any)} 
+                                />
+                                <span className="absolute right-3 top-9 text-sm text-gray-400 font-mono pointer-events-none">
+                                    {formatCurrency(editingTx?.amount)}
+                                </span>
+                            </div>
+
+                            {/* --- ✅ 這裡就是更新後的類別選擇區塊 --- */}
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 mb-1 block">類別 Category</label>
+                                <select 
+                                    className="w-full border rounded p-2" 
+                                    value={editingTx?.category} 
+                                    onChange={e=>setEditingTx({...editingTx, category: e.target.value} as any)}
+                                >
+                                    {/* 讀取系統設定中的類別列表 */}
+                                    {(settings.categories || DEFAULT_CATEGORIES).map((c:any) => (
+                                        <option key={c.name} value={c.name}>
+                                            {c.name}
+                                        </option>
+                                    ))}
+                                </select>
+                                
+                                {/* 動態提示收支類型 */}
+                                <div className={`text-xs mt-1 font-bold ${getTxType(editingTx?.category || '') === 'Income' ? 'text-emerald-600' : 'text-red-500'}`}>
+                                    系統將記錄為: {getTxType(editingTx?.category || '') === 'Income' ? '(+) 收入 Income' : '(-) 支出 Expense'}
+                                </div>
+                            </div>
+                            {/* ------------------------------------- */}
+
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 mb-1 block">成員 Member</label>
+                                <select className="w-full border rounded p-2" value={editingTx?.member} onChange={e=>setEditingTx({...editingTx, member: e.target.value} as any)}>{MEMBERS.map(m=><option key={m} value={m}>{m}</option>)}</select>
+                            </div>
+                            
+                            {/* 圖片上傳區塊 */}
+                            <div className="border-t pt-3 mt-3">
+                                <label className="block text-sm font-bold text-slate-700 mb-2">附件圖片 (最多10張)</label>
+                                <div className="flex flex-wrap gap-2 mb-2">
+                                    {editingTx?.attachments?.map((img, idx) => (
+                                        <div key={idx} className="relative w-16 h-16">
+                                            <img src={img} className="w-full h-full object-cover rounded border" alt="upload" />
+                                            <button onClick={()=>handleRemoveImage(idx, 'transaction')} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs"><ICONS.X /></button>
+                                        </div>
+                                    ))}
+                                    <label className="w-16 h-16 flex items-center justify-center border-2 border-dashed border-gray-300 rounded cursor-pointer hover:bg-gray-50 text-gray-400">
+                                        <ICONS.Plus />
+                                        <input type="file" className="hidden" accept="image/*" multiple onChange={(e)=>handleImageUpload(e, 'transaction')} />
+                                    </label>
+                                </div>
+                            </div>
                         </div>
                         <div className="flex gap-2 mt-6">
                             <button onClick={handleSaveTransaction} className="flex-1 bg-blue-600 text-white py-2 rounded font-bold hover:bg-blue-700">Save</button>
@@ -3036,26 +3111,7 @@ useEffect(() => {
               </div>
           )}
 
-<div>
-    <label className="text-xs font-bold text-slate-500 mb-1 block">類別 Category</label>
-    <select 
-        className="w-full border rounded p-2" 
-        value={editingTx?.category} 
-        onChange={e=>setEditingTx({...editingTx, category: e.target.value} as any)}
-    >
-        {/* 使用 settings.categories 渲染選項 */}
-        {(settings.categories || DEFAULT_CATEGORIES).map((c:any) => (
-            <option key={c.name} value={c.name}>
-                {c.name}
-            </option>
-        ))}
-    </select>
-    
-    {/* 動態提示使用者這是收入還是支出 */}
-    <div className={`text-xs mt-1 font-bold ${getTxType(editingTx?.category || '') === 'Income' ? 'text-emerald-600' : 'text-red-500'}`}>
-        系統將記錄為: {getTxType(editingTx?.category || '') === 'Income' ? '(+) 收入 Income' : '(-) 支出 Expense'}
-    </div>
-</div>
+
 
           {modalMode === 'property' && (
               <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">

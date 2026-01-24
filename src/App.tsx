@@ -155,6 +155,12 @@ interface AppSettings {
     owners: string[];
     agents: string[]; // 新增
     tenants: string[]; // 新增
+    categories: CategoryConfig[];
+}
+
+interface CategoryConfig {
+  name: string;
+  type: 'Income' | 'Expense';
 }
 
 // --- 3. 常數與圖示 ---
@@ -183,6 +189,24 @@ const ICONS = {
 };
 
 // --- Constants ---
+const DEFAULT_CATEGORIES: CategoryConfig[] = [
+  { name: 'Rental Income (租金收入)', type: 'Income' },
+  { name: 'Property Sale (賣樓收入)', type: 'Income' },
+  { name: 'Management Fee (管理費)', type: 'Expense' },
+  { name: 'Govt Rates (差餉)', type: 'Expense' },
+  { name: 'Govt Rent (地租)', type: 'Expense' },
+  { name: 'Mortgage Payment (按揭供款)', type: 'Expense' },
+  { name: 'Repair & Maint (維修)', type: 'Expense' },
+  { name: 'Tax (稅項)', type: 'Expense' },
+  { name: 'Purchase Commission (買入佣金)', type: 'Expense' },
+  { name: 'Agent Fee (招租佣金)', type: 'Expense' },
+  { name: 'Insurance (保險)', type: 'Expense' },
+  { name: 'Utilities (水電煤)', type: 'Expense' },
+  { name: 'Other (其他)', type: 'Expense' },
+  { name: 'Education', type: 'Expense' },
+  // ... 其他您可以自行補充
+];
+
 const CATEGORIES = [
   'Rental Income (租金收入)', 
   'Property Sale (賣樓收入)', 
@@ -211,7 +235,8 @@ const INITIAL_SETTINGS: AppSettings = {
     insuranceCompanies: ['AIA', 'Prudential', 'Manulife'],
     owners: ['Charles', 'Carmen', 'Joint'],
     agents: ['Midland', 'Centaline', 'Ricacorp'],
-    tenants: []
+    tenants: [],
+    categories: DEFAULT_CATEGORIES
 };
 
 const FAMILY_INFO = {
@@ -579,26 +604,128 @@ const OverviewDashboard = ({ transactions, properties, leases }: any) => {
     );
 };
 
+// --- 在 SettingsView 內部 ---
+
 const SettingsView = ({ settings, setSettings, updateSettings }: { settings: AppSettings, setSettings: (s: AppSettings) => void, updateSettings: (s: AppSettings) => void }) => {
     
+    // 1. 既有的簡易字串列表移除邏輯 (保持不變，用於銀行、業主等)
     const removeItem = (type: keyof AppSettings, item: string) => {
+        // @ts-ignore
         const newSettings = { ...settings, [type]: settings[type].filter((x: string) => x !== item) };
         setSettings(newSettings);
         updateSettings(newSettings);
     };
 
+    // 2. 既有的簡易字串列表新增邏輯 (保持不變)
     const handleAdd = (type: keyof AppSettings, val: string) => {
         if (val) {
+            // @ts-ignore
             const newSettings = { ...settings, [type]: [...settings[type], val] };
             setSettings(newSettings);
             updateSettings(newSettings);
         }
     };
 
+    // --- 3. 新增：類別 (Category) 專用狀態 ---
+    const [newCatName, setNewCatName] = useState('');
+    const [newCatType, setNewCatType] = useState<'Income' | 'Expense'>('Expense');
+
+    // 新增類別函數
+    const addCategory = () => {
+        if (!newCatName.trim()) return;
+        
+        // 檢查重複
+        if (settings.categories?.some(c => c.name === newCatName)) {
+            alert('此類別名稱已存在');
+            return;
+        }
+
+        const newEntry = { name: newCatName, type: newCatType };
+        // 確保 categories 陣列存在
+        const currentCats = settings.categories || [];
+        const newSettings = { ...settings, categories: [...currentCats, newEntry] };
+        
+        setSettings(newSettings);
+        updateSettings(newSettings);
+        setNewCatName(''); // 清空輸入框
+    };
+
+    // 移除類別函數
+    const removeCategory = (nameToRemove: string) => {
+        if(!window.confirm(`確定刪除類別 "${nameToRemove}" 嗎？`)) return;
+        const newSettings = { 
+            ...settings, 
+            categories: settings.categories.filter(c => c.name !== nameToRemove) 
+        };
+        setSettings(newSettings);
+        updateSettings(newSettings);
+    };
+
     return (
-        <div className="space-y-8 animate-in fade-in">
+        <div className="space-y-8 animate-in fade-in pb-10">
             <h2 className="text-2xl font-bold mb-4 text-slate-800">系統設定 System Settings</h2>
             
+            {/* --- 新增：收支類別管理區塊 (置頂) --- */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-700">
+                    <ICONS.Tag /> 收支類別管理 (Transaction Categories)
+                </h3>
+                
+                {/* 輸入區 */}
+                <div className="flex gap-2 mb-6 p-4 bg-slate-50 rounded-lg border border-slate-100 items-center">
+                    <div className="flex-1">
+                        <label className="text-xs font-bold text-slate-400 block mb-1">類別名稱 Name</label>
+                        <input 
+                            className="border rounded px-3 py-2 text-sm w-full focus:ring-2 focus:ring-blue-500 outline-none" 
+                            placeholder="例如: 車位租金, 裝修費..." 
+                            value={newCatName}
+                            onChange={e => setNewCatName(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && addCategory()}
+                        />
+                    </div>
+                    <div className="w-32">
+                        <label className="text-xs font-bold text-slate-400 block mb-1">類型 Type</label>
+                        <select 
+                            className={`border rounded px-3 py-2 text-sm w-full font-bold cursor-pointer ${newCatType === 'Income' ? 'text-emerald-600 bg-emerald-50 border-emerald-200' : 'text-red-500 bg-red-50 border-red-200'}`}
+                            value={newCatType}
+                            onChange={e => setNewCatType(e.target.value as any)}
+                        >
+                            <option value="Expense">(-) 支出</option>
+                            <option value="Income">(+) 收入</option>
+                        </select>
+                    </div>
+                    <div className="self-end">
+                        <button onClick={addCategory} className="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors shadow-sm h-[38px]">
+                            新增 Add
+                        </button>
+                    </div>
+                </div>
+
+                {/* 列表顯示區 */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 max-h-[400px] overflow-y-auto pr-2">
+                    {settings.categories?.map((cat) => (
+                        <div key={cat.name} className="flex justify-between items-center bg-white border border-slate-200 px-3 py-2.5 rounded-lg text-sm group hover:shadow-md transition-all hover:border-blue-300">
+                            <div className="flex items-center gap-2 overflow-hidden">
+                                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${cat.type === 'Income' ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
+                                <span className="truncate font-medium text-slate-700" title={cat.name}>{cat.name}</span>
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                                <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${cat.type === 'Income' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                                    {cat.type === 'Income' ? '收入' : '支出'}
+                                </span>
+                                <button 
+                                    onClick={() => removeCategory(cat.name)} 
+                                    className="text-slate-300 hover:text-red-500 p-1 rounded hover:bg-red-50 transition-colors"
+                                >
+                                    <ICONS.Trash />
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* --- 原有的通用設定 (銀行、保險、業主...) --- */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {[
                     { key: 'banks', title: '銀行列表 (Banks)' },
@@ -607,13 +734,13 @@ const SettingsView = ({ settings, setSettings, updateSettings }: { settings: App
                     { key: 'agents', title: '地產代理 (Agents)' },
                     { key: 'tenants', title: '租客名單 (Tenants)' }
                 ].map((section) => (
-                    <div key={section.key} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                    <div key={section.key} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col h-full">
                         <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-700">
                             {section.title}
                         </h3>
                         <div className="flex gap-2 mb-4">
                             <input 
-                                className="border rounded px-2 py-1 text-sm flex-1" 
+                                className="border rounded px-3 py-2 text-sm flex-1 outline-none focus:border-blue-400" 
                                 placeholder="Add new..." 
                                 onKeyDown={(e) => {
                                     if(e.key === 'Enter') {
@@ -624,11 +751,17 @@ const SettingsView = ({ settings, setSettings, updateSettings }: { settings: App
                                 }}
                             />
                         </div>
-                        <div className="space-y-2 max-h-60 overflow-y-auto">
-                            {settings[section.key as keyof AppSettings].map((item: string) => (
-                                <div key={item} className="flex justify-between items-center bg-slate-50 px-3 py-2 rounded text-sm group">
+                        <div className="space-y-2 overflow-y-auto flex-1 max-h-48 pr-1">
+                            {/* @ts-ignore */}
+                            {settings[section.key]?.map((item: string) => (
+                                <div key={item} className="flex justify-between items-center bg-slate-50 px-3 py-2 rounded-md text-sm group hover:bg-slate-100 border border-transparent hover:border-slate-200">
                                     <span>{item}</span>
-                                    <button onClick={() => removeItem(section.key as keyof AppSettings, item)} className="text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100">✕</button>
+                                    <button 
+                                        onClick={() => removeItem(section.key as keyof AppSettings, item)} 
+                                        className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    >
+                                        ✕
+                                    </button>
                                 </div>
                             ))}
                         </div>
@@ -990,12 +1123,24 @@ const PropertyDetailView = ({
     onBack, setDocConfig, setModalMode, setEditingProp, setEditingTx, 
     setEditingLease, deleteItem,
     ledgerFilter, setLedgerFilter, handleUpdateCategory,
-    handleOpenReceipt 
+    handleOpenReceipt,
+    settings // <--- 1. 這裡新增了 settings
 }: any) => {
     const p = propStats.find((x: any) => x.id === propId);
     if (!p) return <div>Property not found</div>;
+
+    // --- 2. 新增：判斷收支類型的輔助函數 (優先讀取設定，舊資料用關鍵字兜底) ---
+    const getTxType = (catName: string) => {
+        const found = settings.categories?.find((c: any) => c.name === catName);
+        if (found) return found.type;
+        // 舊資料相容邏輯
+        if ((catName || '').includes('Income') || (catName || '').includes('Sale') || (catName || '').includes('收入')) {
+            return 'Income';
+        }
+        return 'Expense';
+    };
     
-    // Updated ledger logic to include sales and commission
+    // 篩選交易紀錄
     const filteredTxs = transactions
         .filter((t: any) => t.propertyId === propId)
         .filter((t: any) => (JSON.stringify(t) || '').toLowerCase().includes(ledgerFilter.toLowerCase()))
@@ -1003,8 +1148,14 @@ const PropertyDetailView = ({
     
     const pLeases = leases.filter((l: any) => l.propertyId === propId);
 
-    const periodIncome = filteredTxs.filter((t:any) => (t.category || '').includes('Income') || t.category === 'Property Sale (賣樓收入)').reduce((sum:number, t:any) => sum + t.amount, 0);
-    const periodExpense = filteredTxs.filter((t:any) => !((t.category || '').includes('Income') || t.category === 'Property Sale (賣樓收入)')).reduce((sum:number, t:any) => sum + t.amount, 0);
+    // --- 3. 更新：根據設定計算區間總收支 ---
+    const periodIncome = filteredTxs
+        .filter((t:any) => getTxType(t.category) === 'Income')
+        .reduce((sum:number, t:any) => sum + t.amount, 0);
+
+    const periodExpense = filteredTxs
+        .filter((t:any) => getTxType(t.category) === 'Expense')
+        .reduce((sum:number, t:any) => sum + t.amount, 0);
 
     return (
         <div className="space-y-6 animate-in fade-in">
@@ -1110,58 +1261,74 @@ const PropertyDetailView = ({
                     <table className="w-full text-sm text-left">
                         <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0"><tr><th className="p-3">Date</th><th className="p-3">Category</th><th className="p-3">Detail</th><th className="p-3">Amount</th><th className="p-3">Action</th></tr></thead>
                         <tbody className="divide-y">
-                            {filteredTxs.map((t: any) => (
-                                <tr key={t.id} className="hover:bg-blue-50">
-                                    <td className="p-3">{t.date}</td>
-                                    <td className="p-3">
-                                        <select 
-                                            className="bg-transparent border-none" 
-                                            value={t.category} 
-                                            onChange={e => handleUpdateCategory(t.id, e.target.value)}
-                                        >
-                                            {CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
-                                        </select>
-                                    </td>
-                                    <td className="p-3 font-medium">
-                                        <div>{t.merchant} <span className="text-slate-400 text-xs">{t.note}</span></div>
-                                        {t.attachments && t.attachments.length > 0 && (
-                                            <div className="flex gap-1 mt-1">
-                                                {t.attachments.map((img:string, idx:number) => (
-                                                    <img key={idx} src={img} className="w-6 h-6 object-cover rounded border" alt="receipt" />
-                                                ))}
-                                            </div>
-                                        )}
-                                        {t.receiptNo && (
-                                            <span className="inline-block mt-1 text-[10px] text-green-700 bg-green-100 px-2 py-0.5 rounded border border-green-200 font-bold">
-                                                🧾 {t.receiptNo}
-                                            </span>
-                                        )}
-                                    </td>
-                                    <td className={`p-3 font-mono font-bold ${((t.category || '').includes('Income') || t.category === 'Property Sale (賣樓收入)') ? 'text-emerald-600' : 'text-red-500'}`}>{((t.category || '').includes('Income') || t.category === 'Property Sale (賣樓收入)') ? '+' : '-'}{formatCurrency(t.amount)}</td>
-                                    <td className="p-3">
-                                        <div className="flex items-center gap-2">
-                                            {/* Allow receipt generation for any income or specific categories */}
-                                            <button 
-                                                onClick={() => handleOpenReceipt(t)} 
-                                                className={`text-xs px-2 py-1 rounded border flex flex-col items-center min-w-[70px] transition-colors ${
-                                                    t.receiptNo 
-                                                    ? 'bg-green-100 text-green-700 border-green-300 hover:bg-green-200' 
-                                                    : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
-                                                }`}
-                                                title={t.receiptNo ? "查看已存檔收據" : "建立新收據"}
+                            {filteredTxs.map((t: any) => {
+                                // --- 4. 判斷單筆交易收支類型 (影響顏色) ---
+                                const isIncome = getTxType(t.category) === 'Income';
+                                
+                                return (
+                                    <tr key={t.id} className="hover:bg-blue-50">
+                                        <td className="p-3">{t.date}</td>
+                                        <td className="p-3">
+                                            {/* 使用 settings.categories 渲染選單 */}
+                                            <select 
+                                                className="bg-transparent border-none max-w-[140px] truncate" 
+                                                value={t.category} 
+                                                onChange={e => handleUpdateCategory(t.id, e.target.value)}
                                             >
-                                                <span className="font-bold flex items-center gap-1">
-                                                    <ICONS.FileText /> {t.receiptNo ? 'View' : 'Receipt'}
+                                                {settings.categories?.map((c: any) => (
+                                                    <option key={c.name} value={c.name}>{c.name}</option>
+                                                ))}
+                                                {/* 兜底：如果當前類別不在設定列表中，至少要顯示出來 */}
+                                                {!settings.categories?.some((c:any)=>c.name === t.category) && (
+                                                    <option value={t.category}>{t.category}</option>
+                                                )}
+                                            </select>
+                                        </td>
+                                        <td className="p-3 font-medium">
+                                            <div>{t.merchant} <span className="text-slate-400 text-xs">{t.note}</span></div>
+                                            {t.attachments && t.attachments.length > 0 && (
+                                                <div className="flex gap-1 mt-1">
+                                                    {t.attachments.map((img:string, idx:number) => (
+                                                        <img key={idx} src={img} className="w-6 h-6 object-cover rounded border" alt="receipt" />
+                                                    ))}
+                                                </div>
+                                            )}
+                                            {t.receiptNo && (
+                                                <span className="inline-block mt-1 text-[10px] text-green-700 bg-green-100 px-2 py-0.5 rounded border border-green-200 font-bold">
+                                                    🧾 {t.receiptNo}
                                                 </span>
-                                                {t.receiptNo && <span className="text-[9px]">{t.receiptNo}</span>}
-                                            </button>
+                                            )}
+                                        </td>
+                                        
+                                        {/* 金額顯示邏輯更新：綠色(+) 或 紅色(-) */}
+                                        <td className={`p-3 font-mono font-bold ${isIncome ? 'text-emerald-600' : 'text-red-500'}`}>
+                                            {isIncome ? '+' : '-'}{formatCurrency(t.amount)}
+                                        </td>
+                                        
+                                        <td className="p-3">
+                                            <div className="flex items-center gap-2">
+                                                <button 
+                                                    onClick={() => handleOpenReceipt(t)} 
+                                                    className={`text-xs px-2 py-1 rounded border flex flex-col items-center min-w-[70px] transition-colors ${
+                                                        t.receiptNo 
+                                                        ? 'bg-green-100 text-green-700 border-green-300 hover:bg-green-200' 
+                                                        : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                                                    }`}
+                                                    title={t.receiptNo ? "查看已存檔收據" : "建立新收據"}
+                                                >
+                                                    <span className="font-bold flex items-center gap-1">
+                                                        <ICONS.FileText /> {t.receiptNo ? 'View' : 'Receipt'}
+                                                    </span>
+                                                    {t.receiptNo && <span className="text-[9px]">{t.receiptNo}</span>}
+                                                </button>
 
-                                            <button onClick={() => { setEditingTx(t); setModalMode('transaction'); }} className="text-blue-400 hover:text-blue-600 p-1"><ICONS.Edit /></button>
-                                            <button onClick={() => deleteItem('transactions', t.id)} className="text-red-400 hover:text-red-600 p-1"><ICONS.Trash /></button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
+                                                <button onClick={() => { setEditingTx(t); setModalMode('transaction'); }} className="text-blue-400 hover:text-blue-600 p-1"><ICONS.Edit /></button>
+                                                <button onClick={() => deleteItem('transactions', t.id)} className="text-red-400 hover:text-red-600 p-1"><ICONS.Trash /></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>
@@ -1779,6 +1946,19 @@ const App: React.FC = () => {
 const [isSidebarOpen, setIsSidebarOpen] = useState(false); // 控制手機版側邊欄
 const [isDesktopSidebarCollapsed, setIsDesktopSidebarCollapsed] = useState(false); // 控制電腦版側邊欄縮放
 
+// 放在 App 組件內，或是可以存取到 settings 的地方
+const getTxType = (catName: string) => {
+    // 1. 優先從 settings 找
+    const found = settings.categories?.find(c => c.name === catName);
+    if (found) return found.type;
+
+    // 2. 找不到則使用舊有的關鍵字判斷 (兼容舊數據)
+    if ((catName || '').includes('Income') || (catName || '').includes('Sale') || (catName || '').includes('收入')) {
+        return 'Income';
+    }
+    return 'Expense';
+};
+
 // ... 其他函數
   const handleBatchUpdate = async (ids: string[], newCategory: string, newPropertyId: string, newMember: string) => {
       if (ids.length === 0) return;
@@ -1887,16 +2067,15 @@ useEffect(() => {
     return properties.map(p => {
         const pTxs = transactions.filter(t => t.propertyId === p.id);
         
-        // 修正收入計算邏輯：包含 Income 和 Sale
-        const income = pTxs.filter(t => 
-            (t.category || '').includes('Income') || 
-            (t.category || '').includes('Sale')
-        ).reduce((sum, t) => sum + (t.amount || 0), 0);
+       // 計算總收入 (使用新的 getTxType 邏輯)
+        const income = pTxs
+            .filter(t => getTxType(t.category) === 'Income')
+            .reduce((sum, t) => sum + (t.amount || 0), 0);
         
-        // 修正支出計算邏輯
-        const expense = pTxs.filter(t => 
-            !((t.category || '').includes('Income') || (t.category || '').includes('Sale'))
-        ).reduce((sum, t) => sum + (t.amount || 0), 0);
+        // 計算總支出 (使用新的 getTxType 邏輯)
+        const expense = pTxs
+            .filter(t => getTxType(t.category) === 'Expense')
+            .reduce((sum, t) => sum + (t.amount || 0), 0);
         
         const activeLease = leases.find(l => l.propertyId === p.id && l.status === 'Active');
         
@@ -2856,6 +3035,27 @@ useEffect(() => {
                     </div>
               </div>
           )}
+
+<div>
+    <label className="text-xs font-bold text-slate-500 mb-1 block">類別 Category</label>
+    <select 
+        className="w-full border rounded p-2" 
+        value={editingTx?.category} 
+        onChange={e=>setEditingTx({...editingTx, category: e.target.value} as any)}
+    >
+        {/* 使用 settings.categories 渲染選項 */}
+        {(settings.categories || DEFAULT_CATEGORIES).map((c:any) => (
+            <option key={c.name} value={c.name}>
+                {c.name}
+            </option>
+        ))}
+    </select>
+    
+    {/* 動態提示使用者這是收入還是支出 */}
+    <div className={`text-xs mt-1 font-bold ${getTxType(editingTx?.category || '') === 'Income' ? 'text-emerald-600' : 'text-red-500'}`}>
+        系統將記錄為: {getTxType(editingTx?.category || '') === 'Income' ? '(+) 收入 Income' : '(-) 支出 Expense'}
+    </div>
+</div>
 
           {modalMode === 'property' && (
               <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">

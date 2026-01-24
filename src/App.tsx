@@ -2553,25 +2553,28 @@ useEffect(() => {
   }
 
   return (
-      <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 text-slate-900 font-sans overflow-x-hidden">
+      // [修改 1] 最外層容器：設定高度為螢幕高度 (h-screen)，並隱藏超出範圍 (overflow-hidden)
+      // 這樣可以鎖死瀏覽器視窗，強制使用內部滾動
+      <div className="flex flex-col md:flex-row h-screen bg-slate-50 text-slate-900 font-sans overflow-hidden">
           <style>{`
-            /* 一般介面樣式 */
             ::-webkit-scrollbar { width: 6px; height: 6px; }
             ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
             .modal-overlay { background-color: rgba(0, 0, 0, 0.5); }
             
-            /* iPhone 安全區域與滾動優化 */
+            /* iPhone 滾動優化 */
             .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
-            .overflow-y-auto { -webkit-overflow-scrolling: touch; }
+            .scroll-smooth { -webkit-overflow-scrolling: touch; }
+            
             /* 隱藏 Scrollbar 但保持功能 */
             .no-scrollbar::-webkit-scrollbar { display: none; }
             .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-            /* 列印樣式 */
             @media print {
                 @page { size: A4; margin: 15mm; }
-                html, body { height: 100%; margin: 0 !important; padding: 0 !important; background: white; }
-                body.printing-mode #root { display: none !important; }
+                html, body { height: 100%; margin: 0 !important; padding: 0 !important; background: white; overflow: visible !important; }
+                /* 列印時隱藏側邊欄與導航 */
+                body.printing-mode #root > div { display: block !important; height: auto !important; overflow: visible !important; }
+                .no-print { display: none !important; }
                 body.printing-mode .modal-overlay { display: none !important; }
                 #print-clone-root { display: block !important; visibility: visible !important; position: relative !important; width: 100% !important; }
                 #print-clone-root .w-\[210mm\] { width: 100% !important; height: auto !important; margin: 0 auto !important; border: none !important; padding: 0 !important; }
@@ -2580,9 +2583,9 @@ useEffect(() => {
             }
           `}</style>
 
-          {/* 1. 手機版頂部導航列 (Mobile Header) */}
+          {/* 1. 手機版頂部導航列 (Mobile Header) - [保持不變] */}
           {!reportMode && (
-              <div className="md:hidden bg-slate-900 text-white p-4 flex justify-between items-center sticky top-0 z-30 shadow-md">
+              <div className="md:hidden bg-slate-900 text-white p-4 flex justify-between items-center shrink-0 z-30 shadow-md no-print">
                   <h1 className="font-bold text-lg flex items-center gap-2"><ICONS.Home /> Charles's 導航</h1>
                   <button onClick={() => setIsSidebarOpen(true)} className="p-2 rounded hover:bg-slate-800">
                       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" x2="21" y1="6" y2="6"/><line x1="3" x2="21" y1="12" y2="12"/><line x1="3" x2="21" y1="18" y2="18"/></svg>
@@ -2590,19 +2593,27 @@ useEffect(() => {
               </div>
           )}
 
-          {/* 2. 側邊欄 (Sidebar) - 包含手機抽屜與電腦側欄邏輯 */}
+          {/* 2. 側邊欄 (Sidebar) - [修改 2] 移除 sticky，改為高度 100% */}
           {!reportMode && (
               <>
                   {/* 手機版遮罩 */}
                   {isSidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 md:hidden backdrop-blur-sm transition-opacity" onClick={() => setIsSidebarOpen(false)} />}
                   
-                  {/* 側邊欄本體 */}
-                  <div className={`fixed md:sticky top-0 left-0 h-screen z-50 bg-slate-900 text-slate-300 flex flex-col transition-all duration-300 ease-in-out shadow-xl ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} ${isDesktopSidebarCollapsed ? 'md:w-20' : 'md:w-64'} w-64`}>
-                      <div className={`p-6 flex justify-between items-center ${isDesktopSidebarCollapsed ? 'md:justify-center' : ''}`}>
+                  {/* 側邊欄結構 */}
+                  <div className={`
+                      fixed md:relative z-50 bg-slate-900 text-slate-300 flex flex-col transition-all duration-300 ease-in-out shadow-xl no-print
+                      h-full  /* [關鍵] 佔滿父容器高度 */
+                      ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} 
+                      ${isDesktopSidebarCollapsed ? 'md:w-20' : 'md:w-64'} 
+                      w-64
+                  `}>
+                      <div className={`p-6 flex justify-between items-center shrink-0 ${isDesktopSidebarCollapsed ? 'md:justify-center' : ''}`}>
                           {!isDesktopSidebarCollapsed && <h1 className="text-xl font-bold text-white flex items-center gap-2 truncate"><ICONS.Home /> Charles's 導航</h1>}
                           {isDesktopSidebarCollapsed && <div className="text-white"><ICONS.Home /></div>}
                           <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-white">✕</button>
                       </div>
+
+                      {/* 選單區域 */}
                       <nav className="flex-1 px-3 space-y-2 overflow-y-auto no-scrollbar">
                           {[
                               {id: 'overview', icon: 'LayoutDashboard', label: '總覽 Overview'},
@@ -2618,15 +2629,18 @@ useEffect(() => {
                               </button>
                           ))}
                       </nav>
-                      <div className="p-4 border-t border-slate-800 hidden md:flex justify-end">
+
+                      {/* 底部收縮按鈕 */}
+                      <div className="p-4 border-t border-slate-800 hidden md:flex justify-end shrink-0">
                           <button onClick={() => setIsDesktopSidebarCollapsed(!isDesktopSidebarCollapsed)} className="p-2 text-slate-500 hover:text-white transition-colors">{isDesktopSidebarCollapsed ? '➝' : '←'}</button>
                       </div>
                   </div>
               </>
           )}
 
-          {/* 3. 主要內容區域 */}
-          <div className="flex-1 p-4 md:p-8 overflow-y-auto print-container pb-20 md:pb-8 pb-safe">
+          {/* 3. 主要內容區域 (Main Content) */}
+          {/* [修改 3] 加入 h-full 和 overflow-y-auto，創造獨立滾動區域 */}
+          <div className="flex-1 h-full overflow-y-auto scroll-smooth p-4 md:p-8 pb-20 md:pb-8 pb-safe relative">
               
               {activeTab === 'overview' && (
                   <OverviewDashboard transactions={transactions} properties={properties} leases={leases} />
@@ -2726,7 +2740,7 @@ useEffect(() => {
                                                               <td className="p-3 whitespace-nowrap text-center hidden md:table-cell"><span className="text-[10px] text-slate-400 border px-1 rounded bg-slate-50">DB</span></td>
                                                               <td className="p-3 whitespace-nowrap">
                                                                 <div className="flex items-center justify-center gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                    <button onClick={() => { setBulkTemplateTx(t); setIsBulkModalOpen(true); }} className="p-1.5 rounded text-indigo-500 hover:bg-indigo-50 hover:border-indigo-200 border border-transparent transition-colors" title="智能批量歸類"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M9 3v4"/><path d="M3 5h4"/><path d="M3 9h4"/></svg></button>
+                                                                    <button onClick={() => { setBulkTemplateTx(t); setIsBulkModalOpen(true); }} className="p-1.5 rounded text-indigo-500 hover:bg-indigo-50 hover:border-indigo-200 border border-transparent transition-colors" title="智能批量歸類"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M9 3v4"/><path d="M3 5h4"/><path d="M3 9h4"/></svg></button>
                                                                     {((t.category || '').includes('Income') || t.category?.includes('Sale')) && (<button onClick={() => handleOpenReceipt(t)} className={`p-1.5 rounded hover:bg-white border ${t.receiptNo ? 'text-green-600 border-green-200 bg-green-50' : 'text-slate-400 border-transparent hover:border-slate-200'}`} title="收據"><ICONS.FileText /></button>)}
                                                                     <button onClick={() => { setEditingTx(t); setModalMode('transaction'); }} className="p-1.5 rounded text-blue-500 hover:bg-white hover:border-blue-200 border border-transparent" title="編輯"><ICONS.Edit /></button>
                                                                     <button onClick={() => deleteItem('transactions', t.id)} className="p-1.5 rounded text-red-400 hover:text-red-600 hover:bg-white hover:border-red-200 border border-transparent" title="刪除"><ICONS.Trash /></button>
@@ -2822,7 +2836,7 @@ useEffect(() => {
           {modalMode === 'transaction' && (
               <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
                   {/* [修改] 寬度響應式 w-[90%] md:w-[500px] */}
-                  <div className="bg-white rounded-xl shadow-2xl p-6 w-[90%] md:w-[500px] animate-in fade-in zoom-in duration-200">
+                  <div className="bg-white rounded-xl shadow-2xl p-6 w-[90%] md:w-[500px] max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in duration-200">
                         <h3 className="text-lg font-bold mb-4">{editingTx?.id ? '編輯交易 Edit Record' : '新增交易 New Record'}</h3>
                         <div className="space-y-4">
                             <div className="grid grid-cols-2 gap-4">

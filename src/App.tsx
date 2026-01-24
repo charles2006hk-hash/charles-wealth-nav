@@ -639,8 +639,6 @@ const SettingsView = ({ settings, setSettings, updateSettings }: { settings: App
     );
 };
 
-// --- [新增] 智能批量歸類模態視窗 ---
-// --- [修改] 智能批量歸類模態視窗 (加入 Prop/Member) ---
 const BulkClassifyModal = ({ isOpen, onClose, templateTx, transactions, properties, onConfirmBatch }: any) => {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [targetCategory, setTargetCategory] = useState('');
@@ -648,20 +646,17 @@ const BulkClassifyModal = ({ isOpen, onClose, templateTx, transactions, properti
     const [targetMember, setTargetMember] = useState('');
     const [candidates, setCandidates] = useState<Transaction[]>([]);
 
-    // 當打開視窗時，自動搜尋相似交易並初始化設定
     useEffect(() => {
         if (isOpen && templateTx) {
-            // 1. 初始化目標值 (預設帶入範本的值)
             setTargetCategory(templateTx.category || 'General');
             setTargetPropertyId(templateTx.propertyId || '');
             setTargetMember(templateTx.member || 'Family');
 
-            // 2. 搜尋相似交易
             const searchName = templateTx.merchant.toLowerCase().replace(/[0-9]/g, '').trim().substring(0, 4);
             const searchAmount = templateTx.amount;
             
             const matches = transactions.filter((t: Transaction) => {
-                if (t.id === templateTx.id) return false; // 排除自己
+                if (t.id === templateTx.id) return false;
                 const nameMatch = t.merchant.toLowerCase().includes(searchName);
                 const amountMatch = t.amount === searchAmount;
                 return nameMatch || (amountMatch && (t.category === 'Other (其他)' || t.category === 'General'));
@@ -680,7 +675,6 @@ const BulkClassifyModal = ({ isOpen, onClose, templateTx, transactions, properti
     };
 
     const handleConfirm = () => {
-        // 傳遞所有新的設定值 (Category, Property, Member)
         onConfirmBatch(Array.from(selectedIds), targetCategory, targetPropertyId, targetMember);
         onClose();
     };
@@ -689,7 +683,8 @@ const BulkClassifyModal = ({ isOpen, onClose, templateTx, transactions, properti
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
-            <div className="bg-white rounded-xl shadow-2xl p-6 w-[800px] max-h-[90vh] flex flex-col animate-in fade-in zoom-in duration-200">
+            {/* [修改] 寬度改為響應式 w-[95%] md:w-[800px] */}
+            <div className="bg-white rounded-xl shadow-2xl p-6 w-[95%] md:w-[800px] max-h-[90vh] flex flex-col animate-in fade-in zoom-in duration-200">
                 <div className="flex justify-between items-start mb-4 border-b pb-2">
                     <div>
                         <h3 className="text-xl font-bold flex items-center gap-2 text-indigo-700">
@@ -702,36 +697,23 @@ const BulkClassifyModal = ({ isOpen, onClose, templateTx, transactions, properti
                     <button onClick={onClose} className="text-slate-400 hover:text-slate-600">✕</button>
                 </div>
 
-                {/* --- 新增：批量設定區域 (Category + Property + Member) --- */}
-                <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100 mb-4 grid grid-cols-3 gap-4">
+                <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100 mb-4 grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                         <label className="block text-xs font-bold text-indigo-900 mb-1">歸類 Category</label>
-                        <select 
-                            className="w-full border border-indigo-300 rounded px-2 py-1.5 text-sm"
-                            value={targetCategory}
-                            onChange={(e) => setTargetCategory(e.target.value)}
-                        >
+                        <select className="w-full border border-indigo-300 rounded px-2 py-1.5 text-sm" value={targetCategory} onChange={(e) => setTargetCategory(e.target.value)}>
                             {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                     </div>
                     <div>
                         <label className="block text-xs font-bold text-indigo-900 mb-1">物業 Property</label>
-                        <select 
-                            className="w-full border border-indigo-300 rounded px-2 py-1.5 text-sm"
-                            value={targetPropertyId}
-                            onChange={(e) => setTargetPropertyId(e.target.value)}
-                        >
+                        <select className="w-full border border-indigo-300 rounded px-2 py-1.5 text-sm" value={targetPropertyId} onChange={(e) => setTargetPropertyId(e.target.value)}>
                             <option value="">(不指定 / None)</option>
                             {properties.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
                         </select>
                     </div>
                     <div>
                         <label className="block text-xs font-bold text-indigo-900 mb-1">成員 Member</label>
-                        <select 
-                            className="w-full border border-indigo-300 rounded px-2 py-1.5 text-sm"
-                            value={targetMember}
-                            onChange={(e) => setTargetMember(e.target.value)}
-                        >
+                        <select className="w-full border border-indigo-300 rounded px-2 py-1.5 text-sm" value={targetMember} onChange={(e) => setTargetMember(e.target.value)}>
                             {MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
                         </select>
                     </div>
@@ -741,48 +723,31 @@ const BulkClassifyModal = ({ isOpen, onClose, templateTx, transactions, properti
                     <table className="w-full text-sm text-left">
                         <thead className="bg-slate-50 text-slate-500 sticky top-0 z-10">
                             <tr>
-                                <th className="p-3 w-10">
-                                    <input type="checkbox" 
-                                        checked={selectedIds.size === candidates.length && candidates.length > 0}
-                                        onChange={(e) => setSelectedIds(e.target.checked ? new Set(candidates.map((t:any)=>t.id)) : new Set())} 
-                                    />
-                                </th>
+                                <th className="p-3 w-10"><input type="checkbox" checked={selectedIds.size === candidates.length && candidates.length > 0} onChange={(e) => setSelectedIds(e.target.checked ? new Set(candidates.map((t:any)=>t.id)) : new Set())} /></th>
                                 <th className="p-3">Date</th>
                                 <th className="p-3">Merchant</th>
                                 <th className="p-3 text-right">Amount</th>
-                                <th className="p-3">Current Status</th>
+                                <th className="p-3">Status</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y">
                             {candidates.map((t: any) => (
                                 <tr key={t.id} className={selectedIds.has(t.id) ? 'bg-indigo-50/50' : 'hover:bg-slate-50'}>
-                                    <td className="p-3">
-                                        <input type="checkbox" checked={selectedIds.has(t.id)} onChange={() => handleToggle(t.id)} />
-                                    </td>
+                                    <td className="p-3"><input type="checkbox" checked={selectedIds.has(t.id)} onChange={() => handleToggle(t.id)} /></td>
                                     <td className="p-3 text-xs font-mono text-slate-500">{t.date}</td>
                                     <td className="p-3 font-medium">{t.merchant}</td>
                                     <td className={`p-3 text-right font-mono ${t.amount > 0 ? 'text-green-600' : 'text-red-500'}`}>{formatCurrency(t.amount)}</td>
-                                    <td className="p-3 text-xs text-slate-400">
-                                        {t.category} / {t.member}
-                                    </td>
+                                    <td className="p-3 text-xs text-slate-400">{t.category}</td>
                                 </tr>
                             ))}
-                            {candidates.length === 0 && (
-                                <tr><td colSpan={5} className="p-8 text-center text-slate-400">沒有找到其他相似的交易</td></tr>
-                            )}
+                            {candidates.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-slate-400">沒有找到其他相似的交易</td></tr>}
                         </tbody>
                     </table>
                 </div>
 
                 <div className="flex justify-end gap-2 mt-4 pt-2 border-t">
                     <button onClick={onClose} className="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded">取消</button>
-                    <button 
-                        onClick={handleConfirm} 
-                        disabled={selectedIds.size === 0}
-                        className="px-4 py-2 bg-indigo-600 text-white font-bold rounded hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
-                    >
-                        <ICONS.Edit /> 確認修改 ({selectedIds.size} 筆)
-                    </button>
+                    <button onClick={handleConfirm} disabled={selectedIds.size === 0} className="px-4 py-2 bg-indigo-600 text-white font-bold rounded hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"><ICONS.Edit /> 確認修改 ({selectedIds.size} 筆)</button>
                 </div>
             </div>
         </div>
@@ -1701,13 +1666,15 @@ const DocModal: React.FC<DocModalProps> = ({
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
-            <div className="bg-white rounded-xl shadow-2xl p-6 w-[1200px] h-[95vh] flex flex-col">
+            {/* [修改] 寬度改為響應式 w-[98%] md:w-[1200px] */}
+            <div className="bg-white rounded-xl shadow-2xl p-4 md:p-6 w-[98%] md:w-[1200px] h-[95vh] flex flex-col">
                 <div className="flex justify-between items-center mb-4 border-b pb-2">
                     <h3 className="text-xl font-bold flex items-center gap-2"><ICONS.FileText /> 文書生成器</h3>
                     <button onClick={onClose} className="text-slate-400 hover:text-slate-600">✕</button>
                 </div>
-                <div className="flex gap-6 flex-1 overflow-hidden">
-                    <div className="w-1/4 space-y-4 overflow-y-auto pr-2 border-r">
+                <div className="flex flex-col md:flex-row gap-6 flex-1 overflow-hidden">
+                    <div className="w-full md:w-1/4 space-y-4 overflow-y-auto pr-2 border-r md:border-r-0 md:border-b-0 border-b pb-4 md:pb-0">
+                        {/* 設定區域內容保持不變 */}
                         <div>
                             <label className="block text-xs font-bold text-slate-500 mb-1">文件類型</label>
                             <div className="flex rounded bg-slate-100 p-1">
@@ -1725,48 +1692,16 @@ const DocModal: React.FC<DocModalProps> = ({
                         {docConfig.type === 'statement' && (
                              <div className="p-3 bg-blue-50 rounded text-sm space-y-3 border border-blue-100">
                                  <p className="font-bold text-blue-800 border-b border-blue-200 pb-1">對數單設定 Statement Options</p>
-                                 
-                                 {/* 日期範圍 */}
                                  <div><label className="text-xs block text-blue-600">Start Date</label><input type="date" className="w-full border rounded text-xs p-1" value={docConfig.statementDateStart} onChange={e=>setDocConfig({...docConfig, statementDateStart: e.target.value})} /></div>
                                  <div><label className="text-xs block text-blue-600">End Date</label><input type="date" className="w-full border rounded text-xs p-1" value={docConfig.statementDateEnd} onChange={e=>setDocConfig({...docConfig, statementDateEnd: e.target.value})} /></div>
-                                 
-                                 {/* 新增：顯示選項 (改為獨立控制 Debit/Credit) */}
                                  <div className="space-y-2 pt-2 border-t border-blue-200 mt-2">
                                      <div className="flex gap-4">
-                                         <label className="flex items-center gap-2 text-xs cursor-pointer font-bold text-slate-700">
-                                             <input 
-                                                 type="checkbox" 
-                                                 checked={docConfig.showDebit !== false} // 預設為 true
-                                                 onChange={e=>setDocConfig({...docConfig, showDebit: e.target.checked})} 
-                                             />
-                                             顯示 Debit
-                                         </label>
-                                         <label className="flex items-center gap-2 text-xs cursor-pointer font-bold text-slate-700">
-                                             <input 
-                                                 type="checkbox" 
-                                                 checked={docConfig.showCredit !== false} // 預設為 true
-                                                 onChange={e=>setDocConfig({...docConfig, showCredit: e.target.checked})} 
-                                             />
-                                             顯示 Credit
-                                         </label>
+                                         <label className="flex items-center gap-2 text-xs cursor-pointer font-bold text-slate-700"><input type="checkbox" checked={docConfig.showDebit !== false} onChange={e=>setDocConfig({...docConfig, showDebit: e.target.checked})} /> 顯示 Debit</label>
+                                         <label className="flex items-center gap-2 text-xs cursor-pointer font-bold text-slate-700"><input type="checkbox" checked={docConfig.showCredit !== false} onChange={e=>setDocConfig({...docConfig, showCredit: e.target.checked})} /> 顯示 Credit</label>
                                      </div>
-                                     
-                                     <label className="flex items-center gap-2 text-xs cursor-pointer text-slate-600">
-                                         <input type="checkbox" checked={docConfig.showRowNotes !== false} onChange={e=>setDocConfig({...docConfig, showRowNotes: e.target.checked})} />
-                                         顯示交易備註 (Detail Note)
-                                     </label>
+                                     <label className="flex items-center gap-2 text-xs cursor-pointer text-slate-600"><input type="checkbox" checked={docConfig.showRowNotes !== false} onChange={e=>setDocConfig({...docConfig, showRowNotes: e.target.checked})} /> 顯示交易備註</label>
                                  </div>
-
-                                 {/* 新增：底部備註輸入 */}
-                                 <div>
-                                     <label className="text-xs block text-blue-600 font-bold mb-1">底部備註 Footer Note</label>
-                                     <textarea 
-                                         className="w-full border rounded text-xs p-1 h-16" 
-                                         placeholder="例如: 請於收到後七天內付款..."
-                                         value={docConfig.statementFooterNote || ''}
-                                         onChange={e=>setDocConfig({...docConfig, statementFooterNote: e.target.value})}
-                                     />
-                                 </div>
+                                 <div><label className="text-xs block text-blue-600 font-bold mb-1">底部備註 Footer Note</label><textarea className="w-full border rounded text-xs p-1 h-16" placeholder="例如: 請於收到後七天內付款..." value={docConfig.statementFooterNote || ''} onChange={e=>setDocConfig({...docConfig, statementFooterNote: e.target.value})} /></div>
                              </div>
                         )}
                         
@@ -1776,16 +1711,11 @@ const DocModal: React.FC<DocModalProps> = ({
                             <label className="block text-xs font-bold">Amount ($)</label><input type="number" className="w-full border rounded p-1" value={docConfig.amount} onChange={e=>setDocConfig({...docConfig, amount: Number(e.target.value)})} />
                         </div>
                         
-                        {docConfig.linkedTransactionId && (
-                            <div className="bg-green-50 p-2 rounded text-xs text-green-700 border border-green-200">
-                                此收據已連結至交易紀錄 (Archived)
-                            </div>
-                        )}
-
+                        {docConfig.linkedTransactionId && <div className="bg-green-50 p-2 rounded text-xs text-green-700 border border-green-200">此收據已連結至交易紀錄 (Archived)</div>}
                         <button onClick={handlePrint} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold shadow mt-4 flex justify-center items-center gap-2"><ICONS.Printer /> Print / Save PDF</button>
                     </div>
-                    <div className="w-3/4 bg-slate-200 rounded-lg p-8 overflow-y-auto flex justify-center shadow-inner">
-                        <div className="doc-print-container">
+                    <div className="w-full md:w-3/4 bg-slate-200 rounded-lg p-4 md:p-8 overflow-y-auto flex justify-center shadow-inner">
+                        <div className="doc-print-container scale-[0.6] md:scale-100 origin-top">
                             <DocPreviewContent docConfig={docConfig} properties={properties} transactions={transactions} />
                         </div>
                     </div>
@@ -1845,6 +1775,9 @@ const App: React.FC = () => {
   const [stressRate, setStressRate] = useState(0);
   const [rentDrop, setRentDrop] = useState(0);
   const [displayLimit, setDisplayLimit] = useState(50);
+
+const [isSidebarOpen, setIsSidebarOpen] = useState(false); // 控制手機版側邊欄
+const [isDesktopSidebarCollapsed, setIsDesktopSidebarCollapsed] = useState(false); // 控制電腦版側邊欄縮放
 
 // ... 其他函數
   const handleBatchUpdate = async (ids: string[], newCategory: string, newPropertyId: string, newMember: string) => {
@@ -2620,124 +2553,91 @@ useEffect(() => {
   }
 
   return (
-      <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 text-slate-900 font-sans">
+      <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 text-slate-900 font-sans overflow-x-hidden">
           <style>{`
             /* 一般介面樣式 */
             ::-webkit-scrollbar { width: 6px; height: 6px; }
             ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
             .modal-overlay { background-color: rgba(0, 0, 0, 0.5); }
             
-            /* --- 🖨️ 列印專用樣式 (含邊距優化) --- */
+            /* iPhone 安全區域與滾動優化 */
+            .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+            .overflow-y-auto { -webkit-overflow-scrolling: touch; }
+            /* 隱藏 Scrollbar 但保持功能 */
+            .no-scrollbar::-webkit-scrollbar { display: none; }
+            .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+            /* 列印樣式 */
             @media print {
-                @page { 
-                    size: A4; 
-                    margin: 15mm; /* 🟢 關鍵修改：設置 15mm 頁面邊距 */
-                }
-                
-                html, body {
-                    height: 100%;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    background: white;
-                }
-
-                /* 當處於列印模式時... */
-                body.printing-mode {
-                    /* 隱藏原本的 App 內容 */
-                    #root {
-                        display: none !important;
-                    }
-                    
-                    /* 隱藏所有 Modal 殘留 */
-                    .modal-overlay {
-                        display: none !important;
-                    }
-
-                    /* 顯示複製出來的文件 */
-                    #print-clone-root {
-                        display: block !important;
-                        visibility: visible !important;
-                        position: relative !important; /* 改回 relative 讓它跟隨 margin */
-                        left: 0 !important;
-                        top: 0 !important;
-                        width: 100% !important;
-                        
-                        /* 🟢 關鍵修改：強制覆寫內部寫死的 210mm 寬度，改為適應頁面寬度 */
-                        /* 這能防止內容被邊距切掉，而是自動縮放到邊距內 */
-                    }
-                    
-                    /* 針對原本寫死 w-[210mm] 的容器進行覆寫 */
-                    #print-clone-root .w-\[210mm\] {
-                        width: 100% !important;
-                        height: auto !important;
-                        margin: 0 auto !important;
-                        border: none !important; /* 移除預覽框線，列印更乾淨 */
-                        padding: 0 !important;
-                    }
-                }
-                
-                /* 強制背景顏色列印 */
-                * {
-                    -webkit-print-color-adjust: exact !important;
-                    print-color-adjust: exact !important;
-                }
-                
-                .page-break {
-                    page-break-before: always !important;
-                    break-before: page !important;
-                    display: block;
-                    height: 1px;
-                }
+                @page { size: A4; margin: 15mm; }
+                html, body { height: 100%; margin: 0 !important; padding: 0 !important; background: white; }
+                body.printing-mode #root { display: none !important; }
+                body.printing-mode .modal-overlay { display: none !important; }
+                #print-clone-root { display: block !important; visibility: visible !important; position: relative !important; width: 100% !important; }
+                #print-clone-root .w-\[210mm\] { width: 100% !important; height: auto !important; margin: 0 auto !important; border: none !important; padding: 0 !important; }
+                * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                .page-break { page-break-before: always !important; break-before: page !important; display: block; height: 1px; }
             }
           `}</style>
 
+          {/* 1. 手機版頂部導航列 (Mobile Header) */}
           {!reportMode && (
-              <div className="w-full md:w-64 bg-slate-900 text-slate-300 flex flex-col sticky top-0 h-screen overflow-y-auto no-print">
-                  <div className="p-6">
-                      <h1 className="text-xl font-bold text-white flex items-center gap-2"><ICONS.Home /> Charles's 導航</h1>
-                  </div>
-                  <nav className="flex-1 px-3 space-y-1">
-                      {[
-                          {id: 'overview', icon: 'LayoutDashboard', label: '總覽 Overview'},
-                          {id: 'dashboard', icon: 'Home', label: '物業管理 Properties'}, 
-                          {id: 'data', icon: 'Data', label: '數據中心 Data Hub'},
-                          {id: 'insurance', icon: 'Shield', label: '保險庫 Insurance'},
-                          {id: 'education', icon: 'GraduationCap', label: '升學 Education'},
-                          {id: 'settings', icon: 'Settings', label: '系統設定 Settings'}
-                      ].map(item => (
-                          <button key={item.id} onClick={() => { setActiveTab(item.id); setPropertyViewId(null); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${activeTab===item.id && !propertyViewId ? 'bg-blue-600 text-white' : 'hover:bg-slate-800'}`}>
-                              {item.id === 'overview' ? <ICONS.LayoutDashboard /> : item.id === 'dashboard' ? <ICONS.Home /> : item.id === 'data' ? <ICONS.Data /> : item.id === 'insurance' ? <ICONS.Shield /> : item.id === 'education' ? <ICONS.GraduationCap /> : <ICONS.Settings />} {item.label}
-                          </button>
-                      ))}
-                  </nav>
+              <div className="md:hidden bg-slate-900 text-white p-4 flex justify-between items-center sticky top-0 z-30 shadow-md">
+                  <h1 className="font-bold text-lg flex items-center gap-2"><ICONS.Home /> Charles's 導航</h1>
+                  <button onClick={() => setIsSidebarOpen(true)} className="p-2 rounded hover:bg-slate-800">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" x2="21" y1="6" y2="6"/><line x1="3" x2="21" y1="12" y2="12"/><line x1="3" x2="21" y1="18" y2="18"/></svg>
+                  </button>
               </div>
           )}
 
-          <div className="flex-1 p-8 overflow-y-auto print-container">
+          {/* 2. 側邊欄 (Sidebar) - 包含手機抽屜與電腦側欄邏輯 */}
+          {!reportMode && (
+              <>
+                  {/* 手機版遮罩 */}
+                  {isSidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 md:hidden backdrop-blur-sm transition-opacity" onClick={() => setIsSidebarOpen(false)} />}
+                  
+                  {/* 側邊欄本體 */}
+                  <div className={`fixed md:sticky top-0 left-0 h-screen z-50 bg-slate-900 text-slate-300 flex flex-col transition-all duration-300 ease-in-out shadow-xl ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} ${isDesktopSidebarCollapsed ? 'md:w-20' : 'md:w-64'} w-64`}>
+                      <div className={`p-6 flex justify-between items-center ${isDesktopSidebarCollapsed ? 'md:justify-center' : ''}`}>
+                          {!isDesktopSidebarCollapsed && <h1 className="text-xl font-bold text-white flex items-center gap-2 truncate"><ICONS.Home /> Charles's 導航</h1>}
+                          {isDesktopSidebarCollapsed && <div className="text-white"><ICONS.Home /></div>}
+                          <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-white">✕</button>
+                      </div>
+                      <nav className="flex-1 px-3 space-y-2 overflow-y-auto no-scrollbar">
+                          {[
+                              {id: 'overview', icon: 'LayoutDashboard', label: '總覽 Overview'},
+                              {id: 'dashboard', icon: 'Home', label: '物業管理 Properties'}, 
+                              {id: 'data', icon: 'Data', label: '數據中心 Data Hub'},
+                              {id: 'insurance', icon: 'Shield', label: '保險庫 Insurance'},
+                              {id: 'education', icon: 'GraduationCap', label: '升學 Education'},
+                              {id: 'settings', icon: 'Settings', label: '系統設定 Settings'}
+                          ].map(item => (
+                              <button key={item.id} onClick={() => { setActiveTab(item.id); setPropertyViewId(null); setIsSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${activeTab===item.id && !propertyViewId ? 'bg-blue-600 text-white' : 'hover:bg-slate-800'} ${isDesktopSidebarCollapsed ? 'justify-center' : ''}`} title={item.label}>
+                                  {item.id === 'overview' ? <ICONS.LayoutDashboard /> : item.id === 'dashboard' ? <ICONS.Home /> : item.id === 'data' ? <ICONS.Data /> : item.id === 'insurance' ? <ICONS.Shield /> : item.id === 'education' ? <ICONS.GraduationCap /> : <ICONS.Settings />} 
+                                  {!isDesktopSidebarCollapsed && <span>{item.label}</span>}
+                              </button>
+                          ))}
+                      </nav>
+                      <div className="p-4 border-t border-slate-800 hidden md:flex justify-end">
+                          <button onClick={() => setIsDesktopSidebarCollapsed(!isDesktopSidebarCollapsed)} className="p-2 text-slate-500 hover:text-white transition-colors">{isDesktopSidebarCollapsed ? '➝' : '←'}</button>
+                      </div>
+                  </div>
+              </>
+          )}
+
+          {/* 3. 主要內容區域 */}
+          <div className="flex-1 p-4 md:p-8 overflow-y-auto print-container pb-20 md:pb-8 pb-safe">
               
               {activeTab === 'overview' && (
-                  <OverviewDashboard 
-                      transactions={transactions} 
-                      properties={properties} 
-                      leases={leases} 
-                  />
+                  <OverviewDashboard transactions={transactions} properties={properties} leases={leases} />
               )}
 
               {activeTab === 'dashboard' && !propertyViewId && (
                   <PropertyDashboard 
-                      properties={properties}
-                      totalValuation={totalValuation}
-                      totalMonthlyRent={totalMonthlyRent}
-                      propStats={propStats}
-                      stressRate={stressRate}
-                      setStressRate={setStressRate}
-                      rentDrop={rentDrop}
-                      setRentDrop={setRentDrop}
-                      onSelectProperty={handleSelectProperty}
-                      setEditingProp={setEditingProp}
-                      setModalMode={setModalMode}
-                      initializeDefaults={initializeDefaults}
-                      onDeleteProperty={handleDeleteProperty}
+                      properties={properties} totalValuation={totalValuation} totalMonthlyRent={totalMonthlyRent} propStats={propStats}
+                      stressRate={stressRate} setStressRate={setStressRate} rentDrop={rentDrop} setRentDrop={setRentDrop}
+                      onSelectProperty={handleSelectProperty} setEditingProp={setEditingProp} setModalMode={setModalMode}
+                      initializeDefaults={initializeDefaults} onDeleteProperty={handleDeleteProperty}
                       onAddProperty={() => { setEditingProp({ id: '', name: '', address: '', type: 'Investment', status: 'Vacant', currentValue: 0, purchasePrice: 0, initialDeposit: 0, furtherDeposit: 0, balancePayment: 0, mortgageLoan: 0, mortgageAmount: 0, outstandingLoan: 0, managementFee: 0, govtRates: 0, govtRent: 0, estRent: 0, tenure: 0, interestRate: 0, bank: '', owner: '', ownershipType: 'Self-owned', tags: [], purchaseDate: '', purchaseAgent: '', purchaseCommission: 0 } as Property); setModalMode('property'); }}
                       onInitializeDefaults={initializeDefaults}
                   />
@@ -2745,21 +2645,11 @@ useEffect(() => {
 
               {activeTab === 'dashboard' && propertyViewId && (
                   <PropertyDetailView 
-                      propId={propertyViewId}
-                      propStats={propStats}
-                      transactions={transactions}
-                      leases={leases}
-                      onBack={() => setPropertyViewId(null)}
-                      setDocConfig={setDocConfig}
-                      setModalMode={setModalMode}
-                      setEditingProp={setEditingProp}
-                      setEditingTx={setEditingTx}
-                      setEditingLease={setEditingLease}
-                      deleteItem={deleteItem}
-                      ledgerFilter={ledgerFilter}
-                      setLedgerFilter={setLedgerFilter}
-                      handleUpdateCategory={handleUpdateCategory}
-                      handleOpenReceipt={handleOpenReceipt}
+                      propId={propertyViewId} propStats={propStats} transactions={transactions} leases={leases}
+                      onBack={() => setPropertyViewId(null)} setDocConfig={setDocConfig} setModalMode={setModalMode}
+                      setEditingProp={setEditingProp} setEditingTx={setEditingTx} setEditingLease={setEditingLease}
+                      deleteItem={deleteItem} ledgerFilter={ledgerFilter} setLedgerFilter={setLedgerFilter}
+                      handleUpdateCategory={handleUpdateCategory} handleOpenReceipt={handleOpenReceipt}
                   />
               )}
 
@@ -2768,247 +2658,88 @@ useEffect(() => {
               )}
 
               {activeTab === 'data' && (
-                  <div className="bg-white p-6 md:p-10 rounded-xl shadow animate-in fade-in h-full flex flex-col">
+                  <div className="bg-white p-4 md:p-10 rounded-xl shadow animate-in fade-in h-full flex flex-col">
                       <div className="flex flex-wrap justify-between items-center mb-6 gap-4">
                         <div>
-                            <h2 className="text-2xl font-bold text-slate-800">數據中心 Data Hub</h2>
-                            <p className="text-slate-500 text-sm">所有交易紀錄一覽 Table of All Transactions</p>
+                            <h2 className="text-xl md:text-2xl font-bold text-slate-800">數據中心 Data Hub</h2>
+                            <p className="text-slate-500 text-xs md:text-sm">所有交易紀錄一覽 Table of All Transactions</p>
                         </div>
                         <div className="flex flex-wrap gap-2">
-                            {/* 手動新增按鈕 */}
-                            <button 
-                                onClick={() => { 
-                                    setEditingTx({ 
-                                        id: '', 
-                                        date: new Date().toISOString().split('T')[0], 
-                                        merchant: '', 
-                                        amount: 0, 
-                                        category: 'General', 
-                                        member: 'Charles', 
-                                        note: '', 
-                                        year: new Date().getFullYear(), 
-                                        month: new Date().getMonth() + 1,
-                                        attachments: [] 
-                                    } as Transaction); 
-                                    setModalMode('transaction'); 
-                                }} 
-                                className="px-3 py-2 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 flex items-center gap-2 shadow-sm font-bold transition-colors"
-                            >
-                                <ICONS.Plus /> 新增 Add
-                            </button>
-
-                            <button onClick={handleClearData} className="px-3 py-2 bg-white text-red-600 text-xs rounded hover:bg-red-50 flex items-center gap-2 border border-red-200 transition-colors">
-                                <ICONS.Trash /> 清空 Reset
-                            </button>
-                            <label className="flex items-center gap-2 px-3 py-2 bg-indigo-50 text-indigo-700 text-xs rounded hover:bg-indigo-100 cursor-pointer border border-indigo-200 transition-colors">
-                                <ICONS.Upload /> CSV
-                                <input type="file" className="hidden" onChange={handleCSVUpload} accept=".csv" />
-                            </label>
-                            <label className="flex items-center gap-2 px-3 py-2 bg-green-50 text-green-700 text-xs rounded hover:bg-green-100 cursor-pointer border border-green-200 transition-colors">
-                                <ICONS.Upload /> JSON
-                                <input type="file" className="hidden" onChange={handleFileUpload} accept=".json" />
-                            </label>
-                            <button onClick={handleExportJSON} className="px-3 py-2 bg-slate-100 text-slate-600 text-xs rounded hover:bg-slate-200 flex items-center gap-2 border border-slate-200 transition-colors">
-                                <ICONS.Download /> 導出
-                            </button>
+                            <button onClick={() => { setEditingTx({ id: '', date: new Date().toISOString().split('T')[0], merchant: '', amount: 0, category: 'General', member: 'Charles', note: '', year: new Date().getFullYear(), month: new Date().getMonth() + 1, attachments: [] } as Transaction); setModalMode('transaction'); }} className="px-3 py-2 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 flex items-center gap-2 shadow-sm font-bold transition-colors"><ICONS.Plus /> 新增 Add</button>
+                            <button onClick={handleClearData} className="px-3 py-2 bg-white text-red-600 text-xs rounded hover:bg-red-50 flex items-center gap-2 border border-red-200 transition-colors"><ICONS.Trash /> 清空 Reset</button>
+                            <label className="flex items-center gap-2 px-3 py-2 bg-indigo-50 text-indigo-700 text-xs rounded hover:bg-indigo-100 cursor-pointer border border-indigo-200 transition-colors"><ICONS.Upload /> CSV<input type="file" className="hidden" onChange={handleCSVUpload} accept=".csv" /></label>
+                            <label className="flex items-center gap-2 px-3 py-2 bg-green-50 text-green-700 text-xs rounded hover:bg-green-100 cursor-pointer border border-green-200 transition-colors"><ICONS.Upload /> JSON<input type="file" className="hidden" onChange={handleFileUpload} accept=".json" /></label>
+                            <button onClick={handleExportJSON} className="px-3 py-2 bg-slate-100 text-slate-600 text-xs rounded hover:bg-slate-200 flex items-center gap-2 border border-slate-200 transition-colors"><ICONS.Download /> 導出</button>
                         </div>
                       </div>
 
-                      {/* --- [新增] 數據統計儀表板 --- */}
                       {(() => {
-                          // 將過濾邏輯提取出來，以便計算數量
                           const filteredDataList = transactions.filter(t => {
                               const matchesCat = filterCategory === 'All' || t.category === filterCategory;
                               const matchesMem = filterMember === 'All' || t.member === filterMember;
                               const matchesYear = filterYear === 'All' || t.year === parseInt(filterYear);
                               const term = searchTerm.toLowerCase();
-                              const matchesSearch = searchTerm === '' || 
-                                  (t.merchant || '').toLowerCase().includes(term) || 
-                                  (t.amount || 0).toString().includes(term);
+                              const matchesSearch = searchTerm === '' || (t.merchant || '').toLowerCase().includes(term) || (t.amount || 0).toString().includes(term);
                               return matchesCat && matchesMem && matchesYear && matchesSearch;
                           });
 
                           return (
                               <>
                                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                                      <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 flex flex-col">
-                                          <span className="text-[10px] text-slate-500 font-bold uppercase">Total Records (總數)</span>
-                                          <span className="text-xl font-bold text-slate-700">{transactions.length} <span className="text-xs font-normal text-slate-400">筆</span></span>
-                                      </div>
-                                      <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 flex flex-col">
-                                          <span className="text-[10px] text-blue-500 font-bold uppercase">Filtered (篩選後)</span>
-                                          <span className="text-xl font-bold text-blue-700">{filteredDataList.length} <span className="text-xs font-normal text-blue-400">筆</span></span>
-                                      </div>
-                                      <div className="bg-emerald-50 p-3 rounded-lg border border-emerald-100 flex flex-col">
-                                          <span className="text-[10px] text-emerald-600 font-bold uppercase">Source (資料來源)</span>
-                                          <div className="flex items-center gap-1 mt-1">
-                                              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                                              <span className="text-sm font-bold text-emerald-800">Firebase Cloud</span>
-                                          </div>
-                                      </div>
-                                      <div className="bg-indigo-50 p-3 rounded-lg border border-indigo-100 flex flex-col">
-                                          <span className="text-[10px] text-indigo-600 font-bold uppercase">Display Limit</span>
-                                          <span className="text-sm font-bold text-indigo-800 mt-1">
-                                              {Math.min(displayLimit, filteredDataList.length)} / {filteredDataList.length}
-                                          </span>
-                                      </div>
+                                      <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 flex flex-col"><span className="text-[10px] text-slate-500 font-bold uppercase">Total Records (總數)</span><span className="text-xl font-bold text-slate-700">{transactions.length} <span className="text-xs font-normal text-slate-400">筆</span></span></div>
+                                      <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 flex flex-col"><span className="text-[10px] text-blue-500 font-bold uppercase">Filtered (篩選後)</span><span className="text-xl font-bold text-blue-700">{filteredDataList.length} <span className="text-xs font-normal text-blue-400">筆</span></span></div>
+                                      <div className="bg-emerald-50 p-3 rounded-lg border border-emerald-100 flex flex-col"><span className="text-[10px] text-emerald-600 font-bold uppercase">Source (資料來源)</span><div className="flex items-center gap-1 mt-1"><span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span><span className="text-sm font-bold text-emerald-800">Firebase Cloud</span></div></div>
+                                      <div className="bg-indigo-50 p-3 rounded-lg border border-indigo-100 flex flex-col"><span className="text-[10px] text-indigo-600 font-bold uppercase">Display Limit</span><span className="text-sm font-bold text-indigo-800 mt-1">{Math.min(displayLimit, filteredDataList.length)} / {filteredDataList.length}</span></div>
                                   </div>
 
-                                  {/* --- 篩選工具列 --- */}
                                   <div className="flex flex-wrap gap-3 mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100 items-center">
-                                    <div className="relative flex-1 min-w-[200px]">
-                                        <ICONS.Search />
-                                        <input 
-                                            type="text" 
-                                            placeholder="Search merchant or amount..." 
-                                            className="pl-8 border rounded px-3 py-1.5 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" 
-                                            value={searchTerm} 
-                                            onChange={e => setSearchTerm(e.target.value)} 
-                                        />
-                                    </div>
-                                    
-                                    <select className="border rounded px-3 py-1.5 text-sm bg-white min-w-[140px]" value={filterCategory} onChange={e=>setFilterCategory(e.target.value)}>
-                                        <option value="All">所有類別 (All Cats)</option>
-                                        {uniqueCategories.map(c=><option key={c} value={c}>{c}</option>)}
-                                    </select>
-
-                                    <select className="border rounded px-3 py-1.5 text-sm bg-white min-w-[120px]" value={filterMember} onChange={e=>setFilterMember(e.target.value)}>
-                                        <option value="All">所有成員 (All)</option>
-                                        {uniqueMembers.map(m=><option key={m} value={m}>{m}</option>)}
-                                    </select>
-
-                                    <select className="border rounded px-3 py-1.5 text-sm bg-white min-w-[100px]" value={filterYear} onChange={e=>setFilterYear(e.target.value)}>
-                                        <option value="All">所有年份</option>
-                                        {uniqueYears.map(y=><option key={y} value={y}>{y}</option>)}
-                                    </select>
+                                    <div className="relative flex-1 min-w-[200px]"><ICONS.Search /><input type="text" placeholder="Search merchant or amount..." className="pl-8 border rounded px-3 py-1.5 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+                                    <select className="border rounded px-3 py-1.5 text-sm bg-white min-w-[140px]" value={filterCategory} onChange={e=>setFilterCategory(e.target.value)}><option value="All">所有類別 (All Cats)</option>{uniqueCategories.map(c=><option key={c} value={c}>{c}</option>)}</select>
+                                    <select className="border rounded px-3 py-1.5 text-sm bg-white min-w-[120px]" value={filterMember} onChange={e=>setFilterMember(e.target.value)}><option value="All">所有成員 (All)</option>{uniqueMembers.map(m=><option key={m} value={m}>{m}</option>)}</select>
+                                    <select className="border rounded px-3 py-1.5 text-sm bg-white min-w-[100px]" value={filterYear} onChange={e=>setFilterYear(e.target.value)}><option value="All">所有年份</option>{uniqueYears.map(y=><option key={y} value={y}>{y}</option>)}</select>
                                   </div>
 
-                                  {/* --- 數據表格 --- */}
                                   <div className="border rounded-lg overflow-hidden flex-1 flex flex-col bg-white">
                                       <div className="overflow-auto flex-1">
                                           <table className="w-full text-sm text-left border-collapse">
                                               <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0 z-10 shadow-sm">
                                                   <tr>
-                                                      <th className="p-3 whitespace-nowrap w-28">Date</th>
-                                                      <th className="p-3 whitespace-nowrap">Merchant / Detail</th>
-                                                      <th className="p-3 whitespace-nowrap text-right">Amount</th>
-                                                      <th className="p-3 whitespace-nowrap w-40">Category</th>
-                                                      <th className="p-3 whitespace-nowrap w-32">Prop/Member</th>
-                                                      <th className="p-3 whitespace-nowrap text-center w-20">Source</th>
-                                                      <th className="p-3 whitespace-nowrap text-center w-32">Action</th>
+                                                      <th className="p-3 whitespace-nowrap w-24">Date</th>
+                                                      <th className="p-3 whitespace-nowrap min-w-[150px]">Merchant</th>
+                                                      <th className="p-3 whitespace-nowrap text-right">Amt</th>
+                                                      <th className="p-3 whitespace-nowrap hidden md:table-cell">Cat</th>
+                                                      <th className="p-3 whitespace-nowrap hidden md:table-cell">Prop</th>
+                                                      <th className="p-3 whitespace-nowrap text-center hidden md:table-cell">Src</th>
+                                                      <th className="p-3 whitespace-nowrap text-center">Act</th>
                                                   </tr>
                                               </thead>
                                               <tbody className="divide-y divide-slate-100">
-                                                  {filteredDataList
-                                                    .slice(0, displayLimit)
-                                                    .map(t => {
+                                                  {filteredDataList.slice(0, displayLimit).map(t => {
                                                         const linkedProp = properties.find(p => p.id === t.propertyId);
-                                                        
                                                         return (
                                                           <tr key={t.id} className="hover:bg-blue-50/50 group transition-colors">
-                                                              {/* 1. 日期 */}
                                                               <td className="p-3 whitespace-nowrap text-slate-600 font-mono text-xs">{t.date}</td>
-                                                              
-                                                              {/* 2. 商戶 */}
-                                                              <td className="p-3 max-w-[300px]" title={t.merchant + (t.note ? ` (${t.note})` : '')}>
-                                                                  <div className="flex items-center gap-2">
-                                                                      <span className="truncate font-medium text-slate-700 block">{t.merchant}</span>
-                                                                      {t.receiptNo && <span className="flex-shrink-0 text-[9px] text-green-600 bg-green-50 px-1 rounded border border-green-100">🧾 {t.receiptNo}</span>}
-                                                                  </div>
-                                                                  {t.note && <div className="text-[10px] text-slate-400 truncate">{t.note}</div>}
-                                                              </td>
-
-                                                              {/* 3. 金額 */}
-                                                              <td className={`p-3 text-right whitespace-nowrap font-mono font-bold ${((t.category || '').includes('Income') || t.category?.includes('Sale')) ? 'text-emerald-600' : 'text-slate-700'}`}>
-                                                                  {formatCurrency(t.amount)}
-                                                              </td>
-
-                                                              {/* 4. 類別 */}
+                                                              <td className="p-3 max-w-[150px] md:max-w-[300px]" title={t.merchant}><div className="flex items-center gap-2"><span className="truncate font-medium text-slate-700 block">{t.merchant}</span>{t.receiptNo && <span className="flex-shrink-0 text-[9px] text-green-600 bg-green-50 px-1 rounded border border-green-100">🧾 {t.receiptNo}</span>}</div>{t.note && <div className="text-[10px] text-slate-400 truncate">{t.note}</div>}</td>
+                                                              <td className={`p-3 text-right whitespace-nowrap font-mono font-bold ${((t.category || '').includes('Income') || t.category?.includes('Sale')) ? 'text-emerald-600' : 'text-slate-700'}`}>{formatCurrency(t.amount)}</td>
+                                                              <td className="p-3 whitespace-nowrap hidden md:table-cell"><span className="px-2 py-1 bg-slate-100 rounded text-xs text-slate-600 border border-slate-200">{t.category}</span></td>
+                                                              <td className="p-3 whitespace-nowrap hidden md:table-cell">{linkedProp ? <span className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded font-bold flex items-center w-fit gap-1 border border-blue-100"><ICONS.Home /> {linkedProp.name}</span> : <span className="text-slate-500 text-xs px-2 py-1">{t.member}</span>}</td>
+                                                              <td className="p-3 whitespace-nowrap text-center hidden md:table-cell"><span className="text-[10px] text-slate-400 border px-1 rounded bg-slate-50">DB</span></td>
                                                               <td className="p-3 whitespace-nowrap">
-                                                                  <span className="px-2 py-1 bg-slate-100 rounded text-xs text-slate-600 border border-slate-200">{t.category}</span>
+                                                                <div className="flex items-center justify-center gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                    <button onClick={() => { setBulkTemplateTx(t); setIsBulkModalOpen(true); }} className="p-1.5 rounded text-indigo-500 hover:bg-indigo-50 hover:border-indigo-200 border border-transparent transition-colors" title="智能批量歸類"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M9 3v4"/><path d="M3 5h4"/><path d="M3 9h4"/></svg></button>
+                                                                    {((t.category || '').includes('Income') || t.category?.includes('Sale')) && (<button onClick={() => handleOpenReceipt(t)} className={`p-1.5 rounded hover:bg-white border ${t.receiptNo ? 'text-green-600 border-green-200 bg-green-50' : 'text-slate-400 border-transparent hover:border-slate-200'}`} title="收據"><ICONS.FileText /></button>)}
+                                                                    <button onClick={() => { setEditingTx(t); setModalMode('transaction'); }} className="p-1.5 rounded text-blue-500 hover:bg-white hover:border-blue-200 border border-transparent" title="編輯"><ICONS.Edit /></button>
+                                                                    <button onClick={() => deleteItem('transactions', t.id)} className="p-1.5 rounded text-red-400 hover:text-red-600 hover:bg-white hover:border-red-200 border border-transparent" title="刪除"><ICONS.Trash /></button>
+                                                                </div>
                                                               </td>
-
-                                                              {/* 5. 物業/成員 */}
-                                                              <td className="p-3 whitespace-nowrap">
-                                                                  {linkedProp ? (
-                                                                      <span className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded font-bold flex items-center w-fit gap-1 border border-blue-100">
-                                                                          <ICONS.Home /> {linkedProp.name}
-                                                                      </span>
-                                                                  ) : (
-                                                                      <span className="text-slate-500 text-xs px-2 py-1">{t.member}</span>
-                                                                  )}
-                                                              </td>
-
-                                                              {/* 6. [新增] 來源顯示 */}
-                                                              <td className="p-3 whitespace-nowrap text-center">
-                                                                <span className="text-[10px] text-slate-400 border px-1 rounded bg-slate-50">
-                                                                    DB
-                                                                </span>
-                                                              </td>
-
-                                                              {/* 7. 操作按鈕 */}
-                                                              {/* 6. 操作按鈕 (Flex排列，保持一行) - [已修改] 加入智能批量按鈕 */}
-<td className="p-3 whitespace-nowrap">
-  <div className="flex items-center justify-center gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
-      
-      {/* [新增] 智能批量歸類按鈕 (Magic Wand) */}
-      <button 
-          onClick={() => { setBulkTemplateTx(t); setIsBulkModalOpen(true); }}
-          className="p-1.5 rounded text-indigo-500 hover:bg-indigo-50 hover:border-indigo-200 border border-transparent transition-colors"
-          title="智能批量歸類 (Smart Batch)"
-      >
-          {/* 魔法棒 Icon */}
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M9 3v4"/><path d="M3 5h4"/><path d="M3 9h4"/></svg>
-      </button>
-
-      {/* 原有的收據按鈕 */}
-      {((t.category || '').includes('Income') || t.category?.includes('Sale')) && (
-          <button 
-              onClick={() => handleOpenReceipt(t)} 
-              className={`p-1.5 rounded hover:bg-white border ${t.receiptNo ? 'text-green-600 border-green-200 bg-green-50' : 'text-slate-400 border-transparent hover:border-slate-200'}`}
-              title="收據"
-          >
-              <ICONS.FileText />
-          </button>
-      )}
-      
-      {/* 原有的編輯按鈕 */}
-      <button 
-          onClick={() => { setEditingTx(t); setModalMode('transaction'); }} 
-          className="p-1.5 rounded text-blue-500 hover:bg-white hover:border-blue-200 border border-transparent"
-          title="編輯"
-      >
-          <ICONS.Edit />
-      </button>
-      
-      {/* 原有的刪除按鈕 */}
-      <button 
-          onClick={() => deleteItem('transactions', t.id)} 
-          className="p-1.5 rounded text-red-400 hover:text-red-600 hover:bg-white hover:border-red-200 border border-transparent"
-          title="刪除"
-      >
-          <ICONS.Trash />
-      </button>
-  </div>
-</td>
                                                           </tr>
                                                         );
                                                     })}
                                               </tbody>
                                           </table>
                                       </div>
-                                      
-                                      {/* 底部加載更多 */}
                                       <div className="p-3 bg-slate-50 border-t flex justify-center gap-4 text-xs">
-                                          {displayLimit < filteredDataList.length ? (
-                                              <>
-                                                <button onClick={() => setDisplayLimit(prev => prev + 100)} className="text-blue-600 hover:underline">載入更多 (+100)</button>
-                                                <span className="text-slate-300">|</span>
-                                                <button onClick={() => setDisplayLimit(filteredDataList.length)} className="text-slate-500 hover:text-slate-700">顯示全部</button>
-                                              </>
-                                          ) : (
-                                              <span className="text-slate-400">已顯示所有資料 ({filteredDataList.length} 筆)</span>
-                                          )}
+                                          {displayLimit < filteredDataList.length ? (<><button onClick={() => setDisplayLimit(prev => prev + 100)} className="text-blue-600 hover:underline">載入更多 (+100)</button><span className="text-slate-300">|</span><button onClick={() => setDisplayLimit(filteredDataList.length)} className="text-slate-500 hover:text-slate-700">顯示全部</button></>) : (<span className="text-slate-400">已顯示所有資料 ({filteredDataList.length} 筆)</span>)}
                                       </div>
                                   </div>
                               </>
@@ -3085,85 +2816,24 @@ useEffect(() => {
               )}
           </div>
 
-          {/* Modals */}
+          {/* Modals - 全部加入 md:w-[] 響應式寬度 */}
           {modalMode === 'doc' && <DocModal isOpen={modalMode === 'doc'} onClose={() => setModalMode('none')} docConfig={docConfig} setDocConfig={setDocConfig} handlePrint={handlePrint} properties={properties} transactions={transactions} />}
           
-          {/* --- 修改 1: 交易編輯視窗 (增加物業選擇功能) --- */}
           {modalMode === 'transaction' && (
               <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
-                  <div className="bg-white rounded-xl shadow-2xl p-6 w-[500px] animate-in fade-in zoom-in duration-200">
+                  {/* [修改] 寬度響應式 w-[90%] md:w-[500px] */}
+                  <div className="bg-white rounded-xl shadow-2xl p-6 w-[90%] md:w-[500px] animate-in fade-in zoom-in duration-200">
                         <h3 className="text-lg font-bold mb-4">{editingTx?.id ? '編輯交易 Edit Record' : '新增交易 New Record'}</h3>
                         <div className="space-y-4">
                             <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="text-xs font-bold text-slate-500 mb-1 block">日期 Date</label>
-                                    <input type="date" className="w-full border rounded p-2" value={editingTx?.date} onChange={e=>setEditingTx({...editingTx, date: e.target.value} as any)} />
-                                </div>
-                                <div>
-                                    <label className="text-xs font-bold text-slate-500 mb-1 block">歸屬物業 Link Property</label>
-                                    <select 
-                                        className="w-full border rounded p-2" 
-                                        value={editingTx?.propertyId || ''} 
-                                        onChange={e=>setEditingTx({...editingTx, propertyId: e.target.value} as any)}
-                                    >
-                                        <option value="">(無 / 一般消費)</option>
-                                        {properties.map(p => (
-                                            <option key={p.id} value={p.id}>{p.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
+                                <div><label className="text-xs font-bold text-slate-500 mb-1 block">日期 Date</label><input type="date" className="w-full border rounded p-2" value={editingTx?.date} onChange={e=>setEditingTx({...editingTx, date: e.target.value} as any)} /></div>
+                                <div><label className="text-xs font-bold text-slate-500 mb-1 block">歸屬物業 Link Property</label><select className="w-full border rounded p-2" value={editingTx?.propertyId || ''} onChange={e=>setEditingTx({...editingTx, propertyId: e.target.value} as any)}><option value="">(無 / 一般消費)</option>{properties.map(p => (<option key={p.id} value={p.id}>{p.name}</option>))}</select></div>
                             </div>
-
-                            <div>
-                                <label className="text-xs font-bold text-slate-500 mb-1 block">商戶/詳情 Merchant</label>
-                                <input type="text" placeholder="Detail/Merchant" className="w-full border rounded p-2" value={editingTx?.merchant} onChange={e=>setEditingTx({...editingTx, merchant: e.target.value} as any)} />
-                            </div>
-                            
-                            {/* 金額輸入優化 */}
-                            <div className="relative">
-                                <label className="text-xs font-bold text-slate-500 mb-1 block">金額 Amount (輸入數字即可)</label>
-                                <input 
-                                    type="number" 
-                                    placeholder="0" 
-                                    className="w-full border rounded p-2 pr-24 font-mono text-lg" 
-                                    value={editingTx?.amount} 
-                                    onChange={e=>setEditingTx({...editingTx, amount: Number(e.target.value)} as any)} 
-                                />
-                                <span className="absolute right-3 top-9 text-sm text-gray-400 font-mono pointer-events-none">
-                                    {formatCurrency(editingTx?.amount)}
-                                </span>
-                            </div>
-
-                            <div>
-                                <label className="text-xs font-bold text-slate-500 mb-1 block">類別 Category (決定正負)</label>
-                                <select className="w-full border rounded p-2" value={editingTx?.category} onChange={e=>setEditingTx({...editingTx, category: e.target.value} as any)}>{CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select>
-                                
-                                <div className={`text-xs mt-1 font-bold ${((editingTx?.category||'').includes('Income') || editingTx?.category?.includes('Sale')) ? 'text-emerald-600' : 'text-red-500'}`}>
-                                    此筆將記錄為: {((editingTx?.category||'').includes('Income') || editingTx?.category?.includes('Sale')) ? '(+) 收入 Income' : '(-) 支出 Expense'}
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="text-xs font-bold text-slate-500 mb-1 block">成員 Member</label>
-                                <select className="w-full border rounded p-2" value={editingTx?.member} onChange={e=>setEditingTx({...editingTx, member: e.target.value} as any)}>{MEMBERS.map(m=><option key={m} value={m}>{m}</option>)}</select>
-                            </div>
-                            
-                            {/* 圖片上傳區塊 */}
-                            <div className="border-t pt-3 mt-3">
-                                <label className="block text-sm font-bold text-slate-700 mb-2">附件圖片 (最多10張)</label>
-                                <div className="flex flex-wrap gap-2 mb-2">
-                                    {editingTx?.attachments?.map((img, idx) => (
-                                        <div key={idx} className="relative w-16 h-16">
-                                            <img src={img} className="w-full h-full object-cover rounded border" alt="upload" />
-                                            <button onClick={()=>handleRemoveImage(idx, 'transaction')} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs"><ICONS.X /></button>
-                                        </div>
-                                    ))}
-                                    <label className="w-16 h-16 flex items-center justify-center border-2 border-dashed border-gray-300 rounded cursor-pointer hover:bg-gray-50 text-gray-400">
-                                        <ICONS.Plus />
-                                        <input type="file" className="hidden" accept="image/*" multiple onChange={(e)=>handleImageUpload(e, 'transaction')} />
-                                    </label>
-                                </div>
-                            </div>
+                            <div><label className="text-xs font-bold text-slate-500 mb-1 block">商戶/詳情 Merchant</label><input type="text" placeholder="Detail/Merchant" className="w-full border rounded p-2" value={editingTx?.merchant} onChange={e=>setEditingTx({...editingTx, merchant: e.target.value} as any)} /></div>
+                            <div className="relative"><label className="text-xs font-bold text-slate-500 mb-1 block">金額 Amount (輸入數字即可)</label><input type="number" placeholder="0" className="w-full border rounded p-2 pr-24 font-mono text-lg" value={editingTx?.amount} onChange={e=>setEditingTx({...editingTx, amount: Number(e.target.value)} as any)} /><span className="absolute right-3 top-9 text-sm text-gray-400 font-mono pointer-events-none">{formatCurrency(editingTx?.amount)}</span></div>
+                            <div><label className="text-xs font-bold text-slate-500 mb-1 block">類別 Category (決定正負)</label><select className="w-full border rounded p-2" value={editingTx?.category} onChange={e=>setEditingTx({...editingTx, category: e.target.value} as any)}>{CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select><div className={`text-xs mt-1 font-bold ${((editingTx?.category||'').includes('Income') || editingTx?.category?.includes('Sale')) ? 'text-emerald-600' : 'text-red-500'}`}>此筆將記錄為: {((editingTx?.category||'').includes('Income') || editingTx?.category?.includes('Sale')) ? '(+) 收入 Income' : '(-) 支出 Expense'}</div></div>
+                            <div><label className="text-xs font-bold text-slate-500 mb-1 block">成員 Member</label><select className="w-full border rounded p-2" value={editingTx?.member} onChange={e=>setEditingTx({...editingTx, member: e.target.value} as any)}>{MEMBERS.map(m=><option key={m} value={m}>{m}</option>)}</select></div>
+                            <div className="border-t pt-3 mt-3"><label className="block text-sm font-bold text-slate-700 mb-2">附件圖片 (最多10張)</label><div className="flex flex-wrap gap-2 mb-2">{editingTx?.attachments?.map((img, idx) => (<div key={idx} className="relative w-16 h-16"><img src={img} className="w-full h-full object-cover rounded border" alt="upload" /><button onClick={()=>handleRemoveImage(idx, 'transaction')} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs"><ICONS.X /></button></div>))}<label className="w-16 h-16 flex items-center justify-center border-2 border-dashed border-gray-300 rounded cursor-pointer hover:bg-gray-50 text-gray-400"><ICONS.Plus /><input type="file" className="hidden" accept="image/*" multiple onChange={(e)=>handleImageUpload(e, 'transaction')} /></label></div></div>
                         </div>
                         <div className="flex gap-2 mt-6">
                             <button onClick={handleSaveTransaction} className="flex-1 bg-blue-600 text-white py-2 rounded font-bold hover:bg-blue-700">Save</button>
@@ -3175,8 +2845,10 @@ useEffect(() => {
 
           {modalMode === 'property' && (
               <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
-                  <div className="bg-white rounded-xl shadow-2xl p-6 w-[600px] max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in duration-200">
+                  {/* [修改] 寬度響應式 w-[95%] md:w-[600px] */}
+                  <div className="bg-white rounded-xl shadow-2xl p-6 w-[95%] md:w-[600px] max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in duration-200">
                       <h3 className="font-bold text-xl mb-6">Edit Property</h3>
+                      {/* ... Property Modal 內容 ... */}
                       <div className="space-y-6">
                           <div className="space-y-2">
                               <label className="text-xs font-bold text-slate-500 uppercase">Basic Info</label>
@@ -3187,126 +2859,13 @@ useEffect(() => {
                                 <select className="border w-full p-2 rounded" value={editingProp?.ownershipType} onChange={e => setEditingProp({...editingProp, ownershipType: e.target.value} as any)}><option value="Self-owned">Self-owned</option><option value="Managed">Managed</option></select>
                               </div>
                               <div className="flex gap-2">
-                                  <div className="flex-1">
-                                      <label className="text-xs block text-slate-500">Owner</label>
-                                      <select className="border w-full p-2 rounded" value={editingProp?.owner} onChange={e => setEditingProp({...editingProp, owner: e.target.value} as any)}>
-                                          <option value="">Select...</option>
-                                          {settings.owners.map(o => <option key={o} value={o}>{o}</option>)}
-                                      </select>
-                                  </div>
-                                  <div className="flex-1">
-                                      <label className="text-xs block text-slate-500">Tags (Enter to add)</label>
-                                      <div className="border rounded p-2 flex flex-wrap gap-1 min-h-[42px]">
-                                          {editingProp?.tags?.map(t => (
-                                              <span key={t} className="text-xs bg-slate-100 px-1 rounded flex items-center">{t} <button className="ml-1 text-red-400" onClick={()=>setEditingProp({...editingProp, tags: editingProp!.tags.filter(x=>x!==t)} as any)}>x</button></span>
-                                          ))}
-                                          <input className="outline-none text-xs w-20" onKeyDown={(e)=>{if(e.key==='Enter' && editingProp) { const val = (e.target as HTMLInputElement).value; if(val) { setEditingProp({...editingProp, tags: [...(editingProp.tags||[]), val]} as any); (e.target as HTMLInputElement).value = ''; }}}} />
-                                      </div>
-                                  </div>
+                                  <div className="flex-1"><label className="text-xs block text-slate-500">Owner</label><select className="border w-full p-2 rounded" value={editingProp?.owner} onChange={e => setEditingProp({...editingProp, owner: e.target.value} as any)}><option value="">Select...</option>{settings.owners.map(o => <option key={o} value={o}>{o}</option>)}</select></div>
+                                  <div className="flex-1"><label className="text-xs block text-slate-500">Tags (Enter to add)</label><div className="border rounded p-2 flex flex-wrap gap-1 min-h-[42px]">{editingProp?.tags?.map(t => (<span key={t} className="text-xs bg-slate-100 px-1 rounded flex items-center">{t} <button className="ml-1 text-red-400" onClick={()=>setEditingProp({...editingProp, tags: editingProp!.tags.filter(x=>x!==t)} as any)}>x</button></span>))}<input className="outline-none text-xs w-20" onKeyDown={(e)=>{if(e.key==='Enter' && editingProp) { const val = (e.target as HTMLInputElement).value; if(val) { setEditingProp({...editingProp, tags: [...(editingProp.tags||[]), val]} as any); (e.target as HTMLInputElement).value = ''; }}}} /></div></div>
                               </div>
                           </div>
-                          
-                          <div className="space-y-2">
-                              <label className="text-xs font-bold text-slate-500 uppercase">Purchase & Sale Detail</label>
-                              <div className="p-4 bg-blue-50 rounded-lg border border-blue-100 space-y-3">
-                                  <div className="grid grid-cols-2 gap-2">
-                                      <div className="relative">
-                                          <label className="text-xs text-slate-500 block mb-1">Purchase Price</label>
-                                          <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.purchasePrice || ''} onChange={e => setEditingProp({...editingProp, purchasePrice: Number(e.target.value)} as any)} />
-                                          <span className="absolute right-2 top-8 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.purchasePrice)}</span>
-                                      </div>
-                                      <div><label className="text-xs text-slate-500 block mb-1">Purchase Date</label><input className="border w-full p-2 rounded text-sm" type="date" value={editingProp?.purchaseDate || ''} onChange={e => setEditingProp({...editingProp, purchaseDate: e.target.value} as any)} /></div>
-                                  </div>
-                                  <div className="grid grid-cols-2 gap-2">
-                                      <div>
-                                          <label className="text-xs text-slate-500 block mb-1">Agent</label>
-                                          <select className="border w-full p-2 rounded text-sm" value={editingProp?.purchaseAgent} onChange={e => setEditingProp({...editingProp, purchaseAgent: e.target.value} as any)}>
-                                               <option value="">Select...</option>
-                                               {settings.agents.map(a => <option key={a} value={a}>{a}</option>)}
-                                          </select>
-                                      </div>
-                                      <div className="relative">
-                                          <label className="text-xs text-slate-500 block mb-1">Commission</label>
-                                          <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.purchaseCommission || ''} onChange={e => setEditingProp({...editingProp, purchaseCommission: Number(e.target.value)} as any)} />
-                                          <span className="absolute right-2 top-8 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.purchaseCommission)}</span>
-                                      </div>
-                                  </div>
-                                  
-                                  {editingProp?.status === 'Sold' && (
-                                      <div className="mt-2 border-t pt-2 border-blue-200 bg-blue-100/50 p-2 rounded">
-                                          <div className="grid grid-cols-2 gap-2">
-                                              <div className="relative">
-                                                  <label className="text-xs text-slate-700 font-bold block mb-1">Sale Price (賣出價)</label>
-                                                  <input className="border w-full p-2 rounded text-sm font-bold text-green-700" type="number" value={editingProp?.salePrice || ''} onChange={e => setEditingProp({...editingProp, salePrice: Number(e.target.value)} as any)} />
-                                                  <span className="absolute right-2 top-8 text-xs text-gray-500 pointer-events-none">{formatCurrency(editingProp?.salePrice)}</span>
-                                              </div>
-                                              <div><label className="text-xs text-slate-700 font-bold block mb-1">Sale Date (賣出日)</label><input className="border w-full p-2 rounded text-sm" type="date" value={editingProp?.saleDate || ''} onChange={e => setEditingProp({...editingProp, saleDate: e.target.value} as any)} /></div>
-                                          </div>
-                                      </div>
-                                  )}
-                              </div>
-                          </div>
-                          
-                          <details className="group border rounded-lg p-2">
-                              <summary className="font-bold text-sm cursor-pointer text-slate-700 flex justify-between items-center">銀行按揭設定 (點擊展開) <span className="text-xs text-slate-400">▼</span></summary>
-                              <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-100 grid grid-cols-2 gap-4 mt-2">
-                                   <div>
-                                       <label className="text-xs text-slate-500 block mb-1">Bank</label>
-                                       <select className="border w-full p-2 rounded text-sm" value={editingProp?.bank} onChange={e => setEditingProp({...editingProp, bank: e.target.value} as any)}>
-                                           <option value="">Select...</option>
-                                           {settings.banks.map(b => <option key={b} value={b}>{b}</option>)}
-                                       </select>
-                                   </div>
-                                   <div>
-                                       <label className="text-xs text-slate-500 block mb-1">Mortgage Loan</label>
-                                       <div className="relative">
-                                            <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.mortgageLoan || ''} onChange={e => setEditingProp({...editingProp, mortgageLoan: Number(e.target.value)} as any)} />
-                                            <span className="absolute right-2 top-2 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.mortgageLoan)}</span>
-                                       </div>
-                                   </div>
-                                   <div>
-                                       <label className="text-xs text-slate-500 block mb-1">Outstanding</label>
-                                       <div className="relative">
-                                            <input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.outstandingLoan || ''} onChange={e => setEditingProp({...editingProp, outstandingLoan: Number(e.target.value)} as any)} />
-                                            <span className="absolute right-2 top-2 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.outstandingLoan)}</span>
-                                       </div>
-                                   </div>
-                                   <div><label className="text-xs text-slate-500 block mb-1">Rate (%)</label><input className="border w-full p-2 rounded text-sm" type="number" step="0.1" value={editingProp?.interestRate || ''} onChange={e => setEditingProp({...editingProp, interestRate: Number(e.target.value)} as any)} /></div>
-                                   <div><label className="text-xs text-slate-500 block mb-1">Tenure (Yrs)</label><input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.tenure || ''} onChange={e => setEditingProp({...editingProp, tenure: Number(e.target.value)} as any)} /></div>
-                                   <div>
-                                       <label className="text-xs text-slate-500 block mb-1">Monthly Pay</label>
-                                       <div className="relative">
-                                            <input className="border w-full p-2 rounded text-sm bg-white font-bold text-red-600" type="number" value={editingProp?.mortgageAmount || ''} onChange={e => setEditingProp({...editingProp, mortgageAmount: Number(e.target.value)} as any)} />
-                                            <span className="absolute right-2 top-2 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.mortgageAmount)}</span>
-                                       </div>
-                                   </div>
-                              </div>
-                          </details>
-
-                          <div className="space-y-2">
-                              <label className="text-xs font-bold text-slate-500 uppercase">Valuation & Expenses</label>
-                              <div className="grid grid-cols-2 gap-3">
-                                   <div>
-                                       <label className="text-xs">Current Value</label>
-                                       <div className="relative">
-                                            <input className="border w-full p-2 rounded" type="number" value={editingProp?.currentValue || ''} onChange={e => setEditingProp({...editingProp, currentValue: Number(e.target.value)} as any)} />
-                                            <span className="absolute right-2 top-2 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.currentValue)}</span>
-                                       </div>
-                                   </div>
-                                   <div>
-                                       <label className="text-xs">Est. Rent</label>
-                                       <div className="relative">
-                                            <input className="border w-full p-2 rounded" type="number" value={editingProp?.estRent || ''} onChange={e => setEditingProp({...editingProp, estRent: Number(e.target.value)} as any)} />
-                                            <span className="absolute right-2 top-2 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.estRent)}</span>
-                                       </div>
-                                   </div>
-                              </div>
-                              <div className="grid grid-cols-3 gap-2">
-                                  <div><label className="text-xs">Mgt Fee</label><input className="border p-1 text-sm w-full rounded" type="number" value={editingProp?.managementFee || ''} onChange={e=>setEditingProp({...editingProp, managementFee: Number(e.target.value)} as any)} /></div>
-                                  <div><label className="text-xs">Rates (Qtr)</label><input className="border p-1 text-sm w-full rounded" type="number" value={editingProp?.govtRates || ''} onChange={e=>setEditingProp({...editingProp, govtRates: Number(e.target.value)} as any)} /></div>
-                                  <div><label className="text-xs">Govt Rent</label><input className="border p-1 text-sm w-full rounded" type="number" value={editingProp?.govtRent || ''} onChange={e=>setEditingProp({...editingProp, govtRent: Number(e.target.value)} as any)} /></div>
-                              </div>
-                          </div>
+                          <div className="space-y-2"><label className="text-xs font-bold text-slate-500 uppercase">Purchase & Sale Detail</label><div className="p-4 bg-blue-50 rounded-lg border border-blue-100 space-y-3"><div className="grid grid-cols-2 gap-2"><div className="relative"><label className="text-xs text-slate-500 block mb-1">Purchase Price</label><input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.purchasePrice || ''} onChange={e => setEditingProp({...editingProp, purchasePrice: Number(e.target.value)} as any)} /><span className="absolute right-2 top-8 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.purchasePrice)}</span></div><div><label className="text-xs text-slate-500 block mb-1">Purchase Date</label><input className="border w-full p-2 rounded text-sm" type="date" value={editingProp?.purchaseDate || ''} onChange={e => setEditingProp({...editingProp, purchaseDate: e.target.value} as any)} /></div></div><div className="grid grid-cols-2 gap-2"><div><label className="text-xs text-slate-500 block mb-1">Agent</label><select className="border w-full p-2 rounded text-sm" value={editingProp?.purchaseAgent} onChange={e => setEditingProp({...editingProp, purchaseAgent: e.target.value} as any)}><option value="">Select...</option>{settings.agents.map(a => <option key={a} value={a}>{a}</option>)}</select></div><div className="relative"><label className="text-xs text-slate-500 block mb-1">Commission</label><input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.purchaseCommission || ''} onChange={e => setEditingProp({...editingProp, purchaseCommission: Number(e.target.value)} as any)} /><span className="absolute right-2 top-8 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.purchaseCommission)}</span></div></div>{editingProp?.status === 'Sold' && (<div className="mt-2 border-t pt-2 border-blue-200 bg-blue-100/50 p-2 rounded"><div className="grid grid-cols-2 gap-2"><div className="relative"><label className="text-xs text-slate-700 font-bold block mb-1">Sale Price (賣出價)</label><input className="border w-full p-2 rounded text-sm font-bold text-green-700" type="number" value={editingProp?.salePrice || ''} onChange={e => setEditingProp({...editingProp, salePrice: Number(e.target.value)} as any)} /><span className="absolute right-2 top-8 text-xs text-gray-500 pointer-events-none">{formatCurrency(editingProp?.salePrice)}</span></div><div><label className="text-xs text-slate-700 font-bold block mb-1">Sale Date (賣出日)</label><input className="border w-full p-2 rounded text-sm" type="date" value={editingProp?.saleDate || ''} onChange={e => setEditingProp({...editingProp, saleDate: e.target.value} as any)} /></div></div></div>)}</div></div>
+                          <details className="group border rounded-lg p-2"><summary className="font-bold text-sm cursor-pointer text-slate-700 flex justify-between items-center">銀行按揭設定 (點擊展開) <span className="text-xs text-slate-400">▼</span></summary><div className="p-4 bg-yellow-50 rounded-lg border border-yellow-100 grid grid-cols-2 gap-4 mt-2"><div><label className="text-xs text-slate-500 block mb-1">Bank</label><select className="border w-full p-2 rounded text-sm" value={editingProp?.bank} onChange={e => setEditingProp({...editingProp, bank: e.target.value} as any)}><option value="">Select...</option>{settings.banks.map(b => <option key={b} value={b}>{b}</option>)}</select></div><div><label className="text-xs text-slate-500 block mb-1">Mortgage Loan</label><div className="relative"><input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.mortgageLoan || ''} onChange={e => setEditingProp({...editingProp, mortgageLoan: Number(e.target.value)} as any)} /><span className="absolute right-2 top-2 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.mortgageLoan)}</span></div></div><div><label className="text-xs text-slate-500 block mb-1">Outstanding</label><div className="relative"><input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.outstandingLoan || ''} onChange={e => setEditingProp({...editingProp, outstandingLoan: Number(e.target.value)} as any)} /><span className="absolute right-2 top-2 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.outstandingLoan)}</span></div></div><div><label className="text-xs text-slate-500 block mb-1">Rate (%)</label><input className="border w-full p-2 rounded text-sm" type="number" step="0.1" value={editingProp?.interestRate || ''} onChange={e => setEditingProp({...editingProp, interestRate: Number(e.target.value)} as any)} /></div><div><label className="text-xs text-slate-500 block mb-1">Tenure (Yrs)</label><input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.tenure || ''} onChange={e => setEditingProp({...editingProp, tenure: Number(e.target.value)} as any)} /></div><div><label className="text-xs text-slate-500 block mb-1">Monthly Pay</label><div className="relative"><input className="border w-full p-2 rounded text-sm bg-white font-bold text-red-600" type="number" value={editingProp?.mortgageAmount || ''} onChange={e => setEditingProp({...editingProp, mortgageAmount: Number(e.target.value)} as any)} /><span className="absolute right-2 top-2 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.mortgageAmount)}</span></div></div></div></details>
+                          <div className="space-y-2"><label className="text-xs font-bold text-slate-500 uppercase">Valuation & Expenses</label><div className="grid grid-cols-2 gap-3"><div><label className="text-xs">Current Value</label><div className="relative"><input className="border w-full p-2 rounded" type="number" value={editingProp?.currentValue || ''} onChange={e => setEditingProp({...editingProp, currentValue: Number(e.target.value)} as any)} /><span className="absolute right-2 top-2 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.currentValue)}</span></div></div><div><label className="text-xs">Est. Rent</label><div className="relative"><input className="border w-full p-2 rounded" type="number" value={editingProp?.estRent || ''} onChange={e => setEditingProp({...editingProp, estRent: Number(e.target.value)} as any)} /><span className="absolute right-2 top-2 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.estRent)}</span></div></div></div><div className="grid grid-cols-3 gap-2"><div><label className="text-xs">Mgt Fee</label><input className="border p-1 text-sm w-full rounded" type="number" value={editingProp?.managementFee || ''} onChange={e=>setEditingProp({...editingProp, managementFee: Number(e.target.value)} as any)} /></div><div><label className="text-xs">Rates (Qtr)</label><input className="border p-1 text-sm w-full rounded" type="number" value={editingProp?.govtRates || ''} onChange={e=>setEditingProp({...editingProp, govtRates: Number(e.target.value)} as any)} /></div><div><label className="text-xs">Govt Rent</label><input className="border p-1 text-sm w-full rounded" type="number" value={editingProp?.govtRent || ''} onChange={e=>setEditingProp({...editingProp, govtRent: Number(e.target.value)} as any)} /></div></div></div>
                       </div>
                       <div className="flex gap-2 mt-8 pt-4 border-t">
                           <button onClick={handleSaveProperty} className="flex-1 bg-blue-600 text-white p-3 rounded-lg font-bold hover:bg-blue-700">Save Property</button>
@@ -3315,43 +2874,21 @@ useEffect(() => {
                   </div>
               </div>
           )}
+
           {modalMode === 'lease' && (
               <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
-                  <div className="bg-white rounded-xl shadow-2xl p-6 w-[500px] animate-in fade-in zoom-in duration-200">
+                  {/* [修改] 寬度響應式 w-[90%] md:w-[500px] */}
+                  <div className="bg-white rounded-xl shadow-2xl p-6 w-[90%] md:w-[500px] animate-in fade-in zoom-in duration-200">
                       <h3 className="font-bold text-xl mb-6">Manage Lease</h3>
+                      {/* ... Lease Modal 內容 ... */}
                       <div className="space-y-4">
                           <input className="border w-full p-2 rounded" placeholder="Tenant Name" list="tenant-list" value={editingLease?.tenantName || ''} onChange={e => setEditingLease({...editingLease, tenantName: e.target.value} as any)} />
-                          <datalist id="tenant-list">
-                              {settings.tenants.map(t => <option key={t} value={t} />)}
-                          </datalist>
+                          <datalist id="tenant-list">{settings.tenants.map(t => <option key={t} value={t} />)}</datalist>
                           <input className="border w-full p-2 rounded" placeholder="Tenant ID" value={editingLease?.tenantID || ''} onChange={e => setEditingLease({...editingLease, tenantID: e.target.value} as any)} />
-                          <div className="grid grid-cols-2 gap-4">
-                              <div><label className="text-xs">Start Date</label><input type="date" className="border w-full p-2 rounded" value={editingLease?.startDate || ''} onChange={e => setEditingLease({...editingLease, startDate: e.target.value} as any)} /></div>
-                              <div><label className="text-xs">End Date</label><input type="date" className="border w-full p-2 rounded" value={editingLease?.endDate || ''} onChange={e => setEditingLease({...editingLease, endDate: e.target.value} as any)} /></div>
-                          </div>
-                          <div className="grid grid-cols-2 gap-4">
-                              <div><label className="text-xs">Monthly Rent</label><input type="number" className="border w-full p-2 rounded" value={editingLease?.monthlyRent || ''} onChange={e => setEditingLease({...editingLease, monthlyRent: Number(e.target.value)} as any)} />
-                              </div>
-                              <div><label className="text-xs">Deposit</label><input type="number" className="border w-full p-2 rounded" value={editingLease?.deposit || ''} onChange={e => setEditingLease({...editingLease, deposit: Number(e.target.value)} as any)} />
-                              </div>
-                          </div>
+                          <div className="grid grid-cols-2 gap-4"><div><label className="text-xs">Start Date</label><input type="date" className="border w-full p-2 rounded" value={editingLease?.startDate || ''} onChange={e => setEditingLease({...editingLease, startDate: e.target.value} as any)} /></div><div><label className="text-xs">End Date</label><input type="date" className="border w-full p-2 rounded" value={editingLease?.endDate || ''} onChange={e => setEditingLease({...editingLease, endDate: e.target.value} as any)} /></div></div>
+                          <div className="grid grid-cols-2 gap-4"><div><label className="text-xs">Monthly Rent</label><input type="number" className="border w-full p-2 rounded" value={editingLease?.monthlyRent || ''} onChange={e => setEditingLease({...editingLease, monthlyRent: Number(e.target.value)} as any)} /></div><div><label className="text-xs">Deposit</label><input type="number" className="border w-full p-2 rounded" value={editingLease?.deposit || ''} onChange={e => setEditingLease({...editingLease, deposit: Number(e.target.value)} as any)} /></div></div>
                           <select className="border w-full p-2 rounded" value={editingLease?.status} onChange={e => setEditingLease({...editingLease, status: e.target.value} as any)}><option value="Active">Active</option><option value="Terminated">Terminated</option></select>
-                          
-                          <div className="border-t pt-3 mt-3">
-                                <label className="block text-sm font-bold text-slate-700 mb-2">租約文件圖片 (最多10張)</label>
-                                <div className="flex flex-wrap gap-2 mb-2">
-                                    {editingLease?.attachments?.map((img, idx) => (
-                                        <div key={idx} className="relative w-16 h-16">
-                                            <img src={img} className="w-full h-full object-cover rounded border" alt="upload" />
-                                            <button onClick={()=>handleRemoveImage(idx, 'lease')} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs"><ICONS.X /></button>
-                                        </div>
-                                    ))}
-                                    <label className="w-16 h-16 flex items-center justify-center border-2 border-dashed border-gray-300 rounded cursor-pointer hover:bg-gray-50 text-gray-400">
-                                        <ICONS.Plus />
-                                        <input type="file" className="hidden" accept="image/*" multiple onChange={(e)=>handleImageUpload(e, 'lease')} />
-                                    </label>
-                                </div>
-                            </div>
+                          <div className="border-t pt-3 mt-3"><label className="block text-sm font-bold text-slate-700 mb-2">租約文件圖片 (最多10張)</label><div className="flex flex-wrap gap-2 mb-2">{editingLease?.attachments?.map((img, idx) => (<div key={idx} className="relative w-16 h-16"><img src={img} className="w-full h-full object-cover rounded border" alt="upload" /><button onClick={()=>handleRemoveImage(idx, 'lease')} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs"><ICONS.X /></button></div>))}<label className="w-16 h-16 flex items-center justify-center border-2 border-dashed border-gray-300 rounded cursor-pointer hover:bg-gray-50 text-gray-400"><ICONS.Plus /><input type="file" className="hidden" accept="image/*" multiple onChange={(e)=>handleImageUpload(e, 'lease')} /></label></div></div>
                       </div>
                       <div className="flex gap-2 mt-6">
                           <button onClick={handleSaveLease} className="flex-1 bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Save Lease</button>
@@ -3360,14 +2897,15 @@ useEffect(() => {
                   </div>
               </div>
           )}
+
           <BulkClassifyModal 
-    isOpen={isBulkModalOpen} 
-    onClose={() => setIsBulkModalOpen(false)} 
-    templateTx={bulkTemplateTx} 
-    transactions={transactions}
-    properties={properties}  // <--- [新增] 傳入物業列表
-    onConfirmBatch={handleBatchUpdate} 
-/>
+              isOpen={isBulkModalOpen} 
+              onClose={() => setIsBulkModalOpen(false)} 
+              templateTx={bulkTemplateTx} 
+              transactions={transactions}
+              properties={properties} 
+              onConfirmBatch={handleBatchUpdate} 
+          />
       </div>
   );
 };

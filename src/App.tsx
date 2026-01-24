@@ -1140,11 +1140,11 @@ const PropertyDetailView = ({
     const p = propStats.find((x: any) => x.id === propId);
     if (!p) return <div>Property not found</div>;
 
-    // --- 2. 新增：判斷收支類型的輔助函數 (優先讀取設定，舊資料用關鍵字兜底) ---
-    const getTxType = (catName: string) => {
-        const found = settings.categories?.find((c: any) => c.name === catName);
+   const getTxType = (catName: string) => {
+        // 加入 ?. 保護
+        const found = settings?.categories?.find((c: any) => c.name === catName);
         if (found) return found.type;
-        // 舊資料相容邏輯
+        
         if ((catName || '').includes('Income') || (catName || '').includes('Sale') || (catName || '').includes('收入')) {
             return 'Income';
         }
@@ -1957,18 +1957,17 @@ const App: React.FC = () => {
 const [isSidebarOpen, setIsSidebarOpen] = useState(false); // 控制手機版側邊欄
 const [isDesktopSidebarCollapsed, setIsDesktopSidebarCollapsed] = useState(false); // 控制電腦版側邊欄縮放
 
-// 放在 App 組件內，或是可以存取到 settings 的地方
 const getTxType = (catName: string) => {
-    // 1. 優先從 settings 找
-    const found = settings.categories?.find(c => c.name === catName);
-    if (found) return found.type;
+      // 使用 ?. 來防止 settings 或 categories 為 undefined 時崩潰
+      const found = settings?.categories?.find(c => c.name === catName);
+      if (found) return found.type;
 
-    // 2. 找不到則使用舊有的關鍵字判斷 (兼容舊數據)
-    if ((catName || '').includes('Income') || (catName || '').includes('Sale') || (catName || '').includes('收入')) {
-        return 'Income';
-    }
-    return 'Expense';
-};
+      // 舊資料相容邏輯
+      if ((catName || '').includes('Income') || (catName || '').includes('Sale') || (catName || '').includes('收入')) {
+          return 'Income';
+      }
+      return 'Expense';
+  };
 
 // ... 其他函數
   const handleBatchUpdate = async (ids: string[], newCategory: string, newPropertyId: string, newMember: string) => {
@@ -2037,6 +2036,33 @@ const getTxType = (catName: string) => {
       }
     });
     
+    const unsubSettings = onSnapshot(doc(db, "settings", "general"), (docSnap) => {
+        if (docSnap.exists()) {
+            const data = docSnap.data() as AppSettings;
+            
+            // --- ✅ 修改開始：自動補全缺失的分類 ---
+            // 如果資料庫裡沒有 categories，就使用 DEFAULT_CATEGORIES
+            if (!data.categories || data.categories.length === 0) {
+                const fixedSettings = { ...data, categories: DEFAULT_CATEGORIES };
+                setSettings(fixedSettings);
+                // 選項：自動將修復後的設定寫回資料庫 (這樣下次重整就不會空了)
+                updateDoc(doc(db, "settings", "general"), { categories: DEFAULT_CATEGORIES });
+            } else {
+                setSettings(data);
+            }
+            // --- ✅ 修改結束 ---
+            
+        } else {
+            // 如果完全沒有設定檔，就初始化
+            setDoc(doc(db, "settings", "general"), INITIAL_SETTINGS);
+            setSettings(INITIAL_SETTINGS);
+        }
+    });
+
+    setDataLoaded(true);
+    return () => { unsubTx(); unsubProp(); unsubLease(); unsubEdu(); unsubSettings(); };
+  }, []);
+
     const unsubSettings = onSnapshot(doc(db, "settings", "general"), (docSnap) => {
         if (docSnap.exists()) {
             setSettings(docSnap.data() as AppSettings);

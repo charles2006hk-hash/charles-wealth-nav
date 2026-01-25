@@ -1482,18 +1482,17 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
         );
     } 
     
-    // 2. 對數單樣式 (Statement) - 支援獨立顯示 Debit/Credit
+    // 2. 對數單樣式 (Statement) - 緊湊優化版
     if (docConfig.type === 'statement') {
         const filteredTxs = transactions
             .filter(t => t.propertyId === docConfig.propId && (!docConfig.statementDateStart || t.date >= docConfig.statementDateStart) && (!docConfig.statementDateEnd || t.date <= docConfig.statementDateEnd))
             .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
         
-        // 計算總結
         let totalDebit = 0;
         let totalCredit = 0;
         
         filteredTxs.forEach(t => {
-            const isIncome = (t.category || '').includes('Rental Income') || t.category?.includes('Sale');
+            const isIncome = (t.category || '').includes('Rental Income') || t.category?.includes('Sale') || (settings.categories?.find(c => c.name === t.category)?.type === 'Income');
             if (isIncome) totalCredit += t.amount;
             else totalDebit += t.amount;
         });
@@ -1503,15 +1502,17 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
         const showDebit = docConfig.showDebit !== false; 
         const showCredit = docConfig.showCredit !== false;
         const showNotes = docConfig.showRowNotes !== false;
-
-        // 計算表格欄位數 (Date + Desc + (Debit?) + (Credit?))
+        
+        // 計算欄位跨度
         const colCount = 2 + (showDebit ? 1 : 0) + (showCredit ? 1 : 0);
 
         return (
-            <div className="doc-print-container bg-white p-8 w-full text-black font-serif mx-auto relative">
-                <h1 className="text-2xl font-bold text-center underline mb-6">RENTAL STATEMENT 租務對數單</h1>
+            // 移除 p-8 和 min-h，改用 w-full 和緊湊的 padding
+            <div className="doc-print-container bg-white w-full text-black font-serif mx-auto relative p-4">
+                <h1 className="text-2xl font-bold text-center underline mb-4">RENTAL STATEMENT 租務對數單</h1>
                 
-                <div className="flex justify-between mb-8 text-sm">
+                {/* Header 資訊：減少 mb */}
+                <div className="flex justify-between mb-4 text-sm header-info">
                     <div className="w-1/2">
                         <p className="mb-1"><span className="font-bold inline-block w-20">Property:</span> {prop.name}</p>
                         <p><span className="font-bold inline-block w-20">Address:</span> {prop.address}</p>
@@ -1519,37 +1520,33 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
                     <div className="w-1/2 text-right">
                         <p className="mb-1"><span className="font-bold">Tenant:</span> {docConfig.tenant}</p>
                         <p><span className="font-bold">Period:</span> {docConfig.statementDateStart || 'Start'} to {docConfig.statementDateEnd || 'Now'}</p>
-                        <p className="mt-2 text-xs text-gray-500">Generated on: {new Date().toLocaleDateString()}</p>
+                        <p className="mt-1 text-xs text-gray-500">Generated on: {new Date().toLocaleDateString()}</p>
                     </div>
                 </div>
 
-                <table className="w-full border-collapse border border-black text-sm table-fixed">
-                    <colgroup>
-                        <col className="w-24" />
-                        <col className="w-auto" />
-                        {showDebit && <col className="w-28" />}
-                        {showCredit && <col className="w-28" />}
-                    </colgroup>
+                {/* 表格：移除 table-fixed，讓瀏覽器自動調整寬度以容納更多文字 */}
+                <table className="w-full border-collapse border border-black text-sm mb-4">
                     <thead>
                         <tr className="bg-gray-100">
-                            <th className="border border-black p-2 text-left">Date</th>
+                            {/* 設定最小寬度，避免日期被擠壓 */}
+                            <th className="border border-black p-2 text-left w-[15%]">Date</th>
                             <th className="border border-black p-2 text-left">Description / Particulars</th>
-                            {showDebit && <th className="border border-black p-2 text-right">Debit (Dr)</th>}
-                            {showCredit && <th className="border border-black p-2 text-right">Credit (Cr)</th>}
+                            {showDebit && <th className="border border-black p-2 text-right w-[18%]">Debit (Dr)</th>}
+                            {showCredit && <th className="border border-black p-2 text-right w-[18%]">Credit (Cr)</th>}
                         </tr>
                     </thead>
                     <tbody>
                         {filteredTxs.length === 0 && <tr><td colSpan={colCount} className="p-4 text-center">No records found for this period.</td></tr>}
                         
                         {filteredTxs.map(t => {
-                            const isIncome = (t.category || '').includes('Rental Income') || t.category?.includes('Sale');
+                             const isIncome = (t.category || '').includes('Rental Income') || t.category?.includes('Sale') || (settings.categories?.find(c => c.name === t.category)?.type === 'Income');
                             return (
                                 <tr key={t.id}>
-                                    <td className="border border-black p-2 align-top">{t.date}</td>
-                                    <td className="border border-black p-2 align-top break-words whitespace-pre-wrap">
+                                    <td className="border border-black p-2 align-top whitespace-nowrap">{t.date}</td>
+                                    <td className="border border-black p-2 align-top">
                                         <span className="font-bold block">{t.category}</span>
                                         {t.merchant && <span className="block text-slate-700">{t.merchant}</span>}
-                                        {showNotes && t.note && <span className="block text-slate-500 italic text-xs mt-1">Note: {t.note}</span>}
+                                        {showNotes && t.note && <span className="block text-slate-500 italic text-xs mt-0.5">Note: {t.note}</span>}
                                     </td>
                                     
                                     {showDebit && (
@@ -1566,14 +1563,10 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
                                 </tr>
                             );
                         })}
-
-                        {/* 空白填充行 */}
-                        <tr className="h-4 border-l border-r border-black"><td colSpan={colCount}></td></tr>
+                        {/* 移除了空白填充行，節省空間 */}
                     </tbody>
                     
-                    {/* 底部統計區 */}
                     <tfoot>
-                        {/* 統計行 */}
                         <tr className="bg-gray-50 font-bold border-t-2 border-black">
                             <td className="border border-black p-2 text-right" colSpan={2}>
                                 Total ({filteredTxs.length} items):
@@ -1582,7 +1575,6 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
                             {showCredit && <td className="border border-black p-2 text-right">{formatCurrency(totalCredit)}</td>}
                         </tr>
                         
-                        {/* 結餘行 - Net Balance 顯示在最右邊顯示的那個欄位 */}
                         <tr className="bg-gray-100 font-bold text-lg">
                             <td className="border border-black p-2 text-right" colSpan={colCount - 1}>
                                 Net Balance (結餘):
@@ -1594,16 +1586,16 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
                     </tfoot>
                 </table>
 
-                {/* 底部備註區 */}
+                {/* 底部備註區：縮小 padding 與 margin */}
                 {docConfig.statementFooterNote && (
-                    <div className="mt-4 border p-4 bg-slate-50 text-sm no-break">
-                    <p className="font-bold underline mb-1">Notes / Remarks:</p>
-                    <p className="whitespace-pre-wrap">{docConfig.statementFooterNote}</p>
+                    <div className="border p-3 bg-slate-50 text-sm no-break footer-note">
+                        <p className="font-bold underline mb-1">Notes / Remarks:</p>
+                        <p className="whitespace-pre-wrap">{docConfig.statementFooterNote}</p>
                     </div>
                 )}
                 
-                {/* 簽名區 */}
-                <div className="mt-12 flex justify-between signature-section">
+                {/* 簽名區：使用 signature-section 類別，防止分頁切斷 */}
+                <div className="flex justify-between signature-section pt-8">
                     <div className="w-1/3 border-t border-black pt-2 text-center text-xs">Prepared By</div>
                     <div className="w-1/3 border-t border-black pt-2 text-center text-xs">Received & Confirmed By</div>
                 </div>
@@ -2768,6 +2760,7 @@ useEffect(() => {
       // [修改 1] 最外層容器：設定高度為螢幕高度 (h-screen)，並隱藏超出範圍 (overflow-hidden)
       // 這樣可以鎖死瀏覽器視窗，強制使用內部滾動
       <div className="flex flex-col md:flex-row h-screen bg-slate-50 text-slate-900 font-sans overflow-hidden">
+          
           <style>{`
   /* 滾動條樣式 (保持不變) */
   ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -2778,13 +2771,11 @@ useEffect(() => {
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-  /* --- 🖨️ 列印專用樣式 (Print Styles) --- */
+  /* --- 🖨️ 列印專用樣式 (Print Styles) - 優化版 --- */
   @media print {
       @page { 
           size: A4 portrait; 
-          /* 🟢 關鍵修改：設定 5mm 頁面邊距 (即出血位/安全區) */
-          /* 這能確保印表機不會切掉最外圈的內容 */
-          margin: 5mm;      
+          margin: 10mm; /* 標準 10mm 邊距，最大化可列印範圍 */
       }
       
       html, body {
@@ -2794,64 +2785,64 @@ useEffect(() => {
           padding: 0 !important;
           background: white !important;
           overflow: visible !important;
+          font-size: 11pt !important; /* 字體稍微調小一點點，讓內容更緊湊 */
       }
 
-      /* 1. 隱藏系統介面 */
       #root, .modal-overlay, nav, header, .no-print {
           display: none !important;
       }
 
-      /* 2. 顯示列印內容 */
       #print-clone-root {
           display: block !important;
-          position: relative !important; /* 改回 relative 讓它順從 margin */
+          position: absolute !important;
+          top: 0 !important;
+          left: 0 !important;
           width: 100% !important;
           height: auto !important;
           z-index: 9999;
           background-color: white !important;
       }
       
-      /* 3. 容器樣式修正 */
       #print-clone-root .doc-print-container {
           width: 100% !important;
           max-width: none !important;
-          margin: 0 auto !important;
-          
-          /* 🟢 關鍵修改：內部再留一點白，讓文字不要貼著框線 */
-          padding: 5mm 10mm !important; 
-          
+          margin: 0 !important;
+          padding: 0 !important; /* 移除額外內距，直接使用 @page 的 margin */
           border: none !important;
           box-shadow: none !important;
           transform: none !important; 
-          overflow: visible !important;
       }
 
-      /* 4. 表格優化 (讓格子不要太擠) */
+      /* 表格優化 */
       table {
           width: 100% !important;
           border-collapse: collapse !important;
       }
       
+      /* 調整單元格內距，讓表格更緊湊但保持易讀 */
       th, td {
-          /* 🟢 增加表格單元格內的呼吸空間 */
-          padding: 4px 6px !important; 
+          padding: 4px 4px !important; 
+          border: 1px solid black !important; /* 確保框線清晰 */
       }
 
+      /* 避免文字被切斷 */
       tr {
           page-break-inside: avoid;
-          page-break-after: auto;
       }
       
+      /* 每一頁都顯示表頭 */
       thead {
           display: table-header-group;
       }
       
+      /* 每一頁都顯示頁尾(合計) */
       tfoot {
           display: table-footer-group;
       }
 
-      .signature-section, .no-break {
+      .signature-section {
           page-break-inside: avoid !important;
+          margin-top: 20px !important; /* 減少簽名欄上方的空白 */
       }
 
       * {
@@ -2859,12 +2850,10 @@ useEffect(() => {
           print-color-adjust: exact !important;
       }
       
-      .page-break {
-          page-break-before: always !important;
-          break-before: page !important;
-          display: block;
-          height: 0;
-      }
+      /* 標題與段落間距縮小 */
+      h1 { margin-bottom: 10px !important; font-size: 18pt !important; }
+      .header-info { margin-bottom: 15px !important; }
+      .footer-note { margin-top: 10px !important; padding: 10px !important; }
   }
 `}</style>
 

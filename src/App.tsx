@@ -1390,7 +1390,7 @@ const DocPreviewContent = ({
         const isRent = true;   
 
         return (
-             <div className="doc-print-container w-full bg-white text-black font-sans relative border-[3px] border-blue-400 p-8 box-border overflow-hidden mx-auto">
+             <div className="doc-print-container w-full bg-white text-black font-sans relative border-[3px] border-blue-400 p-8 box-border mx-auto">
                 <div className="flex justify-between items-end mb-4">
                     <div className="text-sm font-bold w-1/3">
                         收據編號<br/>
@@ -1497,7 +1497,7 @@ const DocPreviewContent = ({
         let totalCredit = 0;
         
         filteredTxs.forEach(t => {
-            // 使用 settings 判斷正負
+            // [修正] 使用 settings 判斷正負
             const isIncome = (t.category || '').includes('Rental Income') || 
                              t.category?.includes('Sale') || 
                              (settings?.categories?.find((c: any) => c.name === t.category)?.type === 'Income');
@@ -1609,7 +1609,7 @@ const DocPreviewContent = ({
     return (
         <div className="doc-print-container text-black font-serif text-sm leading-relaxed">
           {/* Page 1 */}
-          <div className="w-full bg-white mx-auto relative page-break pb-10">
+          <div className="w-full bg-white mx-auto relative page-break pb-8">
             <div className="text-right text-xs mb-4">Ref. No./編號: {new Date().getFullYear()}-{Math.floor(Math.random()*1000)}</div>
             <h1 className="text-2xl font-bold text-center mb-6 underline">TENANCY AGREEMENT 租約</h1>
             
@@ -1722,8 +1722,8 @@ const DocPreviewContent = ({
              
              <div className="text-right text-xs mt-4">Page 2 of 4</div>
           </div>
-
-          {/* Page 3 */}
+          
+           {/* Page 3 - Schedule I */}
           <div className="w-full bg-white mx-auto relative page-break pb-10">
             <h1 className="text-2xl font-bold text-center mb-8 underline">Schedule I 附表一</h1>
             
@@ -1792,8 +1792,8 @@ const DocPreviewContent = ({
 
             <div className="text-right text-xs mt-4">Page 3 of 4</div>
           </div>
-
-          {/* Page 4 */}
+          
+           {/* Page 4 - Schedule II */}
           <div className="w-full bg-white mx-auto relative page-break pb-10">
              <h1 className="text-2xl font-bold text-center mb-8 underline">Schedule II 附表二</h1>
              
@@ -2779,30 +2779,32 @@ useEffect(() => {
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-  /* --- 🖨️ 列印專用樣式 (Print Styles) - 優化版 --- */
+  /* --- 🖨️ 列印專用樣式 (Print Styles) - 最終修正版 --- */
   @media print {
       @page { 
           size: A4 portrait; 
-          margin: 10mm; /* 標準 10mm 邊距，最大化可列印範圍 */
+          margin: 10mm; /* 設定 10mm 邊距 */
       }
       
       html, body {
+          width: 100% !important;
           height: auto !important;
           min-height: 0 !important;
           margin: 0 !important;
           padding: 0 !important;
           background: white !important;
           overflow: visible !important;
-          font-size: 11pt !important; /* 字體稍微調小一點點，讓內容更緊湊 */
       }
 
+      /* 1. 隱藏系統介面 */
       #root, .modal-overlay, nav, header, .no-print {
           display: none !important;
       }
 
+      /* 2. 顯示列印內容容器 */
       #print-clone-root {
           display: block !important;
-          position: absolute !important;
+          position: relative !important;
           top: 0 !important;
           left: 0 !important;
           width: 100% !important;
@@ -2811,57 +2813,58 @@ useEffect(() => {
           background-color: white !important;
       }
       
+      /* 3. 核心修正：強制內容寬度與自然高度 */
       #print-clone-root .doc-print-container {
-          width: 100% !important;
-          max-width: none !important;
-          margin: 0 !important;
-          padding: 0 !important; /* 移除額外內距，直接使用 @page 的 margin */
+          width: 100% !important; /* 跟隨頁面寬度 */
+          max-width: 190mm !important; /* 限制最大寬度 (210mm - 20mm邊距)，防止被縮小 */
+          height: auto !important;
+          min-height: 0 !important;
+          margin: 0 auto !important;
+          padding: 0 !important; /* 內距由 @page 控制，這裡設為 0 */
           border: none !important;
           box-shadow: none !important;
-          transform: none !important; 
+          transform: none !important; /* 禁止縮放 */
+          display: block !important; /* 確保是 block 排版而非 flex */
       }
 
-      /* 表格優化 */
+      /* 4. 表格與文字設定 */
       table {
           width: 100% !important;
           border-collapse: collapse !important;
+          font-size: 11pt !important; /* 設定最佳閱讀大小 */
       }
       
-      /* 調整單元格內距，讓表格更緊湊但保持易讀 */
       th, td {
-          padding: 4px 4px !important; 
-          border: 1px solid black !important; /* 確保框線清晰 */
+          padding: 6px 4px !important; /* 適度留白 */
+          border: 1px solid #000 !important; /* 確保線條列印清晰 */
       }
 
-      /* 避免文字被切斷 */
+      /* 5. 分頁控制 */
+      /* 允許表格行內部分頁，但盡量保持整行完整 */
       tr {
           page-break-inside: avoid;
+          page-break-after: auto;
       }
       
-      /* 每一頁都顯示表頭 */
+      /* 標頭在每一頁都顯示 */
       thead {
           display: table-header-group;
       }
       
-      /* 每一頁都顯示頁尾(合計) */
       tfoot {
           display: table-footer-group;
       }
 
+      /* 簽名區不要被切斷，但如果真的塞不下才換頁 */
       .signature-section {
-          page-break-inside: avoid !important;
-          margin-top: 20px !important; /* 減少簽名欄上方的空白 */
+          page-break-inside: avoid;
+          margin-top: 20px !important;
       }
 
-      * {
-          -webkit-print-color-adjust: exact !important;
-          print-color-adjust: exact !important;
+      /* 確保沒有元素會強制撐開高度 */
+      div, p, span {
+          height: auto !important;
       }
-      
-      /* 標題與段落間距縮小 */
-      h1 { margin-bottom: 10px !important; font-size: 18pt !important; }
-      .header-info { margin-bottom: 15px !important; }
-      .footer-note { margin-top: 10px !important; padding: 10px !important; }
   }
 `}</style>
 

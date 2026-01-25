@@ -2361,7 +2361,7 @@ useEffect(() => {
   };
 
   const handlePrint = async () => {
-      // 1. 如果是收據，先處理編號邏輯 (保留您原有的邏輯)
+      // 1. 如果是收據，先處理編號邏輯 (生成新編號)
       if (docConfig.type === 'receipt' && docConfig.linkedTransactionId) {
            let finalReceiptNo = docConfig.existingReceiptNo;
            if (!finalReceiptNo) {
@@ -2375,50 +2375,35 @@ useEffect(() => {
       }
 
       // 2. 核心列印邏輯：複製 DOM 節點
-      // 找到要列印的內容容器
       const printContent = document.querySelector('.doc-print-container');
       if (!printContent) {
-          alert("找不到列印內容");
+          alert("找不到列印內容，請稍後再試");
           return;
       }
 
-      // 複製節點
+      // 複製節點 (Clone)
       const clone = printContent.cloneNode(true) as HTMLElement;
       
-      // 給複製體一個特殊的 ID，方便 CSS 控制
+      // 給複製體一個特殊的 ID，讓 CSS @media print { #print-clone-root } 抓取它
       clone.id = 'print-clone-root';
       
-      // 強制設定複製體的樣式，確保它在最上層且樣式正確
-      Object.assign(clone.style, {
-          position: 'absolute',
-          top: '0',
-          left: '0',
-          width: '100%', // 或 '210mm'
-          margin: '0',
-          padding: '0',
-          backgroundColor: 'white',
-          zIndex: '999999',
-          display: 'block',
-          visibility: 'visible'
-      });
-
-      // 將複製體直接掛載到 body 下 (跳脫 #root 和 Modal 的束縛)
+      // 將複製體直接掛載到 body 下
       document.body.appendChild(clone);
       
-      // 標記 body 進入列印模式 (讓 CSS 隱藏其他東西)
+      // 標記 body 進入列印模式 (雖然主要靠 ID 選擇器，但這是一個好習慣)
       document.body.classList.add('printing-mode');
 
-      // 3. 執行列印
+      // 3. 執行列印 (稍微延遲確保 DOM 渲染完成)
       setTimeout(() => {
           window.print();
           
-          // 4. 列印後清理現場
+          // 4. 列印後清理現場 (移除複製體)
           document.body.classList.remove('printing-mode');
           const cloneToRemove = document.getElementById('print-clone-root');
           if (cloneToRemove) {
               document.body.removeChild(cloneToRemove);
           }
-      }, 300); // 稍微延遲確保 DOM 渲染完成
+      }, 500); 
   };
   
   const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2784,31 +2769,81 @@ useEffect(() => {
       // 這樣可以鎖死瀏覽器視窗，強制使用內部滾動
       <div className="flex flex-col md:flex-row h-screen bg-slate-50 text-slate-900 font-sans overflow-hidden">
           <style>{`
-            ::-webkit-scrollbar { width: 6px; height: 6px; }
-            ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
-            .modal-overlay { background-color: rgba(0, 0, 0, 0.5); }
-            
-            /* iPhone 滾動優化 */
-            .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
-            .scroll-smooth { -webkit-overflow-scrolling: touch; }
-            
-            /* 隱藏 Scrollbar 但保持功能 */
-            .no-scrollbar::-webkit-scrollbar { display: none; }
-            .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  /* 一般滾動條樣式 */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+  .modal-overlay { background-color: rgba(0, 0, 0, 0.5); }
+  
+  /* iPhone 滾動優化 */
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+  .scroll-smooth { -webkit-overflow-scrolling: touch; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-            @media print {
-                @page { size: A4; margin: 15mm; }
-                html, body { height: 100%; margin: 0 !important; padding: 0 !important; background: white; overflow: visible !important; }
-                /* 列印時隱藏側邊欄與導航 */
-                body.printing-mode #root > div { display: block !important; height: auto !important; overflow: visible !important; }
-                .no-print { display: none !important; }
-                body.printing-mode .modal-overlay { display: none !important; }
-                #print-clone-root { display: block !important; visibility: visible !important; position: relative !important; width: 100% !important; }
-                #print-clone-root .w-\[210mm\] { width: 100% !important; height: auto !important; margin: 0 auto !important; border: none !important; padding: 0 !important; }
-                * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-                .page-break { page-break-before: always !important; break-before: page !important; display: block; height: 1px; }
-            }
-          `}</style>
+  /* --- 🖨️ 列印專用樣式 (Print Styles) --- */
+  @media print {
+      @page { 
+          size: A4; 
+          margin: 0mm; /* 清除頁面邊距，由內容自己控制 */
+      }
+      
+      html, body {
+          height: auto !important;
+          min-height: 100% !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          background: white !important;
+          overflow: visible !important; /* 允許內容延伸，避免被切斷 */
+      }
+
+      /* 1. 隱藏系統原本的所有介面 */
+      #root, .modal-overlay, nav, header, .no-print {
+          display: none !important;
+          height: 0 !important;
+          width: 0 !important;
+          opacity: 0 !important;
+          overflow: hidden !important;
+      }
+
+      /* 2. 只顯示我們複製出來的 "列印專用節點" */
+      #print-clone-root {
+          display: block !important;
+          position: absolute !important;
+          top: 0 !important;
+          left: 0 !important;
+          width: 100% !important;
+          height: auto !important;
+          z-index: 9999999 !important;
+          background-color: white !important;
+          visibility: visible !important;
+      }
+      
+      /* 3. 修正列印內容的樣式 */
+      #print-clone-root .doc-print-container {
+          width: 100% !important;
+          max-width: 210mm !important; /* A4 寬度 */
+          margin: 0 auto !important;   /* 置中 */
+          padding: 10mm 15mm !important; /* 設定合適的列印邊距 */
+          border: none !important;     /* 移除預覽時的藍色框線 */
+          box-shadow: none !important; /* 移除陰影 */
+          transform: none !important;  /* 移除預覽時的縮放 (scale) */
+      }
+
+      /* 強制列印背景顏色 (Chrome/Safari) */
+      * {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+      }
+      
+      /* 強制分頁 */
+      .page-break {
+          page-break-before: always !important;
+          break-before: page !important;
+          display: block;
+          height: 1px;
+      }
+  }
+`}</style>
 
           {/* 1. 手機版頂部導航列 (Mobile Header) - [保持不變] */}
           {!reportMode && (

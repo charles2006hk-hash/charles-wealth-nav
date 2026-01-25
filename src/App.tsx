@@ -2769,12 +2769,10 @@ useEffect(() => {
       // 這樣可以鎖死瀏覽器視窗，強制使用內部滾動
       <div className="flex flex-col md:flex-row h-screen bg-slate-50 text-slate-900 font-sans overflow-hidden">
           <style>{`
-  /* 一般滾動條樣式 */
+  /* 滾動條樣式 (保持不變) */
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
   .modal-overlay { background-color: rgba(0, 0, 0, 0.5); }
-  
-  /* iPhone 滾動優化 */
   .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
   .scroll-smooth { -webkit-overflow-scrolling: touch; }
   .no-scrollbar::-webkit-scrollbar { display: none; }
@@ -2783,64 +2781,89 @@ useEffect(() => {
   /* --- 🖨️ 列印專用樣式 (Print Styles) --- */
   @media print {
       @page { 
-          size: A4; 
-          margin: 0mm; /* 清除頁面邊距，由內容自己控制 */
+          size: A4 portrait; 
+          /* 🟢 關鍵修改：設定 5mm 頁面邊距 (即出血位/安全區) */
+          /* 這能確保印表機不會切掉最外圈的內容 */
+          margin: 5mm;      
       }
       
       html, body {
           height: auto !important;
-          min-height: 100% !important;
+          min-height: 0 !important;
           margin: 0 !important;
           padding: 0 !important;
           background: white !important;
-          overflow: visible !important; /* 允許內容延伸，避免被切斷 */
+          overflow: visible !important;
       }
 
-      /* 1. 隱藏系統原本的所有介面 */
+      /* 1. 隱藏系統介面 */
       #root, .modal-overlay, nav, header, .no-print {
           display: none !important;
-          height: 0 !important;
-          width: 0 !important;
-          opacity: 0 !important;
-          overflow: hidden !important;
       }
 
-      /* 2. 只顯示我們複製出來的 "列印專用節點" */
+      /* 2. 顯示列印內容 */
       #print-clone-root {
           display: block !important;
-          position: absolute !important;
-          top: 0 !important;
-          left: 0 !important;
+          position: relative !important; /* 改回 relative 讓它順從 margin */
           width: 100% !important;
           height: auto !important;
-          z-index: 9999999 !important;
+          z-index: 9999;
           background-color: white !important;
-          visibility: visible !important;
       }
       
-      /* 3. 修正列印內容的樣式 */
+      /* 3. 容器樣式修正 */
       #print-clone-root .doc-print-container {
           width: 100% !important;
-          max-width: 210mm !important; /* A4 寬度 */
-          margin: 0 auto !important;   /* 置中 */
-          padding: 10mm 15mm !important; /* 設定合適的列印邊距 */
-          border: none !important;     /* 移除預覽時的藍色框線 */
-          box-shadow: none !important; /* 移除陰影 */
-          transform: none !important;  /* 移除預覽時的縮放 (scale) */
+          max-width: none !important;
+          margin: 0 auto !important;
+          
+          /* 🟢 關鍵修改：內部再留一點白，讓文字不要貼著框線 */
+          padding: 5mm 10mm !important; 
+          
+          border: none !important;
+          box-shadow: none !important;
+          transform: none !important; 
+          overflow: visible !important;
       }
 
-      /* 強制列印背景顏色 (Chrome/Safari) */
+      /* 4. 表格優化 (讓格子不要太擠) */
+      table {
+          width: 100% !important;
+          border-collapse: collapse !important;
+      }
+      
+      th, td {
+          /* 🟢 增加表格單元格內的呼吸空間 */
+          padding: 4px 6px !important; 
+      }
+
+      tr {
+          page-break-inside: avoid;
+          page-break-after: auto;
+      }
+      
+      thead {
+          display: table-header-group;
+      }
+      
+      tfoot {
+          display: table-footer-group;
+      }
+
+      .signature-section, .no-break {
+          page-break-inside: avoid !important;
+      }
+
       * {
           -webkit-print-color-adjust: exact !important;
           print-color-adjust: exact !important;
       }
       
-      /* 強制分頁 */
       .page-break {
           page-break-before: always !important;
           break-before: page !important;
           display: block;
-          height: 1px;
+          height: 0;
       }
   }
 `}</style>

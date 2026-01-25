@@ -1517,7 +1517,7 @@ const DocPreviewContent = ({
             <div className="doc-print-container bg-white w-full text-black font-serif mx-auto relative p-4">
                 <h1 className="text-2xl font-bold text-center underline mb-4">RENTAL STATEMENT 租務對數單</h1>
                 
-                <div className="flex justify-between mb-4 text-sm header-info">
+                <div className="flex justify-between mb-2 text-sm header-info">
                     <div className="w-1/2">
                         <p className="mb-1"><span className="font-bold inline-block w-20">Property:</span> {prop.name}</p>
                         <p><span className="font-bold inline-block w-20">Address:</span> {prop.address}</p>
@@ -1529,7 +1529,7 @@ const DocPreviewContent = ({
                     </div>
                 </div>
 
-                <table className="w-full border-collapse border border-black text-sm mb-4">
+                <table className="w-full border-collapse border border-black text-sm mb-2">
                     <thead>
                         <tr className="bg-gray-100">
                             <th className="border border-black p-2 text-left w-[15%]">Date</th>
@@ -1590,19 +1590,26 @@ const DocPreviewContent = ({
                     </tfoot>
                 </table>
 
+                {/* 備註區：確保與表格距離近一點 */}
                 {docConfig.statementFooterNote && (
-                    <div className="border p-3 bg-slate-50 text-sm no-break footer-note">
+                    <div className="border p-2 bg-slate-50 text-sm footer-note mb-4">
                         <p className="font-bold underline mb-1">Notes / Remarks:</p>
-                        <p className="whitespace-pre-wrap">{docConfig.statementFooterNote}</p>
+                        <p className="whitespace-pre-wrap leading-tight">{docConfig.statementFooterNote}</p>
                     </div>
                 )}
                 
-                <div className="flex justify-between signature-section pt-12">
-                    <div className="w-1/3 border-t border-black pt-2 text-center text-xs">Prepared By</div>
-                    <div className="w-1/3 border-t border-black pt-2 text-center text-xs">Received & Confirmed By</div>
+                {/* 🟢 簽名區修正：移除 pt-12，改用 mt-8，並加入 border-t 讓視覺分隔更明確但省空間 */}
+                <div className="flex justify-between signature-section mt-8">
+                    <div className="w-1/3">
+                        <div className="border-t border-black pt-2 text-center text-xs">Prepared By</div>
+                    </div>
+                    <div className="w-1/3">
+                        <div className="border-t border-black pt-2 text-center text-xs">Received & Confirmed By</div>
+                    </div>
                 </div>
             </div>
         );
+    }
     }
 
     // --- 3. 租約樣式 (Lease) ---
@@ -2790,7 +2797,7 @@ useEffect(() => {
       <div className="flex flex-col md:flex-row h-screen bg-slate-50 text-slate-900 font-sans overflow-hidden">
           
           <style>{`
-  /* 滾動條與基礎樣式 */
+  /* --- 基礎滾動條樣式 (螢幕顯示用) --- */
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
   .modal-overlay { background-color: rgba(0, 0, 0, 0.5); }
@@ -2799,11 +2806,11 @@ useEffect(() => {
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-  /* --- 🖨️ 列印專用樣式 (Print Styles) - 智慧縮放版 --- */
+  /* --- 🖨️ 列印專用樣式 (Print Styles) --- */
   @media print {
       @page { 
           size: A4 portrait; 
-          margin: 10mm; /* 設定標準邊距 */
+          margin: 10mm; /* 設定 10mm 標準邊距 */
       }
       
       html, body {
@@ -2812,14 +2819,15 @@ useEffect(() => {
           margin: 0 !important;
           padding: 0 !important;
           background: white !important;
+          overflow: visible !important; /* 允許內容延伸 */
       }
 
-      /* 1. 隱藏系統介面 */
+      /* 1. 隱藏系統原本的介面 (導航欄、按鈕等) */
       #root, .modal-overlay, nav, header, .no-print {
           display: none !important;
       }
 
-      /* 2. 顯示列印內容容器 */
+      /* 2. 顯示我們複製出來的列印專用容器 */
       #print-clone-root {
           display: block !important;
           position: absolute;
@@ -2830,51 +2838,73 @@ useEffect(() => {
           background-color: white;
       }
 
-      /* 3. 預設容器樣式 (100% 大小) */
+      /* 3. 預設容器樣式 */
       .doc-print-container {
           width: 100% !important;
           margin: 0 auto !important;
-          padding: 0 !important;
+          padding: 0 !important; /* 內距由 @page 控制，這裡歸零 */
           border: none !important;
           box-shadow: none !important;
-          transform-origin: top center; /* 縮放基準點：上方置中 */
+          transform-origin: top center; /* 縮放基準點 */
       }
 
-      /* --- 🟢 核心功能：80% 縮放模式 --- */
-      /* 當 JavaScript 偵測到高度超標時，會加上此 class */
+      /* --- 🟢 智慧縮放模式 (Smart Scaling) --- */
+      /* 當 JS 偵測到高度超標時，會加上此 class */
       .print-scale-80 .doc-print-container {
           transform: scale(0.8) !important; /* 縮小到 80% */
-          width: 125% !important; /* 寬度補償 (100 / 0.8 = 125%) 確保填滿橫向 */
+          width: 125% !important; /* 寬度補償 (100/0.8) 確保橫向填滿 */
           margin-left: -12.5% !important; /* 修正置中偏移 */
       }
 
-      /* 4. 表格優化 (解決分頁留白問題) */
+      /* 4. 表格優化 */
       table {
           width: 100% !important;
           border-collapse: collapse !important;
-          font-size: 11pt !important;
+          font-size: 11pt !important; /* 設定最佳閱讀字級 */
+          margin-bottom: 5px !important;
       }
       
       th, td {
-          padding: 4px 6px !important;
-          border: 1px solid #000 !important;
+          padding: 4px 5px !important; /* 適度留白，不要太擠也不要太鬆 */
+          border: 1px solid #000 !important; /* 確保線條清晰 */
       }
 
-      /* 允許表格在頁面中間斷開，避免 "整張表格被推到下一頁" */
+      /* 表格分頁控制 */
       tr {
           page-break-inside: avoid; /* 盡量不切斷單一行文字 */
           page-break-after: auto;
       }
       
-      /* 確保表頭在每一頁都顯示 */
-      thead {
-          display: table-header-group;
+      thead { display: table-header-group; } /* 每一頁都顯示表頭 */
+      tfoot { display: table-footer-group; } /* 每一頁都顯示頁尾合計 */
+
+      /* 5. 簽名區與備註區保護 */
+      /* 確保這些區塊盡量不要被切斷，如果空間不足就整塊移到下一頁 */
+      .signature-section {
+          page-break-inside: avoid !important;
+          break-inside: avoid !important;
+          margin-top: 20px !important;
+      }
+
+      .footer-note {
+          page-break-inside: avoid !important;
+          break-inside: avoid !important;
+          margin-top: 10px !important;
+          font-size: 10pt !important;
+      }
+
+      /* 強制列印背景顏色 (Chrome/Safari) */
+      * {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
       }
       
-      /* 5. 簽名區保護 */
-      .signature-section {
-          page-break-inside: avoid;
-          margin-top: 20px !important;
+      /* 強制分頁符號 (給租約等多頁文件使用) */
+      .page-break {
+          page-break-before: always !important;
+          break-before: page !important;
+          display: block;
+          height: 0;
       }
   }
 `}</style>

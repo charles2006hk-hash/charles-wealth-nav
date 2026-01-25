@@ -1369,10 +1369,20 @@ const PropertyDetailView = ({
     );
 };
 
-const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig: DocConfig, properties: Property[], transactions: Transaction[] }) => {
+const DocPreviewContent = ({ 
+    docConfig, 
+    properties, 
+    transactions, 
+    settings 
+}: { 
+    docConfig: DocConfig, 
+    properties: Property[], 
+    transactions: Transaction[], 
+    settings: AppSettings 
+}) => {
     const prop = properties.find(p => p.id === docConfig.propId) || { name: 'Unknown Property', address: '' } as Property;
 
-    // 1. 收據樣式 (Receipt)
+    // --- 1. 收據樣式 (Receipt) ---
     if (docConfig.type === 'receipt') {
         const receiptNo = docConfig.existingReceiptNo || `PREVIEW`; 
         const englishAmount = convertNumberToEnglish(docConfig.amount);
@@ -1380,14 +1390,14 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
         const isRent = true;   
 
         return (
-             <div className="doc-print-container w-[210mm] h-[145mm] mx-auto bg-white text-black font-sans relative border-[3px] border-blue-400 p-6 box-border overflow-hidden">
-                <div className="flex justify-between items-end mb-2">
+             <div className="doc-print-container w-full bg-white text-black font-sans relative border-[3px] border-blue-400 p-8 box-border overflow-hidden mx-auto">
+                <div className="flex justify-between items-end mb-4">
                     <div className="text-sm font-bold w-1/3">
                         收據編號<br/>
                         Receipt No. : <span className="text-red-600 text-xl font-mono ml-2">{receiptNo}</span>
                     </div>
                     <div className="text-center w-1/3">
-                        <h1 className="text-2xl font-bold whitespace-nowrap">收 OFFICIAL RECEIPT 據</h1>
+                        <h1 className="text-3xl font-bold whitespace-nowrap">收 OFFICIAL RECEIPT 據</h1>
                     </div>
                     <div className="text-right w-1/3 text-sm">
                         日期<br/>
@@ -1395,7 +1405,7 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
                     </div>
                 </div>
 
-                <div className="space-y-3 text-sm font-medium">
+                <div className="space-y-4 text-sm font-medium">
                     <div className="flex items-end">
                         <div className="whitespace-nowrap pb-1">茲 收 到<br/>Received From :</div>
                         <div className="border-b border-black flex-1 mx-2 px-2 text-lg font-bold pb-1">{docConfig.tenant}</div>
@@ -1412,20 +1422,18 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
                         <div className="border-b border-black flex-1 mx-2 px-2 pb-1 relative">
                             <span className="relative z-10 text-lg italic">{englishAmount}</span>
                             <div className="absolute top-1/2 left-0 w-full h-[1px] bg-gray-200 z-0"></div>
-                            <div className="absolute top-[30%] left-0 w-full h-[1px] bg-gray-200 z-0"></div>
-                            <div className="absolute top-[70%] left-0 w-full h-[1px] bg-gray-200 z-0"></div>
                         </div>
                     </div>
 
-                    <div className="flex items-center justify-center my-1">
-                        <div className="text-4xl font-serif italic font-bold border-b-2 border-black border-t-2 py-1 px-8 w-2/3 text-center">
+                    <div className="flex items-center justify-center my-4">
+                        <div className="text-4xl font-serif italic font-bold border-b-2 border-black border-t-2 py-2 px-12 text-center bg-gray-50">
                             HK$ {docConfig.amount.toLocaleString()}
                         </div>
                     </div>
 
                     <div className="flex items-end">
                         <div className="whitespace-nowrap pb-1">物 業 地 址<br/>Property at :</div>
-                        <div className="border-b border-black flex-1 mx-2 px-2 pb-1 truncate">{prop.address}</div>
+                        <div className="border-b border-black flex-1 mx-2 px-2 pb-1 truncate font-bold">{prop.address}</div>
                     </div>
 
                     <div className="flex justify-end">
@@ -1447,32 +1455,29 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
                         </div>
                     </div>
 
-                    <div className="flex items-end mt-2 text-xs">
+                    <div className="flex items-end mt-4 text-xs border-t pt-2">
                         <div className="flex gap-4 items-center">
-                            <label className="flex items-center gap-1"><div className="w-4 h-4 border border-black flex items-center justify-center">{docConfig.paymentMethod === 'Cash' ? '✔' : ''}</div> 現金<br/>Cash</label>
-                            <label className="flex items-center gap-1"><div className="w-4 h-4 border border-black flex items-center justify-center">{docConfig.paymentMethod === 'Cheque' ? '✔' : ''}</div> 支票號碼<br/>Cheque</label>
+                            <label className="flex items-center gap-1"><div className="w-4 h-4 border border-black flex items-center justify-center">{docConfig.paymentMethod === 'Cash' ? '✔' : ''}</div> 現金 Cash</label>
+                            <label className="flex items-center gap-1"><div className="w-4 h-4 border border-black flex items-center justify-center">{docConfig.paymentMethod === 'Cheque' ? '✔' : ''}</div> 支票 Cheque</label>
                         </div>
                         <div className="border-b border-black w-24 mx-1"></div>
-                        <div className="mx-2">銀行<br/>Bank</div>
+                        <div className="mx-2">銀行 Bank</div>
                         <div className="border-b border-black w-24 mx-1 flex-1 text-center">{docConfig.paymentMethod === 'Bank Transfer' ? 'Bank Transfer' : ''}</div>
-                        <div className="mx-2 text-right">開票日期<br/>Date</div>
+                        <div className="mx-2 text-right">日期 Date</div>
                         <div className="border-b border-black w-24 mx-1"></div>
-                        <div className="flex items-center gap-2 ml-auto">
-                            <div className="w-4 h-4 border border-black"></div> 鎖匙 Key(s) <span className="border-b border-black inline-block w-8 text-center"></span> pcs
-                        </div>
                     </div>
                 </div>
 
-                <div className="absolute bottom-6 left-6 right-6 flex justify-between items-end">
-                    <div className="text-xs w-1/2">
+                <div className="mt-12 flex justify-between items-end signature-section">
+                    <div className="text-xs w-1/2 text-gray-500">
                         交來支票收妥作實<br/>
                         Cheques received are subject to clearance
                     </div>
                     <div className="w-1/2 flex flex-col items-end">
-                        <div className="w-48 border-b border-black mb-1 text-center font-script text-xl relative">
+                        <div className="w-64 border-b border-black mb-1 text-center font-script text-2xl relative h-12 flex items-end justify-center">
                             {docConfig.landlord}
                         </div>
-                        <div className="w-48 flex justify-between text-xs">
+                        <div className="w-64 flex justify-between text-xs font-bold">
                             <span>經手收款人</span>
                             <span>Received by</span>
                         </div>
@@ -1482,7 +1487,7 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
         );
     } 
     
-    // 2. 對數單樣式 (Statement) - 緊湊優化版
+    // --- 2. 對數單樣式 (Statement) ---
     if (docConfig.type === 'statement') {
         const filteredTxs = transactions
             .filter(t => t.propertyId === docConfig.propId && (!docConfig.statementDateStart || t.date >= docConfig.statementDateStart) && (!docConfig.statementDateEnd || t.date <= docConfig.statementDateEnd))
@@ -1492,7 +1497,11 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
         let totalCredit = 0;
         
         filteredTxs.forEach(t => {
-            const isIncome = (t.category || '').includes('Rental Income') || t.category?.includes('Sale') || (settings.categories?.find(c => c.name === t.category)?.type === 'Income');
+            // 使用 settings 判斷正負
+            const isIncome = (t.category || '').includes('Rental Income') || 
+                             t.category?.includes('Sale') || 
+                             (settings?.categories?.find((c: any) => c.name === t.category)?.type === 'Income');
+            
             if (isIncome) totalCredit += t.amount;
             else totalDebit += t.amount;
         });
@@ -1502,16 +1511,12 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
         const showDebit = docConfig.showDebit !== false; 
         const showCredit = docConfig.showCredit !== false;
         const showNotes = docConfig.showRowNotes !== false;
-        
-        // 計算欄位跨度
         const colCount = 2 + (showDebit ? 1 : 0) + (showCredit ? 1 : 0);
 
         return (
-            // 移除 p-8 和 min-h，改用 w-full 和緊湊的 padding
             <div className="doc-print-container bg-white w-full text-black font-serif mx-auto relative p-4">
                 <h1 className="text-2xl font-bold text-center underline mb-4">RENTAL STATEMENT 租務對數單</h1>
                 
-                {/* Header 資訊：減少 mb */}
                 <div className="flex justify-between mb-4 text-sm header-info">
                     <div className="w-1/2">
                         <p className="mb-1"><span className="font-bold inline-block w-20">Property:</span> {prop.name}</p>
@@ -1524,11 +1529,9 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
                     </div>
                 </div>
 
-                {/* 表格：移除 table-fixed，讓瀏覽器自動調整寬度以容納更多文字 */}
                 <table className="w-full border-collapse border border-black text-sm mb-4">
                     <thead>
                         <tr className="bg-gray-100">
-                            {/* 設定最小寬度，避免日期被擠壓 */}
                             <th className="border border-black p-2 text-left w-[15%]">Date</th>
                             <th className="border border-black p-2 text-left">Description / Particulars</th>
                             {showDebit && <th className="border border-black p-2 text-right w-[18%]">Debit (Dr)</th>}
@@ -1539,7 +1542,9 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
                         {filteredTxs.length === 0 && <tr><td colSpan={colCount} className="p-4 text-center">No records found for this period.</td></tr>}
                         
                         {filteredTxs.map(t => {
-                             const isIncome = (t.category || '').includes('Rental Income') || t.category?.includes('Sale') || (settings.categories?.find(c => c.name === t.category)?.type === 'Income');
+                             const isIncome = (t.category || '').includes('Rental Income') || 
+                                              t.category?.includes('Sale') || 
+                                              (settings?.categories?.find((c: any) => c.name === t.category)?.type === 'Income');
                             return (
                                 <tr key={t.id}>
                                     <td className="border border-black p-2 align-top whitespace-nowrap">{t.date}</td>
@@ -1563,7 +1568,6 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
                                 </tr>
                             );
                         })}
-                        {/* 移除了空白填充行，節省空間 */}
                     </tbody>
                     
                     <tfoot>
@@ -1586,7 +1590,6 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
                     </tfoot>
                 </table>
 
-                {/* 底部備註區：縮小 padding 與 margin */}
                 {docConfig.statementFooterNote && (
                     <div className="border p-3 bg-slate-50 text-sm no-break footer-note">
                         <p className="font-bold underline mb-1">Notes / Remarks:</p>
@@ -1594,8 +1597,7 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
                     </div>
                 )}
                 
-                {/* 簽名區：使用 signature-section 類別，防止分頁切斷 */}
-                <div className="flex justify-between signature-section pt-8">
+                <div className="flex justify-between signature-section pt-12">
                     <div className="w-1/3 border-t border-black pt-2 text-center text-xs">Prepared By</div>
                     <div className="w-1/3 border-t border-black pt-2 text-center text-xs">Received & Confirmed By</div>
                 </div>
@@ -1603,11 +1605,11 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
         );
     }
 
-    // 3. 租約樣式 (Lease) - 完整 4 頁
+    // --- 3. 租約樣式 (Lease) ---
     return (
         <div className="doc-print-container text-black font-serif text-sm leading-relaxed">
           {/* Page 1 */}
-          <div className="w-[210mm] min-h-[297mm] p-10 bg-white mx-auto relative page-break">
+          <div className="w-full bg-white mx-auto relative page-break pb-10">
             <div className="text-right text-xs mb-4">Ref. No./編號: {new Date().getFullYear()}-{Math.floor(Math.random()*1000)}</div>
             <h1 className="text-2xl font-bold text-center mb-6 underline">TENANCY AGREEMENT 租約</h1>
             
@@ -1651,10 +1653,11 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
                     <p className="text-xs text-gray-600">7. 租客須交予業主保証金（金額如附表一所列）。</p>
                 </li>
             </ol>
-             <div className="absolute bottom-4 right-10 text-xs">Page 1 of 4</div>
+             <div className="text-right text-xs mt-4">Page 1 of 4</div>
           </div>
 
-          <div className="w-[210mm] min-h-[297mm] p-10 bg-white mx-auto relative page-break">
+          {/* Page 2 */}
+          <div className="w-full bg-white mx-auto relative page-break pb-10">
              <ol className="list-decimal pl-6 space-y-3 text-sm" start={8}>
                  <li>
                     <p>The Landlord shall refund the Security Deposit to the Tenant without interest within 7 days from the date of delivery of vacant possession. The Landlord may deduct any loss or damage from the deposit.</p>
@@ -1700,7 +1703,7 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
                 </div>
              </div>
 
-             <div className="grid grid-cols-2 gap-16 mt-8">
+             <div className="grid grid-cols-2 gap-16 mt-8 signature-section">
                  <div>
                      <p className="mb-4 text-sm">Confirmed and Accepted by the <strong>Landlord 業主</strong>:</p>
                      <div className="h-24 border-b border-black mb-2"></div>
@@ -1717,13 +1720,14 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
                  </div>
              </div>
              
-             <div className="absolute bottom-4 right-10 text-xs">Page 2 of 4</div>
+             <div className="text-right text-xs mt-4">Page 2 of 4</div>
           </div>
 
-          <div className="w-[210mm] min-h-[297mm] p-10 bg-white mx-auto relative page-break">
+          {/* Page 3 */}
+          <div className="w-full bg-white mx-auto relative page-break pb-10">
             <h1 className="text-2xl font-bold text-center mb-8 underline">Schedule I 附表一</h1>
             
-            <table className="w-full border-collapse border border-black">
+            <table className="w-full border-collapse border border-black mb-8">
                 <tbody>
                     <tr>
                         <td className="border border-black p-4 w-1/4 font-bold bg-gray-50">The Premises<br/>物業地址</td>
@@ -1768,7 +1772,7 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
                 </tbody>
             </table>
 
-             <div className="mt-12 pt-8 border-t-2 border-black">
+             <div className="mt-12 pt-8 border-t-2 border-black signature-section">
                 <h2 className="font-bold text-lg mb-4">KEY RECEIPT 鎖匙收據</h2>
                 <p className="mb-4 text-sm">Acknowledged the receipt of keys of the premises by the Tenant 租客接收業主所交屬該物業之鎖匙：</p>
                 
@@ -1786,10 +1790,11 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
                 </div>
              </div>
 
-            <div className="absolute bottom-4 right-10 text-xs">Page 3 of 4</div>
+            <div className="text-right text-xs mt-4">Page 3 of 4</div>
           </div>
 
-          <div className="w-[210mm] min-h-[297mm] p-10 bg-white mx-auto relative page-break">
+          {/* Page 4 */}
+          <div className="w-full bg-white mx-auto relative page-break pb-10">
              <h1 className="text-2xl font-bold text-center mb-8 underline">Schedule II 附表二</h1>
              
              <div className="space-y-8">
@@ -1844,14 +1849,25 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
                     </div>
                  </div>
              </div>
-             <div className="absolute bottom-4 right-10 text-xs">Page 4 of 4</div>
+             <div className="text-right text-xs mt-4">Page 4 of 4</div>
           </div>
         </div>
     );
 };
 
+interface DocModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    docConfig: DocConfig;
+    setDocConfig: (config: DocConfig) => void;
+    handlePrint: () => void;
+    properties: Property[];
+    transactions: Transaction[];
+    settings: AppSettings; // <--- 5. 新增這裡
+}
+
 const DocModal: React.FC<DocModalProps> = ({ 
-    isOpen, onClose, docConfig, setDocConfig, handlePrint, properties, transactions 
+    isOpen, onClose, docConfig, setDocConfig, handlePrint, properties, transactions, settings
 }) => {
     if (!isOpen) return null;
 
@@ -1907,7 +1923,7 @@ const DocModal: React.FC<DocModalProps> = ({
                     </div>
                     <div className="w-full md:w-3/4 bg-slate-200 rounded-lg p-4 md:p-8 overflow-y-auto flex justify-center shadow-inner">
                         <div className="doc-print-container scale-[0.6] md:scale-100 origin-top">
-                            <DocPreviewContent docConfig={docConfig} properties={properties} transactions={transactions} />
+                            <DocPreviewContent docConfig={docConfig} properties={properties} transactions={transactions} settings={settings} />
                         </div>
                     </div>
                 </div>
@@ -1916,15 +1932,7 @@ const DocModal: React.FC<DocModalProps> = ({
     );
 }
 
-interface DocModalProps {
-    isOpen: boolean;
-    onClose: () => void;
-    docConfig: DocConfig;
-    setDocConfig: (config: DocConfig) => void;
-    handlePrint: () => void;
-    properties: Property[];
-    transactions: Transaction[];
-}
+
 
 // --- 9. 主應用程式 ---
 const App: React.FC = () => {
@@ -3105,7 +3113,7 @@ useEffect(() => {
           </div>
 
           {/* Modals - 全部加入 md:w-[] 響應式寬度 */}
-          {modalMode === 'doc' && <DocModal isOpen={modalMode === 'doc'} onClose={() => setModalMode('none')} docConfig={docConfig} setDocConfig={setDocConfig} handlePrint={handlePrint} properties={properties} transactions={transactions} />}
+          {modalMode === 'doc' && <DocModal isOpen={modalMode === 'doc'} onClose={() => setModalMode('none')} docConfig={docConfig} setDocConfig={setDocConfig} handlePrint={handlePrint} properties={properties} transactions={transactions} settings={settings} />}
           
           {/* --- 交易編輯視窗 (Transaction Modal) --- */}
           {modalMode === 'transaction' && (

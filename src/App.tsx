@@ -2361,7 +2361,7 @@ useEffect(() => {
   };
 
   const handlePrint = async () => {
-      // 1. 如果是收據，先處理編號邏輯 (生成新編號)
+      // 1. 如果是收據，先處理編號邏輯 (保持不變)
       if (docConfig.type === 'receipt' && docConfig.linkedTransactionId) {
            let finalReceiptNo = docConfig.existingReceiptNo;
            if (!finalReceiptNo) {
@@ -2374,7 +2374,7 @@ useEffect(() => {
            }
       }
 
-      // 2. 核心列印邏輯：複製 DOM 節點
+      // 2. 準備列印內容
       const printContent = document.querySelector('.doc-print-container');
       if (!printContent) {
           alert("找不到列印內容，請稍後再試");
@@ -2384,28 +2384,48 @@ useEffect(() => {
       // 複製節點 (Clone)
       const clone = printContent.cloneNode(true) as HTMLElement;
       
-      // 給複製體一個特殊的 ID，讓 CSS @media print { #print-clone-root } 抓取它
-      clone.id = 'print-clone-root';
+      // 建立一個外層容器來包裹，方便我們控制縮放
+      const wrapper = document.createElement('div');
+      wrapper.id = 'print-clone-root';
+      wrapper.appendChild(clone);
       
-      // 將複製體直接掛載到 body 下
-      document.body.appendChild(clone);
-      
-      // 標記 body 進入列印模式 (雖然主要靠 ID 選擇器，但這是一個好習慣)
+      document.body.appendChild(wrapper);
       document.body.classList.add('printing-mode');
 
-      // 3. 執行列印 (稍微延遲確保 DOM 渲染完成)
+      // --- 🟢 核心邏輯：智慧縮放判斷 ---
+      // 取得複製後的高度 (這時瀏覽器已經計算好排版了)
+      const contentHeight = clone.scrollHeight;
+      
+      // A4 紙張在 96DPI 下的高度約為 1123px
+      // 扣除上下邊距 10mm (~76px)，安全區域約為 1047px
+      // 我們設定一個寬鬆一點的門檻，例如 1080px
+      const A4_HEIGHT_THRESHOLD = 1080;
+
+      if (contentHeight > A4_HEIGHT_THRESHOLD) {
+          // 如果高度超過一頁...
+          // 檢查縮小 80% 後是否能塞進一頁 ( 1080 / 0.8 = 1350 )
+          // 如果縮小後能塞進去，就縮放。
+          // 如果縮小後還是超過 (例如超級多頁)，那就乾脆不縮放，讓它自然分頁比較易讀。
+          // 但根據您的要求：「超出可以整頁縮小80%」，我們直接套用。
+          
+          wrapper.classList.add('print-scale-80');
+          console.log(`Content height ${contentHeight}px exceeds A4. Applying 80% scale.`);
+      } else {
+          console.log(`Content height ${contentHeight}px fits in A4. No scaling.`);
+      }
+      // -------------------------------
+
+      // 3. 執行列印
       setTimeout(() => {
           window.print();
           
-          // 4. 列印後清理現場 (移除複製體)
+          // 4. 清理現場
           document.body.classList.remove('printing-mode');
-          const cloneToRemove = document.getElementById('print-clone-root');
-          if (cloneToRemove) {
-              document.body.removeChild(cloneToRemove);
+          if (document.body.contains(wrapper)) {
+              document.body.removeChild(wrapper);
           }
       }, 500); 
   };
-  
   const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -2770,7 +2790,7 @@ useEffect(() => {
       <div className="flex flex-col md:flex-row h-screen bg-slate-50 text-slate-900 font-sans overflow-hidden">
           
           <style>{`
-  /* 滾動條樣式 (保持不變) */
+  /* 滾動條與基礎樣式 */
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
   .modal-overlay { background-color: rgba(0, 0, 0, 0.5); }
@@ -2779,21 +2799,19 @@ useEffect(() => {
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-  /* --- 🖨️ 列印專用樣式 (Print Styles) - 最終修正版 --- */
+  /* --- 🖨️ 列印專用樣式 (Print Styles) - 智慧縮放版 --- */
   @media print {
       @page { 
           size: A4 portrait; 
-          margin: 10mm; /* 設定 10mm 邊距 */
+          margin: 10mm; /* 設定標準邊距 */
       }
       
       html, body {
-          width: 100% !important;
-          height: auto !important;
-          min-height: 0 !important;
+          width: 100%;
+          height: 100%;
           margin: 0 !important;
           padding: 0 !important;
           background: white !important;
-          overflow: visible !important;
       }
 
       /* 1. 隱藏系統介面 */
@@ -2804,66 +2822,59 @@ useEffect(() => {
       /* 2. 顯示列印內容容器 */
       #print-clone-root {
           display: block !important;
-          position: relative !important;
-          top: 0 !important;
-          left: 0 !important;
-          width: 100% !important;
-          height: auto !important;
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
           z-index: 9999;
-          background-color: white !important;
-      }
-      
-      /* 3. 核心修正：強制內容寬度與自然高度 */
-      #print-clone-root .doc-print-container {
-          width: 100% !important; /* 跟隨頁面寬度 */
-          max-width: 190mm !important; /* 限制最大寬度 (210mm - 20mm邊距)，防止被縮小 */
-          height: auto !important;
-          min-height: 0 !important;
-          margin: 0 auto !important;
-          padding: 0 !important; /* 內距由 @page 控制，這裡設為 0 */
-          border: none !important;
-          box-shadow: none !important;
-          transform: none !important; /* 禁止縮放 */
-          display: block !important; /* 確保是 block 排版而非 flex */
+          background-color: white;
       }
 
-      /* 4. 表格與文字設定 */
+      /* 3. 預設容器樣式 (100% 大小) */
+      .doc-print-container {
+          width: 100% !important;
+          margin: 0 auto !important;
+          padding: 0 !important;
+          border: none !important;
+          box-shadow: none !important;
+          transform-origin: top center; /* 縮放基準點：上方置中 */
+      }
+
+      /* --- 🟢 核心功能：80% 縮放模式 --- */
+      /* 當 JavaScript 偵測到高度超標時，會加上此 class */
+      .print-scale-80 .doc-print-container {
+          transform: scale(0.8) !important; /* 縮小到 80% */
+          width: 125% !important; /* 寬度補償 (100 / 0.8 = 125%) 確保填滿橫向 */
+          margin-left: -12.5% !important; /* 修正置中偏移 */
+      }
+
+      /* 4. 表格優化 (解決分頁留白問題) */
       table {
           width: 100% !important;
           border-collapse: collapse !important;
-          font-size: 11pt !important; /* 設定最佳閱讀大小 */
+          font-size: 11pt !important;
       }
       
       th, td {
-          padding: 6px 4px !important; /* 適度留白 */
-          border: 1px solid #000 !important; /* 確保線條列印清晰 */
+          padding: 4px 6px !important;
+          border: 1px solid #000 !important;
       }
 
-      /* 5. 分頁控制 */
-      /* 允許表格行內部分頁，但盡量保持整行完整 */
+      /* 允許表格在頁面中間斷開，避免 "整張表格被推到下一頁" */
       tr {
-          page-break-inside: avoid;
+          page-break-inside: avoid; /* 盡量不切斷單一行文字 */
           page-break-after: auto;
       }
       
-      /* 標頭在每一頁都顯示 */
+      /* 確保表頭在每一頁都顯示 */
       thead {
           display: table-header-group;
       }
       
-      tfoot {
-          display: table-footer-group;
-      }
-
-      /* 簽名區不要被切斷，但如果真的塞不下才換頁 */
+      /* 5. 簽名區保護 */
       .signature-section {
           page-break-inside: avoid;
           margin-top: 20px !important;
-      }
-
-      /* 確保沒有元素會強制撐開高度 */
-      div, p, span {
-          height: auto !important;
       }
   }
 `}</style>

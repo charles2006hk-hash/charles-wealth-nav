@@ -1508,7 +1508,7 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
         const colCount = 2 + (showDebit ? 1 : 0) + (showCredit ? 1 : 0);
 
         return (
-            <div className="doc-print-container bg-white p-10 w-[210mm] min-h-[297mm] text-black font-serif mx-auto relative">
+            <div className="doc-print-container bg-white p-8 w-full text-black font-serif mx-auto relative">
                 <h1 className="text-2xl font-bold text-center underline mb-6">RENTAL STATEMENT 租務對數單</h1>
                 
                 <div className="flex justify-between mb-8 text-sm">
@@ -1596,14 +1596,14 @@ const DocPreviewContent = ({ docConfig, properties, transactions }: { docConfig:
 
                 {/* 底部備註區 */}
                 {docConfig.statementFooterNote && (
-                    <div className="mt-6 border p-4 bg-slate-50 text-sm">
-                        <p className="font-bold underline mb-1">Notes / Remarks:</p>
-                        <p className="whitespace-pre-wrap">{docConfig.statementFooterNote}</p>
+                    <div className="mt-4 border p-4 bg-slate-50 text-sm no-break">
+                    <p className="font-bold underline mb-1">Notes / Remarks:</p>
+                    <p className="whitespace-pre-wrap">{docConfig.statementFooterNote}</p>
                     </div>
                 )}
                 
                 {/* 簽名區 */}
-                <div className="mt-12 flex justify-between">
+                <div className="mt-12 flex justify-between signature-section">
                     <div className="w-1/3 border-t border-black pt-2 text-center text-xs">Prepared By</div>
                     <div className="w-1/3 border-t border-black pt-2 text-center text-xs">Received & Confirmed By</div>
                 </div>

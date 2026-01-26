@@ -1383,7 +1383,7 @@ const DocPreviewContent = ({
 }) => {
     const prop = properties.find(p => p.id === docConfig.propId) || { name: 'Unknown Property', address: '' } as Property;
 
-    // 1. 收據樣式 (Receipt)
+    // --- 1. 收據樣式 (Receipt) ---
     if (docConfig.type === 'receipt') {
         const receiptNo = docConfig.existingReceiptNo || `PREVIEW`; 
         const englishAmount = convertNumberToEnglish(docConfig.amount);
@@ -1508,22 +1508,22 @@ const DocPreviewContent = ({
 
         const netBalance = totalCredit - totalDebit;
         
+        // 判斷是否顯示 Debit / Credit 欄位
+        // 注意：這裡使用了 docConfig.showDebit !== false，代表預設是顯示的，除非使用者明確取消
         const showDebit = docConfig.showDebit !== false; 
         const showCredit = docConfig.showCredit !== false;
         const showNotes = docConfig.showRowNotes !== false;
+        
+        // 計算總欄位數：日期(1) + 詳情(1) + Debit(有就1，沒就0) + Credit(有就1，沒就0)
         const colCount = 2 + (showDebit ? 1 : 0) + (showCredit ? 1 : 0);
 
         return (
-            /* 移除額外 padding，改由 CSS @page 控制 */
-            <div className="doc-print-container bg-white w-full text-black font-serif mx-auto relative">
-                
-                {/* 標題區 */}
+            <div className="doc-print-container bg-white w-full text-black font-serif mx-auto relative p-4">
                 <div className="text-center mb-4">
                     <h1 className="text-2xl font-bold underline">RENTAL STATEMENT 租務對數單</h1>
                 </div>
                 
-                {/* 資訊區：使用 Grid 讓排版更穩固 */}
-                <div className="flex justify-between items-start mb-4 text-sm border-b pb-2">
+                <div className="flex justify-between items-start mb-4 text-sm header-info">
                     <div className="w-[55%]">
                         <div className="flex mb-1"><span className="font-bold w-20 flex-shrink-0">Property:</span> <span>{prop.name}</span></div>
                         <div className="flex"><span className="font-bold w-20 flex-shrink-0">Address:</span> <span>{prop.address}</span></div>
@@ -1535,12 +1535,14 @@ const DocPreviewContent = ({
                     </div>
                 </div>
 
-                {/* 表格區 */}
                 <table className="w-full border-collapse border border-black text-sm mb-2">
                     <thead>
                         <tr className="bg-gray-100">
+                            {/* 固定欄位 */}
                             <th className="border border-black p-2 text-left w-[15%]">Date</th>
                             <th className="border border-black p-2 text-left">Description / Particulars</th>
+                            
+                            {/* 動態欄位：如果 showDebit 為 false，這個 <th> 就不會被渲染 */}
                             {showDebit && <th className="border border-black p-2 text-right w-[18%]">Debit (Dr)</th>}
                             {showCredit && <th className="border border-black p-2 text-right w-[18%]">Credit (Cr)</th>}
                         </tr>
@@ -1561,6 +1563,7 @@ const DocPreviewContent = ({
                                         {showNotes && t.note && <span className="block text-slate-500 italic text-xs mt-0.5">Note: {t.note}</span>}
                                     </td>
                                     
+                                    {/* 動態內容：只有在打勾時才顯示該欄位的 TD */}
                                     {showDebit && (
                                         <td className="border border-black p-2 text-right align-top text-slate-600">
                                             {!isIncome ? formatCurrency(t.amount) : ''}
@@ -1582,11 +1585,13 @@ const DocPreviewContent = ({
                             <td className="border border-black p-2 text-right" colSpan={2}>
                                 Total:
                             </td>
+                            {/* 動態頁尾：只有打勾時才顯示合計 */}
                             {showDebit && <td className="border border-black p-2 text-right">{formatCurrency(totalDebit)}</td>}
                             {showCredit && <td className="border border-black p-2 text-right">{formatCurrency(totalCredit)}</td>}
                         </tr>
                         
                         <tr className="bg-gray-100 font-bold text-lg">
+                            {/* colspan 會自動根據 colCount 計算，確保 Net Balance 橫跨正確的欄位數 */}
                             <td className="border border-black p-2 text-right" colSpan={colCount - 1}>
                                 Net Balance (結餘):
                             </td>
@@ -1597,7 +1602,6 @@ const DocPreviewContent = ({
                     </tfoot>
                 </table>
 
-                {/* 備註區與簽名區的容器：確保它們盡量在一起 */}
                 <div className="avoid-break">
                     {docConfig.statementFooterNote && (
                         <div className="border p-2 bg-slate-50 text-sm footer-note mb-4">
@@ -1606,11 +1610,10 @@ const DocPreviewContent = ({
                         </div>
                     )}
                     
-                    {/* 簽名區：上方間距 (mt-8) 是關鍵，不能太大 */}
                     <div className="flex justify-between signature-section mt-8">
                         <div className="w-1/3">
                             <div className="border-t border-black pt-2 text-center text-xs font-bold">Prepared By</div>
-                            <div className="h-12"></div> {/* 預留簽名空間 */}
+                            <div className="h-12"></div>
                         </div>
                         <div className="w-1/3">
                             <div className="border-t border-black pt-2 text-center text-xs font-bold">Received & Confirmed By</div>
@@ -1622,7 +1625,7 @@ const DocPreviewContent = ({
         );
     }
 
-    // 3. 租約樣式 (Lease)
+    // --- 3. 租約樣式 (Lease) ---
     return (
         <div className="doc-print-container text-black font-serif text-sm leading-relaxed">
           {/* Page 1 */}
@@ -2413,7 +2416,7 @@ useEffect(() => {
           if (document.body.contains(wrapper)) document.body.removeChild(wrapper);
       }, 500); 
   };
-  
+
   const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;

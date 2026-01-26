@@ -799,7 +799,9 @@ const SettingsView = ({ settings, setSettings, updateSettings }: { settings: App
     );
 };
 
-const BulkClassifyModal = ({ isOpen, onClose, templateTx, transactions, properties, onConfirmBatch }: any) => {
+// 位於 App.tsx 中
+// [修正] 在參數中加入 settings
+const BulkClassifyModal = ({ isOpen, onClose, templateTx, transactions, properties, onConfirmBatch, settings }: any) => {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [targetCategory, setTargetCategory] = useState('');
     const [targetPropertyId, setTargetPropertyId] = useState('');
@@ -808,19 +810,18 @@ const BulkClassifyModal = ({ isOpen, onClose, templateTx, transactions, properti
 
     useEffect(() => {
         if (isOpen && templateTx) {
-            // [修正] 取得當前可用的分類列表
+            // [修正] 現在這裡可以讀取到 settings 了
             const availableCats = (settings?.categories || DEFAULT_CATEGORIES).map((c: any) => c.name);
             
-            // [修正] 如果範本的分類在列表中，就用範本的；否則強制設為列表的第一個 (例如: 租金收入)
+            // 如果範本的分類在列表中，就用範本的；否則強制設為列表的第一個
             const initialCat = availableCats.includes(templateTx.category) 
                 ? templateTx.category 
                 : availableCats[0];
 
-            setTargetCategory(initialCat); // <--- 這裡修正了預設值
+            setTargetCategory(initialCat);
             setTargetPropertyId(templateTx.propertyId || '');
             setTargetMember(templateTx.member || 'Family');
 
-            // ... (後面的搜尋邏輯保持不變) ...
             const searchName = templateTx.merchant.toLowerCase().replace(/[0-9]/g, '').trim().substring(0, 4);
             const searchAmount = templateTx.amount;
             
@@ -836,6 +837,14 @@ const BulkClassifyModal = ({ isOpen, onClose, templateTx, transactions, properti
         }
     }, [isOpen, templateTx, transactions, settings]); // 加入 settings 依賴
 
+    // ... (後面的 render 邏輯保持不變，不用動) ...
+    // ...
+    // ...
+    // 請保留原本的 return (...); 
+    // 這裡為了節省篇幅省略，您原本的 JSX 是正確的
+    
+    // 如果您需要完整的 BulkClassifyModal JSX，請告訴我，但通常只要改上面那段即可。
+    
     const handleToggle = (id: string) => {
         const newSet = new Set(selectedIds);
         if (newSet.has(id)) newSet.delete(id);
@@ -852,7 +861,7 @@ const BulkClassifyModal = ({ isOpen, onClose, templateTx, transactions, properti
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
-            {/* [修改] 寬度改為響應式 w-[95%] md:w-[800px] */}
+            {/* ... (原本的 JSX 內容保持不變) ... */}
             <div className="bg-white rounded-xl shadow-2xl p-6 w-[95%] md:w-[800px] max-h-[90vh] flex flex-col animate-in fade-in zoom-in duration-200">
                 <div className="flex justify-between items-start mb-4 border-b pb-2">
                     <div>
@@ -870,9 +879,11 @@ const BulkClassifyModal = ({ isOpen, onClose, templateTx, transactions, properti
                     <div>
                         <label className="block text-xs font-bold text-indigo-900 mb-1">歸類 Category</label>
                         <select className="w-full border border-indigo-300 rounded px-2 py-1.5 text-sm" value={targetCategory} onChange={(e) => setTargetCategory(e.target.value)}>
-                            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                            {/* [修正] 這裡也要改成讀取 settings */}
+                            {(settings?.categories || DEFAULT_CATEGORIES).map((c:any) => <option key={c.name} value={c.name}>{c.name}</option>)}
                         </select>
                     </div>
+                    {/* ... (其他 JSX 保持不變) ... */}
                     <div>
                         <label className="block text-xs font-bold text-indigo-900 mb-1">物業 Property</label>
                         <select className="w-full border border-indigo-300 rounded px-2 py-1.5 text-sm" value={targetPropertyId} onChange={(e) => setTargetPropertyId(e.target.value)}>
@@ -3347,6 +3358,7 @@ useEffect(() => {
               transactions={transactions}
               properties={properties} 
               onConfirmBatch={handleBatchUpdate} 
+              settings={settings}
           />
       </div>
   );

@@ -1519,37 +1519,46 @@ const DocPreviewContent = ({
         const showCredit = docConfig.showCredit !== false;
         const showNotes = docConfig.showRowNotes !== false;
 
+        // [關鍵修正] 統一判斷收入的邏輯函數
+        const checkIsIncome = (t: Transaction) => {
+            // 1. 強制關鍵字判斷 (優先級最高，防止 settings 被誤改)
+            if ((t.category || '').includes('Rental Income') || t.category?.includes('Sale') || t.category?.includes('收入')) {
+                return true;
+            }
+            // 2. 系統設定判斷
+            const settingType = settings?.categories?.find((c: any) => c.name === t.category)?.type;
+            if (settingType === 'Income') return true;
+
+            return false;
+        };
+
         // 2. 進階篩選：根據「顯示 Debit/Credit」的設定，移除不顯示的行數
         const finalTxs = dateFilteredTxs.filter(t => {
-            const isIncome = (t.category || '').includes('Rental Income') || 
-                             t.category?.includes('Sale') || 
-                             (settings?.categories?.find((c: any) => c.name === t.category)?.type === 'Income');
-            
-            // 邏輯：如果是收入(Income)，必須 showCredit 為 true 才保留
-            //       如果是支出(Expense)，必須 showDebit 為 true 才保留
+            const isIncome = checkIsIncome(t);
+            // 如果是收入，必須 showCredit 為 true 才保留
+            // 如果是支出，必須 showDebit 為 true 才保留
             return isIncome ? showCredit : showDebit;
         });
 
-        // 3. 計算總數 (使用 Math.abs 修正負數問題)
+        // 3. 計算總數
         let totalDebit = 0;
         let totalCredit = 0;
         
         finalTxs.forEach(t => {
-            const isIncome = (t.category || '').includes('Rental Income') || 
-                             t.category?.includes('Sale') || 
-                             (settings?.categories?.find((c: any) => c.name === t.category)?.type === 'Income');
-            
-            // 強制取絕對值，避免 CSV 匯入的負號影響計算
+            const isIncome = checkIsIncome(t);
             const absAmount = Math.abs(t.amount || 0);
 
-            if (isIncome) totalCredit += absAmount;
-            else totalDebit += absAmount;
+            if (isIncome) {
+                totalCredit += absAmount;
+            } else {
+                totalDebit += absAmount;
+            }
         });
 
+        // Net Balance = 總收入 - 總支出
         const netBalance = totalCredit - totalDebit;
         
-        // 4. 計算表格欄位數 (用於 ColSpan)
-        // 日期(1) + 詳情(1) + Debit(有就1) + Credit(有就1)
+        // 4. 計算表格欄位數
         const colCount = 2 + (showDebit ? 1 : 0) + (showCredit ? 1 : 0);
 
         return (
@@ -1578,7 +1587,7 @@ const DocPreviewContent = ({
                         <tr className="bg-gray-100">
                             <th className="border border-black p-2 text-left w-[15%]">Date</th>
                             <th className="border border-black p-2 text-left">Description / Particulars</th>
-                            {/* 動態表頭：只有打勾才顯示 */}
+                            {/* 動態表頭 */}
                             {showDebit && <th className="border border-black p-2 text-right w-[18%]">Debit (Dr)</th>}
                             {showCredit && <th className="border border-black p-2 text-right w-[18%]">Credit (Cr)</th>}
                         </tr>
@@ -1587,12 +1596,8 @@ const DocPreviewContent = ({
                         {finalTxs.length === 0 && <tr><td colSpan={colCount} className="p-4 text-center">No records found for this period.</td></tr>}
                         
                         {finalTxs.map(t => {
-                             const isIncome = (t.category || '').includes('Rental Income') || 
-                                              t.category?.includes('Sale') || 
-                                              (settings?.categories?.find((c: any) => c.name === t.category)?.type === 'Income');
-                            
-                            // 顯示金額前，先取絕對值
-                            const displayAmount = formatCurrency(Math.abs(t.amount || 0));
+                             const isIncome = checkIsIncome(t);
+                             const displayAmount = formatCurrency(Math.abs(t.amount || 0));
 
                             return (
                                 <tr key={t.id}>
@@ -1603,7 +1608,7 @@ const DocPreviewContent = ({
                                         {showNotes && t.note && <span className="block text-slate-500 italic text-xs mt-0.5">Note: {t.note}</span>}
                                     </td>
                                     
-                                    {/* 動態內容：只顯示打勾的欄位 */}
+                                    {/* 動態內容 */}
                                     {showDebit && (
                                         <td className="border border-black p-2 text-right align-top text-slate-600">
                                             {!isIncome ? displayAmount : ''}
@@ -1641,7 +1646,7 @@ const DocPreviewContent = ({
                     </tfoot>
                 </table>
 
-                {/* 底部區域：盡量不分頁 */}
+                {/* 底部區域 */}
                 <div className="avoid-break">
                     {docConfig.statementFooterNote && (
                         <div className="border p-2 bg-slate-50 text-sm footer-note mb-4">
@@ -1650,7 +1655,6 @@ const DocPreviewContent = ({
                         </div>
                     )}
                     
-                    {/* 簽名欄：上方間距縮小，防止跳頁 */}
                     <div className="flex justify-between signature-section mt-8">
                         <div className="w-1/3">
                             <div className="border-t border-black pt-2 text-center text-xs font-bold">Prepared By</div>

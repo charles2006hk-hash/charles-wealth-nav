@@ -1510,7 +1510,7 @@ const DocPreviewContent = ({
     
     // --- 2. 對數單樣式 (Statement) ---
     if (docConfig.type === 'statement') {
-        // 1. 基礎篩選 (物業 & 日期)
+        // 1. 基礎篩選 (物業 & 日期 & 排序)
         const dateFilteredTxs = transactions
             .filter(t => t.propertyId === docConfig.propId && (!docConfig.statementDateStart || t.date >= docConfig.statementDateStart) && (!docConfig.statementDateEnd || t.date <= docConfig.statementDateEnd))
             .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -1519,18 +1519,18 @@ const DocPreviewContent = ({
         const showCredit = docConfig.showCredit !== false;
         const showNotes = docConfig.showRowNotes !== false;
 
-        // 2. ✅ 進階篩選 (根據 Show Debit/Credit 移除整行)
+        // 2. 進階篩選：根據「顯示 Debit/Credit」的設定，移除不顯示的行數
         const finalTxs = dateFilteredTxs.filter(t => {
             const isIncome = (t.category || '').includes('Rental Income') || 
                              t.category?.includes('Sale') || 
                              (settings?.categories?.find((c: any) => c.name === t.category)?.type === 'Income');
             
-            // 如果是收入(Income)，必須 showCredit 為 true 才顯示
-            // 如果是支出(Expense)，必須 showDebit 為 true 才顯示
+            // 邏輯：如果是收入(Income)，必須 showCredit 為 true 才保留
+            //       如果是支出(Expense)，必須 showDebit 為 true 才保留
             return isIncome ? showCredit : showDebit;
         });
 
-        // 3. 計算總數 (只計算有顯示的項目)
+        // 3. 計算總數 (使用 Math.abs 修正負數問題)
         let totalDebit = 0;
         let totalCredit = 0;
         
@@ -1539,22 +1539,28 @@ const DocPreviewContent = ({
                              t.category?.includes('Sale') || 
                              (settings?.categories?.find((c: any) => c.name === t.category)?.type === 'Income');
             
-            if (isIncome) totalCredit += t.amount;
-            else totalDebit += t.amount;
+            // 強制取絕對值，避免 CSV 匯入的負號影響計算
+            const absAmount = Math.abs(t.amount || 0);
+
+            if (isIncome) totalCredit += absAmount;
+            else totalDebit += absAmount;
         });
 
         const netBalance = totalCredit - totalDebit;
         
-        // 計算總欄位數
+        // 4. 計算表格欄位數 (用於 ColSpan)
+        // 日期(1) + 詳情(1) + Debit(有就1) + Credit(有就1)
         const colCount = 2 + (showDebit ? 1 : 0) + (showCredit ? 1 : 0);
 
         return (
             <div className="doc-print-container bg-white w-full text-black font-serif mx-auto relative p-4">
+                {/* 標題區 */}
                 <div className="text-center mb-4">
                     <h1 className="text-2xl font-bold underline">RENTAL STATEMENT 租務對數單</h1>
                 </div>
                 
-                <div className="flex justify-between items-start mb-4 text-sm header-info">
+                {/* 資訊區 */}
+                <div className="flex justify-between items-start mb-4 text-sm header-info border-b pb-2">
                     <div className="w-[55%]">
                         <div className="flex mb-1"><span className="font-bold w-20 flex-shrink-0">Property:</span> <span>{prop.name}</span></div>
                         <div className="flex"><span className="font-bold w-20 flex-shrink-0">Address:</span> <span>{prop.address}</span></div>
@@ -1566,13 +1572,13 @@ const DocPreviewContent = ({
                     </div>
                 </div>
 
+                {/* 表格區 */}
                 <table className="w-full border-collapse border border-black text-sm mb-2">
                     <thead>
                         <tr className="bg-gray-100">
                             <th className="border border-black p-2 text-left w-[15%]">Date</th>
                             <th className="border border-black p-2 text-left">Description / Particulars</th>
-                            
-                            {/* 動態顯示表頭 */}
+                            {/* 動態表頭：只有打勾才顯示 */}
                             {showDebit && <th className="border border-black p-2 text-right w-[18%]">Debit (Dr)</th>}
                             {showCredit && <th className="border border-black p-2 text-right w-[18%]">Credit (Cr)</th>}
                         </tr>
@@ -1584,6 +1590,10 @@ const DocPreviewContent = ({
                              const isIncome = (t.category || '').includes('Rental Income') || 
                                               t.category?.includes('Sale') || 
                                               (settings?.categories?.find((c: any) => c.name === t.category)?.type === 'Income');
+                            
+                            // 顯示金額前，先取絕對值
+                            const displayAmount = formatCurrency(Math.abs(t.amount || 0));
+
                             return (
                                 <tr key={t.id}>
                                     <td className="border border-black p-2 align-top whitespace-nowrap">{t.date}</td>
@@ -1593,15 +1603,16 @@ const DocPreviewContent = ({
                                         {showNotes && t.note && <span className="block text-slate-500 italic text-xs mt-0.5">Note: {t.note}</span>}
                                     </td>
                                     
+                                    {/* 動態內容：只顯示打勾的欄位 */}
                                     {showDebit && (
                                         <td className="border border-black p-2 text-right align-top text-slate-600">
-                                            {!isIncome ? formatCurrency(t.amount) : ''}
+                                            {!isIncome ? displayAmount : ''}
                                         </td>
                                     )}
                                     
                                     {showCredit && (
                                         <td className="border border-black p-2 text-right align-top text-black font-medium">
-                                            {isIncome ? formatCurrency(t.amount) : ''}
+                                            {isIncome ? displayAmount : ''}
                                         </td>
                                     )}
                                 </tr>
@@ -1614,7 +1625,7 @@ const DocPreviewContent = ({
                             <td className="border border-black p-2 text-right" colSpan={2}>
                                 Total ({finalTxs.length} items):
                             </td>
-                            {/* 動態顯示合計 */}
+                            {/* 動態合計 */}
                             {showDebit && <td className="border border-black p-2 text-right">{formatCurrency(totalDebit)}</td>}
                             {showCredit && <td className="border border-black p-2 text-right">{formatCurrency(totalCredit)}</td>}
                         </tr>
@@ -1630,6 +1641,7 @@ const DocPreviewContent = ({
                     </tfoot>
                 </table>
 
+                {/* 底部區域：盡量不分頁 */}
                 <div className="avoid-break">
                     {docConfig.statementFooterNote && (
                         <div className="border p-2 bg-slate-50 text-sm footer-note mb-4">
@@ -1638,6 +1650,7 @@ const DocPreviewContent = ({
                         </div>
                     )}
                     
+                    {/* 簽名欄：上方間距縮小，防止跳頁 */}
                     <div className="flex justify-between signature-section mt-8">
                         <div className="w-1/3">
                             <div className="border-t border-black pt-2 text-center text-xs font-bold">Prepared By</div>
@@ -2163,18 +2176,19 @@ useEffect(() => {
     return properties.map(p => {
         const pTxs = transactions.filter(t => t.propertyId === p.id);
         
-       // 計算總收入 (使用新的 getTxType 邏輯)
+       // [修正] 加入 Math.abs() 確保金額為正數，避免 CSV 負數導致計算錯誤
         const income = pTxs
             .filter(t => getTxType(t.category) === 'Income')
-            .reduce((sum, t) => sum + (t.amount || 0), 0);
+            .reduce((sum, t) => sum + Math.abs(t.amount || 0), 0);
         
-        // 計算總支出 (使用新的 getTxType 邏輯)
+        // [修正] 加入 Math.abs()
         const expense = pTxs
             .filter(t => getTxType(t.category) === 'Expense')
-            .reduce((sum, t) => sum + (t.amount || 0), 0);
+            .reduce((sum, t) => sum + Math.abs(t.amount || 0), 0);
         
         const activeLease = leases.find(l => l.propertyId === p.id && l.status === 'Active');
         
+        // ... (後面的邏輯保持不變)
         let isLate = false;
         if (activeLease && p.status === 'Occupied') {
             const lastRentTx = pTxs
@@ -2188,7 +2202,6 @@ useEffect(() => {
         const estRent = activeLease ? activeLease.monthlyRent : (p.estRent || 0);
         const stressedExpense = (p.managementFee + p.mortgageAmount) * (1 + stressRate * 0.01);
 
-        // Auto tagging
         const autoTags = [];
         if (p.outstandingLoan > 0) autoTags.push('Mortgaged');
         if (p.currentValue > 10000000) autoTags.push('Luxury');
@@ -2200,7 +2213,7 @@ useEffect(() => {
             ...p, 
             income, 
             expense, 
-            net: income - expense, // 正確計算 Net Income
+            net: income - expense, 
             activeLease, 
             isLate, 
             estRent, 
@@ -2208,7 +2221,7 @@ useEffect(() => {
             displayTags 
         } as PropertyWithStats;
     });
-  }, [properties, transactions, leases, stressRate]);
+  }, [properties, transactions, leases, stressRate, settings]); // 記得確認依賴項包含 settings
 
   const totalValuation = properties.reduce((sum, p) => sum + (p.currentValue || 0), 0);
   const totalMonthlyRent = leases.filter(l => l.status === 'Active').reduce((sum, l) => sum + (l.monthlyRent || 0), 0);

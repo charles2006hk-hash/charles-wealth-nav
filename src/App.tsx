@@ -1488,7 +1488,7 @@ const DocPreviewContent = ({
         );
     } 
     
-    // 2. 對數單樣式 (Statement)
+    // --- 2. 對數單樣式 (Statement) ---
     if (docConfig.type === 'statement') {
         const filteredTxs = transactions
             .filter(t => t.propertyId === docConfig.propId && (!docConfig.statementDateStart || t.date >= docConfig.statementDateStart) && (!docConfig.statementDateEnd || t.date <= docConfig.statementDateEnd))
@@ -1514,21 +1514,28 @@ const DocPreviewContent = ({
         const colCount = 2 + (showDebit ? 1 : 0) + (showCredit ? 1 : 0);
 
         return (
-            <div className="doc-print-container bg-white w-full text-black font-serif mx-auto relative p-4">
-                <h1 className="text-2xl font-bold text-center underline mb-4">RENTAL STATEMENT 租務對數單</h1>
+            /* 移除額外 padding，改由 CSS @page 控制 */
+            <div className="doc-print-container bg-white w-full text-black font-serif mx-auto relative">
                 
-                <div className="flex justify-between mb-2 text-sm header-info">
-                    <div className="w-1/2">
-                        <p className="mb-1"><span className="font-bold inline-block w-20">Property:</span> {prop.name}</p>
-                        <p><span className="font-bold inline-block w-20">Address:</span> {prop.address}</p>
+                {/* 標題區 */}
+                <div className="text-center mb-4">
+                    <h1 className="text-2xl font-bold underline">RENTAL STATEMENT 租務對數單</h1>
+                </div>
+                
+                {/* 資訊區：使用 Grid 讓排版更穩固 */}
+                <div className="flex justify-between items-start mb-4 text-sm border-b pb-2">
+                    <div className="w-[55%]">
+                        <div className="flex mb-1"><span className="font-bold w-20 flex-shrink-0">Property:</span> <span>{prop.name}</span></div>
+                        <div className="flex"><span className="font-bold w-20 flex-shrink-0">Address:</span> <span>{prop.address}</span></div>
                     </div>
-                    <div className="w-1/2 text-right">
-                        <p className="mb-1"><span className="font-bold">Tenant:</span> {docConfig.tenant}</p>
-                        <p><span className="font-bold">Period:</span> {docConfig.statementDateStart || 'Start'} to {docConfig.statementDateEnd || 'Now'}</p>
-                        <p className="mt-1 text-xs text-gray-500">Generated on: {new Date().toLocaleDateString()}</p>
+                    <div className="w-[40%] text-right">
+                        <div className="flex justify-end mb-1"><span className="font-bold mr-2">Tenant:</span> <span>{docConfig.tenant}</span></div>
+                        <div className="flex justify-end mb-1"><span className="font-bold mr-2">Period:</span> <span>{docConfig.statementDateStart || 'Start'} to {docConfig.statementDateEnd || 'Now'}</span></div>
+                        <div className="text-xs text-gray-500 mt-1">Generated: {new Date().toLocaleDateString()}</div>
                     </div>
                 </div>
 
+                {/* 表格區 */}
                 <table className="w-full border-collapse border border-black text-sm mb-2">
                     <thead>
                         <tr className="bg-gray-100">
@@ -1573,7 +1580,7 @@ const DocPreviewContent = ({
                     <tfoot>
                         <tr className="bg-gray-50 font-bold border-t-2 border-black">
                             <td className="border border-black p-2 text-right" colSpan={2}>
-                                Total ({filteredTxs.length} items):
+                                Total:
                             </td>
                             {showDebit && <td className="border border-black p-2 text-right">{formatCurrency(totalDebit)}</td>}
                             {showCredit && <td className="border border-black p-2 text-right">{formatCurrency(totalCredit)}</td>}
@@ -1590,19 +1597,25 @@ const DocPreviewContent = ({
                     </tfoot>
                 </table>
 
-                {docConfig.statementFooterNote && (
-                    <div className="border p-2 bg-slate-50 text-sm footer-note mb-4">
-                        <p className="font-bold underline mb-1">Notes / Remarks:</p>
-                        <p className="whitespace-pre-wrap leading-tight">{docConfig.statementFooterNote}</p>
-                    </div>
-                )}
-                
-                <div className="flex justify-between signature-section mt-8">
-                    <div className="w-1/3">
-                        <div className="border-t border-black pt-2 text-center text-xs">Prepared By</div>
-                    </div>
-                    <div className="w-1/3">
-                        <div className="border-t border-black pt-2 text-center text-xs">Received & Confirmed By</div>
+                {/* 備註區與簽名區的容器：確保它們盡量在一起 */}
+                <div className="avoid-break">
+                    {docConfig.statementFooterNote && (
+                        <div className="border p-2 bg-slate-50 text-sm footer-note mb-4">
+                            <p className="font-bold underline mb-1">Notes / Remarks:</p>
+                            <p className="whitespace-pre-wrap leading-tight">{docConfig.statementFooterNote}</p>
+                        </div>
+                    )}
+                    
+                    {/* 簽名區：上方間距 (mt-8) 是關鍵，不能太大 */}
+                    <div className="flex justify-between signature-section mt-8">
+                        <div className="w-1/3">
+                            <div className="border-t border-black pt-2 text-center text-xs font-bold">Prepared By</div>
+                            <div className="h-12"></div> {/* 預留簽名空間 */}
+                        </div>
+                        <div className="w-1/3">
+                            <div className="border-t border-black pt-2 text-center text-xs font-bold">Received & Confirmed By</div>
+                            <div className="h-12"></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2381,14 +2394,12 @@ useEffect(() => {
       // 2. 準備列印內容
       const printContent = document.querySelector('.doc-print-container');
       if (!printContent) {
-          alert("找不到列印內容，請稍後再試");
+          alert("找不到列印內容");
           return;
       }
 
-      // 複製節點 (Clone)
+      // 3. 簡單複製與列印 (不縮放)
       const clone = printContent.cloneNode(true) as HTMLElement;
-      
-      // 建立一個外層容器來包裹，方便我們控制縮放
       const wrapper = document.createElement('div');
       wrapper.id = 'print-clone-root';
       wrapper.appendChild(clone);
@@ -2396,40 +2407,13 @@ useEffect(() => {
       document.body.appendChild(wrapper);
       document.body.classList.add('printing-mode');
 
-      // --- 🟢 核心邏輯：智慧縮放判斷 ---
-      // 取得複製後的高度 (這時瀏覽器已經計算好排版了)
-      const contentHeight = clone.scrollHeight;
-      
-      // A4 紙張在 96DPI 下的高度約為 1123px
-      // 扣除上下邊距 10mm (~76px)，安全區域約為 1047px
-      // 我們設定一個寬鬆一點的門檻，例如 1080px
-      const A4_HEIGHT_THRESHOLD = 1080;
-
-      if (contentHeight > A4_HEIGHT_THRESHOLD) {
-          // 如果高度超過一頁...
-          // 檢查縮小 80% 後是否能塞進一頁 ( 1080 / 0.8 = 1350 )
-          // 如果縮小後能塞進去，就縮放。
-          // 如果縮小後還是超過 (例如超級多頁)，那就乾脆不縮放，讓它自然分頁比較易讀。
-          // 但根據您的要求：「超出可以整頁縮小80%」，我們直接套用。
-          
-          wrapper.classList.add('print-scale-80');
-          console.log(`Content height ${contentHeight}px exceeds A4. Applying 80% scale.`);
-      } else {
-          console.log(`Content height ${contentHeight}px fits in A4. No scaling.`);
-      }
-      // -------------------------------
-
-      // 3. 執行列印
       setTimeout(() => {
           window.print();
-          
-          // 4. 清理現場
           document.body.classList.remove('printing-mode');
-          if (document.body.contains(wrapper)) {
-              document.body.removeChild(wrapper);
-          }
+          if (document.body.contains(wrapper)) document.body.removeChild(wrapper);
       }, 500); 
   };
+  
   const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -2794,7 +2778,7 @@ useEffect(() => {
       <div className="flex flex-col md:flex-row h-screen bg-slate-50 text-slate-900 font-sans overflow-hidden">
           
           <style>{`
-  /* --- 基礎滾動條樣式 (螢幕顯示用) --- */
+  /* 基礎滾動條樣式 */
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
   .modal-overlay { background-color: rgba(0, 0, 0, 0.5); }
@@ -2803,28 +2787,28 @@ useEffect(() => {
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-  /* --- 🖨️ 列印專用樣式 (Print Styles) --- */
+  /* --- 🖨️ 列印專用樣式 (Print Styles) - 正規 A4 版 --- */
   @media print {
       @page { 
           size: A4 portrait; 
-          margin: 10mm; /* 設定 10mm 標準邊距 */
+          margin: 10mm; /* 設定標準 1cm 邊距，最大化內容空間 */
       }
       
       html, body {
           width: 100%;
-          height: 100%;
+          height: auto !important;
           margin: 0 !important;
           padding: 0 !important;
           background: white !important;
-          overflow: visible !important; /* 允許內容延伸 */
+          overflow: visible !important;
       }
 
-      /* 1. 隱藏系統原本的介面 (導航欄、按鈕等) */
+      /* 隱藏系統介面 */
       #root, .modal-overlay, nav, header, .no-print {
           display: none !important;
       }
 
-      /* 2. 顯示我們複製出來的列印專用容器 */
+      /* 顯示列印容器 */
       #print-clone-root {
           display: block !important;
           position: absolute;
@@ -2835,68 +2819,54 @@ useEffect(() => {
           background-color: white;
       }
 
-      /* 3. 預設容器樣式 */
+      /* 容器設定：強制 100% 寬度，不縮放 */
       .doc-print-container {
           width: 100% !important;
-          margin: 0 auto !important;
-          padding: 0 !important; /* 內距由 @page 控制，這裡歸零 */
+          margin: 0 !important;
+          padding: 0 !important; /* 內距由 @page margin 控制 */
           border: none !important;
           box-shadow: none !important;
-          transform-origin: top center; /* 縮放基準點 */
+          transform: none !important; /* 關鍵：禁止縮放 */
+          font-size: 11pt !important; /* 設定標準文件字級 */
+          line-height: 1.3;
       }
 
-      /* --- 🟢 智慧縮放模式 (Smart Scaling) --- */
-      /* 當 JS 偵測到高度超標時，會加上此 class */
-      .print-scale-80 .doc-print-container {
-          transform: scale(0.8) !important; /* 縮小到 80% */
-          width: 125% !important; /* 寬度補償 (100/0.8) 確保橫向填滿 */
-          margin-left: -12.5% !important; /* 修正置中偏移 */
-      }
-
-      /* 4. 表格優化 */
+      /* 表格設定 */
       table {
           width: 100% !important;
           border-collapse: collapse !important;
-          font-size: 11pt !important; /* 設定最佳閱讀字級 */
-          margin-bottom: 5px !important;
+          margin-bottom: 10px !important;
       }
       
       th, td {
-          padding: 4px 5px !important; /* 適度留白，不要太擠也不要太鬆 */
-          border: 1px solid #000 !important; /* 確保線條清晰 */
-      }
-
-      /* 表格分頁控制 */
-      tr {
-          page-break-inside: avoid; /* 盡量不切斷單一行文字 */
-          page-break-after: auto;
-      }
-      
-      thead { display: table-header-group; } /* 每一頁都顯示表頭 */
-      tfoot { display: table-footer-group; } /* 每一頁都顯示頁尾合計 */
-
-      /* 5. 簽名區與備註區保護 */
-      /* 確保這些區塊盡量不要被切斷，如果空間不足就整塊移到下一頁 */
-      .signature-section {
-          page-break-inside: avoid !important;
-          break-inside: avoid !important;
-          margin-top: 20px !important;
-      }
-
-      .footer-note {
-          page-break-inside: avoid !important;
-          break-inside: avoid !important;
-          margin-top: 10px !important;
+          padding: 4px 6px !important; /* 適度留白 */
+          border: 1px solid #000 !important;
           font-size: 10pt !important;
       }
 
-      /* 強制列印背景顏色 (Chrome/Safari) */
+      /* 分頁控制 */
+      tr { page-break-inside: avoid; page-break-after: auto; }
+      thead { display: table-header-group; }
+      tfoot { display: table-footer-group; }
+
+      /* 簽名區與備註區：盡量不分頁，但間距縮小 */
+      .signature-section {
+          page-break-inside: avoid;
+          margin-top: 20px !important; /* 保持適當距離 */
+      }
+
+      .footer-note {
+          page-break-inside: avoid;
+          margin-top: 5px !important; /* 備註緊貼表格 */
+          margin-bottom: 10px !important;
+      }
+
+      /* 強制背景列印 */
       * {
           -webkit-print-color-adjust: exact !important;
           print-color-adjust: exact !important;
       }
       
-      /* 強制分頁符號 (給租約等多頁文件使用) */
       .page-break {
           page-break-before: always !important;
           break-before: page !important;

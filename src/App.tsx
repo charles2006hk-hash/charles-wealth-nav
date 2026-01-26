@@ -808,10 +808,19 @@ const BulkClassifyModal = ({ isOpen, onClose, templateTx, transactions, properti
 
     useEffect(() => {
         if (isOpen && templateTx) {
-            setTargetCategory(templateTx.category || 'General');
+            // [修正] 取得當前可用的分類列表
+            const availableCats = (settings?.categories || DEFAULT_CATEGORIES).map((c: any) => c.name);
+            
+            // [修正] 如果範本的分類在列表中，就用範本的；否則強制設為列表的第一個 (例如: 租金收入)
+            const initialCat = availableCats.includes(templateTx.category) 
+                ? templateTx.category 
+                : availableCats[0];
+
+            setTargetCategory(initialCat); // <--- 這裡修正了預設值
             setTargetPropertyId(templateTx.propertyId || '');
             setTargetMember(templateTx.member || 'Family');
 
+            // ... (後面的搜尋邏輯保持不變) ...
             const searchName = templateTx.merchant.toLowerCase().replace(/[0-9]/g, '').trim().substring(0, 4);
             const searchAmount = templateTx.amount;
             
@@ -825,7 +834,7 @@ const BulkClassifyModal = ({ isOpen, onClose, templateTx, transactions, properti
             setCandidates(matches);
             setSelectedIds(new Set(matches.map((t:any) => t.id)));
         }
-    }, [isOpen, templateTx, transactions]);
+    }, [isOpen, templateTx, transactions, settings]); // 加入 settings 依賴
 
     const handleToggle = (id: string) => {
         const newSet = new Set(selectedIds);
@@ -2267,7 +2276,26 @@ useEffect(() => {
   const handleSaveTransaction = async () => {
       if(!editingTx) return;
       try {
-        const txData = { ...editingTx, amount: Number(editingTx.amount), year: new Date(editingTx.date).getFullYear(), month: new Date(editingTx.date).getMonth() + 1 };
+        // [修正] 取得當前有效的分類列表
+        const availableCats = (settings?.categories || DEFAULT_CATEGORIES).map((c: any) => c.name);
+        
+        // [修正] 智慧防呆：
+        // 如果當前的 category 不在有效列表中（例如是舊資料 "General"），
+        // 且使用者沒有動過選單（介面上看到的是第一個選項），
+        // 則存檔時強制將其更新為列表的第一個選項（即 "Rental Income"）。
+        let finalCategory = editingTx.category;
+        if (!availableCats.includes(finalCategory) && availableCats.length > 0) {
+            finalCategory = availableCats[0];
+        }
+
+        const txData = { 
+            ...editingTx, 
+            category: finalCategory, // 使用修正後的分類
+            amount: Number(editingTx.amount), 
+            year: new Date(editingTx.date).getFullYear(), 
+            month: new Date(editingTx.date).getMonth() + 1 
+        };
+
         if(editingTx.id) await setDoc(doc(db, "transactions", editingTx.id), txData);
         else await addDoc(collection(db, "transactions"), txData);
         setModalMode('none');
@@ -2983,7 +3011,26 @@ useEffect(() => {
                             <p className="text-slate-500 text-xs md:text-sm">所有交易紀錄一覽 Table of All Transactions</p>
                         </div>
                         <div className="flex flex-wrap gap-2">
-                            <button onClick={() => { setEditingTx({ id: '', date: new Date().toISOString().split('T')[0], merchant: '', amount: 0, category: 'General', member: 'Charles', note: '', year: new Date().getFullYear(), month: new Date().getMonth() + 1, attachments: [] } as Transaction); setModalMode('transaction'); }} className="px-3 py-2 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 flex items-center gap-2 shadow-sm font-bold transition-colors"><ICONS.Plus /> 新增 Add</button>
+                            <button onClick={() => { 
+    // [修正] 新增時，預設分類直接抓取列表的第一個
+    const defaultCat = settings?.categories?.[0]?.name || 'General';
+    
+    setEditingTx({ 
+        id: '', 
+        date: new Date().toISOString().split('T')[0], 
+        merchant: '', 
+        amount: 0, 
+        category: defaultCat, // <--- 改這裡
+        member: 'Charles', 
+        note: '', 
+        year: new Date().getFullYear(), 
+        month: new Date().getMonth() + 1, 
+        attachments: [] 
+    } as Transaction); 
+    setModalMode('transaction'); 
+}} className="...">
+    <ICONS.Plus /> 新增 Add
+</button>
                             <button onClick={handleClearData} className="px-3 py-2 bg-white text-red-600 text-xs rounded hover:bg-red-50 flex items-center gap-2 border border-red-200 transition-colors"><ICONS.Trash /> 清空 Reset</button>
                             <label className="flex items-center gap-2 px-3 py-2 bg-indigo-50 text-indigo-700 text-xs rounded hover:bg-indigo-100 cursor-pointer border border-indigo-200 transition-colors"><ICONS.Upload /> CSV<input type="file" className="hidden" onChange={handleCSVUpload} accept=".csv" /></label>
                             <label className="flex items-center gap-2 px-3 py-2 bg-green-50 text-green-700 text-xs rounded hover:bg-green-100 cursor-pointer border border-green-200 transition-colors"><ICONS.Upload /> JSON<input type="file" className="hidden" onChange={handleFileUpload} accept=".json" /></label>

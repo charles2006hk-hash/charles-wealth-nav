@@ -1510,7 +1510,6 @@ const DocPreviewContent = ({
     
     // --- 2. 對數單樣式 (Statement) ---
     if (docConfig.type === 'statement') {
-        // 1. 基礎篩選 (物業 & 日期 & 排序)
         const dateFilteredTxs = transactions
             .filter(t => t.propertyId === docConfig.propId && (!docConfig.statementDateStart || t.date >= docConfig.statementDateStart) && (!docConfig.statementDateEnd || t.date <= docConfig.statementDateEnd))
             .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -1519,24 +1518,32 @@ const DocPreviewContent = ({
         const showCredit = docConfig.showCredit !== false;
         const showNotes = docConfig.showRowNotes !== false;
 
-        // [關鍵修正] 統一判斷收入的邏輯函數
+        // [關鍵修正] 最強大的收入判斷邏輯
         const checkIsIncome = (t: Transaction) => {
-            // 1. 強制關鍵字判斷 (優先級最高，防止 settings 被誤改)
-            if ((t.category || '').includes('Rental Income') || t.category?.includes('Sale') || t.category?.includes('收入')) {
+            const cat = (t.category || '').toLowerCase();
+            
+            // 1. 優先：檢查關鍵字 (增加 'rent', 'deposit' 等常見字)
+            if (cat.includes('rental income') || cat.includes('rent') || cat.includes('sale') || cat.includes('income') || cat.includes('收入') || cat.includes('deposit')) {
                 return true;
             }
-            // 2. 系統設定判斷
-            const settingType = settings?.categories?.find((c: any) => c.name === t.category)?.type;
-            if (settingType === 'Income') return true;
+            
+            // 2. 次要：檢查系統設定 (如果 settings 有傳進來)
+            if (settings?.categories) {
+                const settingType = settings.categories.find((c: any) => c.name === t.category)?.type;
+                if (settingType === 'Income') return true;
+                if (settingType === 'Expense') return false;
+            }
 
-            return false;
+            // 3. [最後防線]：如果分類不明，直接看金額正負號
+            // 如果 CSV 匯入時是正數 (e.g. 15000)，就當作收入
+            if (t.amount > 0) return true;
+
+            return false; // 預設為支出
         };
 
         // 2. 進階篩選：根據「顯示 Debit/Credit」的設定，移除不顯示的行數
         const finalTxs = dateFilteredTxs.filter(t => {
             const isIncome = checkIsIncome(t);
-            // 如果是收入，必須 showCredit 為 true 才保留
-            // 如果是支出，必須 showDebit 為 true 才保留
             return isIncome ? showCredit : showDebit;
         });
 
@@ -1555,20 +1562,16 @@ const DocPreviewContent = ({
             }
         });
 
-        // Net Balance = 總收入 - 總支出
         const netBalance = totalCredit - totalDebit;
         
-        // 4. 計算表格欄位數
         const colCount = 2 + (showDebit ? 1 : 0) + (showCredit ? 1 : 0);
 
         return (
             <div className="doc-print-container bg-white w-full text-black font-serif mx-auto relative p-4">
-                {/* 標題區 */}
                 <div className="text-center mb-4">
                     <h1 className="text-2xl font-bold underline">RENTAL STATEMENT 租務對數單</h1>
                 </div>
                 
-                {/* 資訊區 */}
                 <div className="flex justify-between items-start mb-4 text-sm header-info border-b pb-2">
                     <div className="w-[55%]">
                         <div className="flex mb-1"><span className="font-bold w-20 flex-shrink-0">Property:</span> <span>{prop.name}</span></div>
@@ -1581,13 +1584,11 @@ const DocPreviewContent = ({
                     </div>
                 </div>
 
-                {/* 表格區 */}
                 <table className="w-full border-collapse border border-black text-sm mb-2">
                     <thead>
                         <tr className="bg-gray-100">
                             <th className="border border-black p-2 text-left w-[15%]">Date</th>
                             <th className="border border-black p-2 text-left">Description / Particulars</th>
-                            {/* 動態表頭 */}
                             {showDebit && <th className="border border-black p-2 text-right w-[18%]">Debit (Dr)</th>}
                             {showCredit && <th className="border border-black p-2 text-right w-[18%]">Credit (Cr)</th>}
                         </tr>
@@ -1608,7 +1609,6 @@ const DocPreviewContent = ({
                                         {showNotes && t.note && <span className="block text-slate-500 italic text-xs mt-0.5">Note: {t.note}</span>}
                                     </td>
                                     
-                                    {/* 動態內容 */}
                                     {showDebit && (
                                         <td className="border border-black p-2 text-right align-top text-slate-600">
                                             {!isIncome ? displayAmount : ''}
@@ -1630,7 +1630,6 @@ const DocPreviewContent = ({
                             <td className="border border-black p-2 text-right" colSpan={2}>
                                 Total ({finalTxs.length} items):
                             </td>
-                            {/* 動態合計 */}
                             {showDebit && <td className="border border-black p-2 text-right">{formatCurrency(totalDebit)}</td>}
                             {showCredit && <td className="border border-black p-2 text-right">{formatCurrency(totalCredit)}</td>}
                         </tr>
@@ -1646,7 +1645,6 @@ const DocPreviewContent = ({
                     </tfoot>
                 </table>
 
-                {/* 底部區域 */}
                 <div className="avoid-break">
                     {docConfig.statementFooterNote && (
                         <div className="border p-2 bg-slate-50 text-sm footer-note mb-4">

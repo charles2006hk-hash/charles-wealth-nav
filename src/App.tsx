@@ -1175,23 +1175,31 @@ const PropertyDetailView = ({
 }: any) => {
     const p = propStats.find((x: any) => x.id === propId);
     
-    // 安全性檢查：如果找不到物業，顯示提示而非崩潰
     if (!p) return <div className="p-8 text-center text-slate-500">找不到該物業資料 (Property not found)</div>;
 
-    // --- 安全的輔助函數：判斷收支類型 ---
-    // 加上 ?. 和 || 避免 settings 為空時崩潰
+    // --- [修正 1] 強化的收支判斷邏輯 ---
     const getTxType = (catName: string) => {
-        // 如果 settings 還沒載入，預設回傳 Expense
-        if (!settings || !settings.categories) return 'Expense';
-
-        const found = settings.categories.find((c: any) => c.name === catName);
-        if (found) return found.type;
+        const cat = (catName || '').toLowerCase();
         
-        // 舊資料相容
-        if ((catName || '').includes('Income') || (catName || '').includes('Sale') || (catName || '').includes('收入')) {
+        // 1. 強制關鍵字判斷 (最優先)
+        // 只要包含這些字，絕對是收入
+        if (cat.includes('rental income') || 
+            cat.includes('rent') || 
+            cat.includes('sale') || 
+            cat.includes('deposit') || // 按金通常是收入(暫存)
+            cat.includes('income') || 
+            cat.includes('interest') || // 利息
+            cat.includes('收入')) {
             return 'Income';
         }
-        return 'Expense';
+
+        // 2. 系統設定判斷
+        if (settings?.categories) {
+            const found = settings.categories.find((c: any) => c.name === catName);
+            if (found) return found.type;
+        }
+        
+        return 'Expense'; // 預設為支出
     };
     
     // 篩選交易
@@ -1202,14 +1210,14 @@ const PropertyDetailView = ({
     
     const pLeases = leases.filter((l: any) => l.propertyId === propId);
 
-    // 計算統計數據
+    // --- [修正 2] 統計計算：強制取絕對值 (Math.abs) ---
     const periodIncome = filteredTxs
         .filter((t:any) => getTxType(t.category) === 'Income')
-        .reduce((sum:number, t:any) => sum + t.amount, 0);
+        .reduce((sum:number, t:any) => sum + Math.abs(t.amount || 0), 0);
 
     const periodExpense = filteredTxs
         .filter((t:any) => getTxType(t.category) === 'Expense')
-        .reduce((sum:number, t:any) => sum + t.amount, 0);
+        .reduce((sum:number, t:any) => sum + Math.abs(t.amount || 0), 0);
 
     return (
         <div className="space-y-6 animate-in fade-in">
@@ -1313,11 +1321,13 @@ const PropertyDetailView = ({
                 </div>
                 <div className="max-h-[500px] overflow-y-auto">
                     <table className="w-full text-sm text-left">
-                        <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0"><tr><th className="p-3">Date</th><th className="p-3">Category</th><th className="p-3">Detail</th><th className="p-3">Amount</th><th className="p-3">Action</th></tr></thead>
+                        <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0"><tr><th className="p-3">Date</th><th className="p-3">Category</th><th className="p-3">Detail</th><th className="p-3 text-right">Amount</th><th className="p-3">Action</th></tr></thead>
                         <tbody className="divide-y">
                             {filteredTxs.map((t: any) => {
-                                // 判斷單筆交易收支類型
+                                // --- [修正 3] 行內判斷邏輯 ---
                                 const isIncome = getTxType(t.category) === 'Income';
+                                // 強制取絕對值
+                                const absAmount = Math.abs(t.amount || 0);
                                 
                                 return (
                                     <tr key={t.id} className="hover:bg-blue-50">
@@ -1328,12 +1338,9 @@ const PropertyDetailView = ({
                                                 value={t.category} 
                                                 onChange={e => handleUpdateCategory(t.id, e.target.value)}
                                             >
-                                                {/* --- 這裡是最重要的修正：加上 ?. 和預設值 [] 防止 map 崩潰 --- */}
                                                 {(settings?.categories || []).map((c: any) => (
                                                     <option key={c.name} value={c.name}>{c.name}</option>
                                                 ))}
-                                                
-                                                {/* 兜底顯示：如果當前類別不在列表中 */}
                                                 {!(settings?.categories || []).some((c:any)=>c.name === t.category) && (
                                                     <option value={t.category}>{t.category}</option>
                                                 )}
@@ -1354,9 +1361,12 @@ const PropertyDetailView = ({
                                                 </span>
                                             )}
                                         </td>
-                                        <td className={`p-3 font-mono font-bold ${isIncome ? 'text-emerald-600' : 'text-red-500'}`}>
-                                            {isIncome ? '+' : '-'}{formatCurrency(t.amount)}
+                                        
+                                        {/* [修正 4] 顏色與符號判斷 */}
+                                        <td className={`p-3 text-right font-mono font-bold ${isIncome ? 'text-emerald-600' : 'text-red-500'}`}>
+                                            {isIncome ? '+' : '-'}{formatCurrency(absAmount)}
                                         </td>
+                                        
                                         <td className="p-3">
                                             <div className="flex items-center gap-2">
                                                 <button 

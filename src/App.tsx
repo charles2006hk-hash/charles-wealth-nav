@@ -1490,14 +1490,31 @@ const DocPreviewContent = ({
     
     // --- 2. 對數單樣式 (Statement) ---
     if (docConfig.type === 'statement') {
-        const filteredTxs = transactions
+        // 1. 基礎篩選 (物業 & 日期)
+        const dateFilteredTxs = transactions
             .filter(t => t.propertyId === docConfig.propId && (!docConfig.statementDateStart || t.date >= docConfig.statementDateStart) && (!docConfig.statementDateEnd || t.date <= docConfig.statementDateEnd))
             .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
         
+        const showDebit = docConfig.showDebit !== false; 
+        const showCredit = docConfig.showCredit !== false;
+        const showNotes = docConfig.showRowNotes !== false;
+
+        // 2. ✅ 進階篩選 (根據 Show Debit/Credit 移除整行)
+        const finalTxs = dateFilteredTxs.filter(t => {
+            const isIncome = (t.category || '').includes('Rental Income') || 
+                             t.category?.includes('Sale') || 
+                             (settings?.categories?.find((c: any) => c.name === t.category)?.type === 'Income');
+            
+            // 如果是收入(Income)，必須 showCredit 為 true 才顯示
+            // 如果是支出(Expense)，必須 showDebit 為 true 才顯示
+            return isIncome ? showCredit : showDebit;
+        });
+
+        // 3. 計算總數 (只計算有顯示的項目)
         let totalDebit = 0;
         let totalCredit = 0;
         
-        filteredTxs.forEach(t => {
+        finalTxs.forEach(t => {
             const isIncome = (t.category || '').includes('Rental Income') || 
                              t.category?.includes('Sale') || 
                              (settings?.categories?.find((c: any) => c.name === t.category)?.type === 'Income');
@@ -1508,13 +1525,7 @@ const DocPreviewContent = ({
 
         const netBalance = totalCredit - totalDebit;
         
-        // 判斷是否顯示 Debit / Credit 欄位
-        // 注意：這裡使用了 docConfig.showDebit !== false，代表預設是顯示的，除非使用者明確取消
-        const showDebit = docConfig.showDebit !== false; 
-        const showCredit = docConfig.showCredit !== false;
-        const showNotes = docConfig.showRowNotes !== false;
-        
-        // 計算總欄位數：日期(1) + 詳情(1) + Debit(有就1，沒就0) + Credit(有就1，沒就0)
+        // 計算總欄位數
         const colCount = 2 + (showDebit ? 1 : 0) + (showCredit ? 1 : 0);
 
         return (
@@ -1538,19 +1549,18 @@ const DocPreviewContent = ({
                 <table className="w-full border-collapse border border-black text-sm mb-2">
                     <thead>
                         <tr className="bg-gray-100">
-                            {/* 固定欄位 */}
                             <th className="border border-black p-2 text-left w-[15%]">Date</th>
                             <th className="border border-black p-2 text-left">Description / Particulars</th>
                             
-                            {/* 動態欄位：如果 showDebit 為 false，這個 <th> 就不會被渲染 */}
+                            {/* 動態顯示表頭 */}
                             {showDebit && <th className="border border-black p-2 text-right w-[18%]">Debit (Dr)</th>}
                             {showCredit && <th className="border border-black p-2 text-right w-[18%]">Credit (Cr)</th>}
                         </tr>
                     </thead>
                     <tbody>
-                        {filteredTxs.length === 0 && <tr><td colSpan={colCount} className="p-4 text-center">No records found for this period.</td></tr>}
+                        {finalTxs.length === 0 && <tr><td colSpan={colCount} className="p-4 text-center">No records found for this period.</td></tr>}
                         
-                        {filteredTxs.map(t => {
+                        {finalTxs.map(t => {
                              const isIncome = (t.category || '').includes('Rental Income') || 
                                               t.category?.includes('Sale') || 
                                               (settings?.categories?.find((c: any) => c.name === t.category)?.type === 'Income');
@@ -1563,7 +1573,6 @@ const DocPreviewContent = ({
                                         {showNotes && t.note && <span className="block text-slate-500 italic text-xs mt-0.5">Note: {t.note}</span>}
                                     </td>
                                     
-                                    {/* 動態內容：只有在打勾時才顯示該欄位的 TD */}
                                     {showDebit && (
                                         <td className="border border-black p-2 text-right align-top text-slate-600">
                                             {!isIncome ? formatCurrency(t.amount) : ''}
@@ -1583,15 +1592,14 @@ const DocPreviewContent = ({
                     <tfoot>
                         <tr className="bg-gray-50 font-bold border-t-2 border-black">
                             <td className="border border-black p-2 text-right" colSpan={2}>
-                                Total:
+                                Total ({finalTxs.length} items):
                             </td>
-                            {/* 動態頁尾：只有打勾時才顯示合計 */}
+                            {/* 動態顯示合計 */}
                             {showDebit && <td className="border border-black p-2 text-right">{formatCurrency(totalDebit)}</td>}
                             {showCredit && <td className="border border-black p-2 text-right">{formatCurrency(totalCredit)}</td>}
                         </tr>
                         
                         <tr className="bg-gray-100 font-bold text-lg">
-                            {/* colspan 會自動根據 colCount 計算，確保 Net Balance 橫跨正確的欄位數 */}
                             <td className="border border-black p-2 text-right" colSpan={colCount - 1}>
                                 Net Balance (結餘):
                             </td>

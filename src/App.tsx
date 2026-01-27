@@ -25,6 +25,32 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 // --- 2. 類型定義 (Types) ---
+// --- 新增：投資模塊類型定義 ---
+interface PrivateLoan {
+  id: string;
+  name: string; // e.g., "建設借款"
+  principal: number; // 本金 e.g., 3000000
+  rate: number; // 年化利率 e.g., 6%
+  term: 'Semi-annual'; // 結算週期
+  nextDeductionDate: string; // 下次扣息日
+  lastDeductionDate: string; // 上次扣息日
+  status: 'Active' | 'Settled';
+  notes: string;
+}
+
+interface PEProject {
+  id: string;
+  fundName: string; // e.g., "蟻米基金"
+  projectName: string; // e.g., "鑫茂新能源"
+  investmentAmount: number; // 投資本金
+  valuation: number; // 當前估值 (或是投資成本)
+  status: 'Investment' | 'Exit' | 'IPO Prep';
+  ipoTargetDate: string; // 預計上市時間
+  description: string;
+  managementFee: number; // 年管理費率
+  feePaidStatus: string; // e.g., "2023 已繳"
+}
+
 interface Transaction {
   id: string; 
   date: string;
@@ -186,6 +212,9 @@ const ICONS = {
   Image: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>,
   X: () => <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>,
   Settings: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>,
+  Briefcase: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>,
+  TrendingUp: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>,
+
 };
 
 // --- Constants ---
@@ -216,6 +245,47 @@ const DEFAULT_CATEGORIES: CategoryConfig[] = [
   { name: 'Medical', type: 'Expense' },
   { name: 'General', type: 'Expense' },
   { name: 'Other (其他)', type: 'Expense' }
+];
+
+const INITIAL_LOANS: PrivateLoan[] = [
+    {
+        id: 'l1',
+        name: '建設借款 (Construction Loan)',
+        principal: 3000000,
+        rate: 6.0,
+        term: 'Semi-annual',
+        nextDeductionDate: '2024-01-01', // 下一次結算
+        lastDeductionDate: '2023-07-01',
+        status: 'Active',
+        notes: '先扣原則，每半年(1/1, 7/1)結算。'
+    }
+];
+
+const INITIAL_PE_PROJECTS: PEProject[] = [
+    {
+        id: 'pe1',
+        fundName: '蟻米基金 (Ant Rice Fund)',
+        projectName: '鑫茂新能源 (Xinmao)',
+        investmentAmount: 500000,
+        valuation: 500000, // 暫按成本計，雖然估值已漲
+        status: 'IPO Prep',
+        ipoTargetDate: '2024-12-31',
+        managementFee: 2.0,
+        feePaidStatus: '2023 Paid (20k)',
+        description: '2022營收6億，淨利9100萬。計劃2023 Q3申報創業板，2024上市。'
+    },
+    {
+        id: 'pe2',
+        fundName: '蟻米基金 (Ant Rice Fund)',
+        projectName: '玻思韬 (Bostao)',
+        investmentAmount: 500000,
+        valuation: 500000,
+        status: 'Investment',
+        ipoTargetDate: '2025-06-30',
+        managementFee: 2.0,
+        feePaidStatus: 'Included',
+        description: '生物醫藥釋控技術。預計2024報IPO。'
+    }
 ];
 
 const CATEGORIES = [
@@ -1018,6 +1088,11 @@ const PropertyDashboard = ({
                 <StatCard title="每月租金收入 Monthly Rent" value={formatCurrency(totalMonthlyRent)} color="emerald" iconName="DollarSign" />
                 <StatCard title="整體出租率 Occupancy Rate" value={`${properties.length ? (properties.filter((p:any)=>p.status==='Occupied').length / properties.length * 100).toFixed(0) : 0}%`} color="indigo" iconName="PieChart" />
                 <StatCard title="應收未收 Arrears" value={propStats.filter((p:any)=>p.isLate).length} color="red" iconName="Shield" subtext="Units Late" />
+                <StatCard title="私募與借貸 Investments" value={formatCurrency(4000000)} // 300萬借款 + 100萬PE
+                    subtext="ROI 6% / IPO Pending" 
+                    color="purple" 
+                    iconName="Briefcase" // 或 DollarSign
+                />
             </div>
 
             {/* --- 新增：篩選工具列 --- */}
@@ -1938,6 +2013,167 @@ interface DocModalProps {
     transactions: Transaction[];
     settings: AppSettings; // <--- 5. 新增這裡
 }
+
+const InvestmentDashboard = () => {
+    // 這裡使用靜態數據演示，實際可存入 Firebase
+    const loans = INITIAL_LOANS;
+    const peProjects = INITIAL_PE_PROJECTS;
+
+    const totalLoanPrincipal = loans.reduce((acc, l) => acc + l.principal, 0);
+    const totalPEInvested = peProjects.reduce((acc, p) => acc + p.investmentAmount, 0);
+    const totalAssets = totalLoanPrincipal + totalPEInvested;
+
+    // 計算下次應收/應扣利息 (半年一次)
+    // 300萬 * 6% / 2 = 9萬
+    const nextInterestIncome = totalLoanPrincipal * 0.06 / 2;
+
+    return (
+        <div className="space-y-6 animate-in fade-in pb-10">
+            {/* 1. 頂部摘要卡片 */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-gradient-to-br from-slate-800 to-slate-900 text-white p-6 rounded-2xl shadow-lg">
+                    <div className="flex justify-between items-start mb-4">
+                        <div className="p-2 bg-white/10 rounded-lg"><ICONS.Briefcase /></div>
+                        <span className="bg-emerald-500 text-white text-xs px-2 py-1 rounded-full font-bold">Total Assets</span>
+                    </div>
+                    <p className="text-slate-400 text-sm">投資與借貸總額 (Principal)</p>
+                    <h3 className="text-3xl font-bold mt-1">{formatCurrency(totalAssets)}</h3>
+                    <div className="mt-4 flex gap-4 text-xs text-slate-300">
+                        <span>Loans: {formatCurrency(totalLoanPrincipal)}</span>
+                        <span>•</span>
+                        <span>PE Fund: {formatCurrency(totalPEInvested)}</span>
+                    </div>
+                </div>
+
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <div className="flex justify-between items-start mb-4">
+                        <div className="p-2 bg-blue-50 text-blue-600 rounded-lg"><ICONS.TrendingUp /></div>
+                        <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full font-bold">Interest (6%)</span>
+                    </div>
+                    <p className="text-slate-500 text-sm">每半年預扣利息 (Semi-annual)</p>
+                    <h3 className="text-2xl font-bold text-slate-800 mt-1">{formatCurrency(nextInterestIncome)}</h3>
+                    <p className="text-xs text-slate-400 mt-2">Next Deduction: 01 Jan 2024</p>
+                </div>
+
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <div className="flex justify-between items-start mb-4">
+                        <div className="p-2 bg-purple-50 text-purple-600 rounded-lg"><ICONS.ShieldCheck /></div>
+                        <span className="bg-purple-100 text-purple-700 text-xs px-2 py-1 rounded-full font-bold">Fund Status</span>
+                    </div>
+                    <p className="text-slate-500 text-sm">基金管理費 (2%)</p>
+                    <h3 className="text-2xl font-bold text-slate-800 mt-1">$20,000</h3>
+                    <p className="text-xs text-green-600 mt-2">✔ 2023 Paid (已代繳)</p>
+                </div>
+            </div>
+
+            {/* 2. 借貸詳情 */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="p-4 border-b bg-slate-50 flex justify-between items-center">
+                    <h3 className="font-bold text-slate-700 flex items-center gap-2">
+                        <ICONS.DollarSign /> 私人借貸管理 (Private Lending)
+                    </h3>
+                    <span className="text-xs bg-white border px-2 py-1 rounded text-slate-500">Rate: 6% p.a.</span>
+                </div>
+                <div className="p-6">
+                    {loans.map(loan => (
+                        <div key={loan.id} className="flex flex-col md:flex-row justify-between items-center gap-4">
+                            <div>
+                                <h4 className="font-bold text-lg text-slate-800">{loan.name}</h4>
+                                <p className="text-sm text-slate-500">{loan.notes}</p>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-xs text-slate-400">本金 Principal</p>
+                                <p className="text-xl font-mono font-bold text-blue-600">{formatCurrency(loan.principal)}</p>
+                            </div>
+                            <div className="flex gap-8 text-sm bg-slate-50 p-3 rounded-lg border">
+                                <div>
+                                    <span className="block text-xs text-slate-400">規則 Rule</span>
+                                    <span className="font-bold">先扣息 (Pre-deduct)</span>
+                                </div>
+                                <div>
+                                    <span className="block text-xs text-slate-400">週期 Term</span>
+                                    <span className="font-bold">每半年 (Semi)</span>
+                                </div>
+                                <div>
+                                    <span className="block text-xs text-slate-400">狀態 Status</span>
+                                    <span className="text-green-600 font-bold">正常履約</span>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                    
+                    {/* 最近結算紀錄 (根據您的文字) */}
+                    <div className="mt-6 pt-4 border-t border-dashed">
+                        <h4 className="text-xs font-bold text-slate-500 mb-2 uppercase">Recent Settlement (最近一次結算明細)</h4>
+                        <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-100 text-sm space-y-2 font-mono">
+                            <div className="flex justify-between text-slate-600">
+                                <span>1. 匯入舊款利息 (47萬 - 6萬)</span>
+                                <span>$410,000</span>
+                            </div>
+                            <div className="flex justify-between text-slate-600">
+                                <span>2. 代繳管理費調整</span>
+                                <span>+$20,000</span>
+                            </div>
+                            <div className="flex justify-between font-bold text-slate-800 border-t border-yellow-200 pt-2 mt-2">
+                                <span>總匯入款項 (Total Remittance)</span>
+                                <span>$430,000</span>
+                            </div>
+                            <p className="text-[10px] text-slate-400 font-sans mt-1">* 註：新款100萬已扣除3萬利息及50萬已付，餘47萬。舊款200萬扣6萬利息。</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* 3. 私募基金詳情 */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="p-4 border-b bg-slate-50 flex justify-between items-center">
+                    <h3 className="font-bold text-slate-700 flex items-center gap-2">
+                        <ICONS.Briefcase /> 蟻米基金 (Private Equity)
+                    </h3>
+                    <span className="text-xs bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-1 rounded">Fund Size: {formatCurrency(totalPEInvested)}</span>
+                </div>
+                <div className="divide-y">
+                    {peProjects.map(proj => (
+                        <div key={proj.id} className="p-6 hover:bg-slate-50 transition-colors">
+                            <div className="flex flex-col md:flex-row justify-between mb-2">
+                                <div className="flex items-center gap-3">
+                                    <h4 className="font-bold text-lg text-slate-800">{proj.projectName}</h4>
+                                    <span className={`text-[10px] px-2 py-0.5 rounded border ${proj.status==='IPO Prep' ? 'bg-orange-50 text-orange-600 border-orange-200' : 'bg-blue-50 text-blue-600 border-blue-200'}`}>
+                                        {proj.status === 'IPO Prep' ? 'IPO 衝刺期' : '投資持有中'}
+                                    </span>
+                                </div>
+                                <div className="text-right">
+                                    <span className="text-xs text-slate-400 mr-2">Investment:</span>
+                                    <span className="font-bold font-mono">{formatCurrency(proj.investmentAmount)}</span>
+                                </div>
+                            </div>
+                            
+                            <p className="text-sm text-slate-600 mb-4 bg-slate-50 p-2 rounded">{proj.description}</p>
+                            
+                            {/* 進度條模擬 */}
+                            <div className="relative pt-4 pb-2">
+                                <div className="flex justify-between text-xs font-bold text-slate-400 mb-1">
+                                    <span>Investment</span>
+                                    <span>IPO Application ({proj.ipoTargetDate.substring(0,4)})</span>
+                                    <span>Listing</span>
+                                </div>
+                                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                    <div 
+                                        className={`h-full rounded-full ${proj.projectName.includes('鑫茂') ? 'w-[80%] bg-orange-400' : 'w-[40%] bg-blue-400'}`}
+                                    ></div>
+                                </div>
+                                {proj.projectName.includes('鑫茂') && <p className="text-[10px] text-orange-500 mt-1 text-center">預計 2023 Q3 申報</p>}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+                <div className="p-4 bg-slate-50 border-t text-xs text-slate-500">
+                    <p>備註：林先生投入本金100萬元。待投資退出時間，按投資收益稅後結算。</p>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 const DocModal: React.FC<DocModalProps> = ({ 
     isOpen, onClose, docConfig, setDocConfig, handlePrint, properties, transactions, settings
@@ -2989,6 +3225,7 @@ useEffect(() => {
                               {id: 'data', icon: 'Data', label: '數據中心 Data Hub'},
                               {id: 'insurance', icon: 'Shield', label: '保險庫 Insurance'},
                               {id: 'education', icon: 'GraduationCap', label: '升學 Education'},
+                              {id: 'investments', icon: 'Briefcase', label: '投資管理 Investments'},
                               {id: 'settings', icon: 'Settings', label: '系統設定 Settings'}
                           ].map(item => (
                               <button key={item.id} onClick={() => { setActiveTab(item.id); setPropertyViewId(null); setIsSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${activeTab===item.id && !propertyViewId ? 'bg-blue-600 text-white' : 'hover:bg-slate-800'} ${isDesktopSidebarCollapsed ? 'justify-center' : ''}`} title={item.label}>
@@ -3033,6 +3270,10 @@ useEffect(() => {
                       deleteItem={deleteItem} ledgerFilter={ledgerFilter} setLedgerFilter={setLedgerFilter}
                       handleUpdateCategory={handleUpdateCategory} handleOpenReceipt={handleOpenReceipt}
                   />
+              )}
+              
+              {activeTab === 'investments' && (
+                 <InvestmentDashboard />
               )}
 
               {activeTab === 'settings' && (

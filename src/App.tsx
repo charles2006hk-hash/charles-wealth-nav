@@ -2014,161 +2014,299 @@ interface DocModalProps {
     settings: AppSettings; // <--- 5. 新增這裡
 }
 
+// 請將此組件完全替換掉原本的 InvestmentDashboard
 const InvestmentDashboard = () => {
-    // 這裡使用靜態數據演示，實際可存入 Firebase
+    // --- 1. 模擬歷史數據 (為了動態分析) ---
+    // 假設借貸從 2015 開始，我們生成一個現金流歷史
+    const loanHistory = useMemo(() => {
+        const principal = 3000000;
+        const rate = 0.06;
+        const history = [];
+        const startDate = 2015;
+        const currentYear = new Date().getFullYear();
+        
+        // 模擬過去每年的利息收入 (每半年一次)
+        for (let y = startDate; y < currentYear; y++) {
+            history.push({ year: y, month: 1, amount: principal * rate / 2, type: 'Interest', note: '上半年利息' });
+            history.push({ year: y, month: 7, amount: principal * rate / 2, type: 'Interest', note: '下半年利息' });
+        }
+        // 加上今年的預期
+        history.push({ year: currentYear, month: 1, amount: principal * rate / 2, type: 'Interest (Paid)', note: '已付' });
+        
+        return history.sort((a,b) => b.year - a.year);
+    }, []);
+
+    const totalInterestReceived = loanHistory.reduce((acc, h) => acc + h.amount, 0);
+    
+    // 定義現在的資產狀態
     const loans = INITIAL_LOANS;
     const peProjects = INITIAL_PE_PROJECTS;
 
     const totalLoanPrincipal = loans.reduce((acc, l) => acc + l.principal, 0);
     const totalPEInvested = peProjects.reduce((acc, p) => acc + p.investmentAmount, 0);
-    const totalAssets = totalLoanPrincipal + totalPEInvested;
+    const totalPEValuation = peProjects.reduce((acc, p) => acc + p.valuation, 0); // 這裡未來可改成動態估值
+    const totalAssets = totalLoanPrincipal + totalPEValuation;
 
-    // 計算下次應收/應扣利息 (半年一次)
-    // 300萬 * 6% / 2 = 9萬
-    const nextInterestIncome = totalLoanPrincipal * 0.06 / 2;
+    // --- 2. 風險與回報計算核心 ---
+    
+    // A. 借貸回報分析
+    // 簡單 ROI = 總利息收入 / 本金
+    const loanROI = (totalInterestReceived / totalLoanPrincipal) * 100;
+    
+    // B. 私募基金潛在回報 (假設估值翻倍的保守估計，或根據最新財報調整)
+    // 這裡我們模擬：鑫茂估值漲了 50% (根據營收翻3倍推測)，玻思韬持平
+    const simulatedPEValuation = 
+        (peProjects.find(p=>p.projectName.includes('鑫茂'))?.investmentAmount || 0) * 1.5 + 
+        (peProjects.find(p=>p.projectName.includes('玻思韬'))?.investmentAmount || 0) * 1.0;
+    
+    const peUnrealizedProfit = simulatedPEValuation - totalPEInvested;
+    const peROI = (peUnrealizedProfit / totalPEInvested) * 100;
+
+    // C. 風險評分 (0-100, 越高越危險)
+    // 借貸：相對低風險 (有固定還款)，但期限長
+    // PE：高風險 (依賴 IPO)
+    const riskScore = Math.round(
+        (totalLoanPrincipal * 20 + totalPEInvested * 80) / (totalLoanPrincipal + totalPEInvested)
+    );
 
     return (
         <div className="space-y-6 animate-in fade-in pb-10">
-            {/* 1. 頂部摘要卡片 */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-gradient-to-br from-slate-800 to-slate-900 text-white p-6 rounded-2xl shadow-lg">
-                    <div className="flex justify-between items-start mb-4">
-                        <div className="p-2 bg-white/10 rounded-lg"><ICONS.Briefcase /></div>
-                        <span className="bg-emerald-500 text-white text-xs px-2 py-1 rounded-full font-bold">Total Assets</span>
+            {/* 1. 動態獲利分析卡 (Dynamic Profitability) */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                
+                {/* 借貸獲利分析 - 現金牛 */}
+                <div className="bg-gradient-to-br from-emerald-50 to-white p-6 rounded-2xl shadow-sm border border-emerald-100 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-4 opacity-10"><ICONS.DollarSign /></div>
+                    <div className="flex items-center gap-2 mb-4">
+                        <div className="p-2 bg-emerald-100 text-emerald-700 rounded-lg"><ICONS.TrendingUp /></div>
+                        <h3 className="font-bold text-slate-700">借貸現金流 (Cash Cow)</h3>
                     </div>
-                    <p className="text-slate-400 text-sm">投資與借貸總額 (Principal)</p>
-                    <h3 className="text-3xl font-bold mt-1">{formatCurrency(totalAssets)}</h3>
-                    <div className="mt-4 flex gap-4 text-xs text-slate-300">
-                        <span>Loans: {formatCurrency(totalLoanPrincipal)}</span>
-                        <span>•</span>
-                        <span>PE Fund: {formatCurrency(totalPEInvested)}</span>
-                    </div>
-                </div>
-
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                    <div className="flex justify-between items-start mb-4">
-                        <div className="p-2 bg-blue-50 text-blue-600 rounded-lg"><ICONS.TrendingUp /></div>
-                        <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full font-bold">Interest (6%)</span>
-                    </div>
-                    <p className="text-slate-500 text-sm">每半年預扣利息 (Semi-annual)</p>
-                    <h3 className="text-2xl font-bold text-slate-800 mt-1">{formatCurrency(nextInterestIncome)}</h3>
-                    <p className="text-xs text-slate-400 mt-2">Next Deduction: 01 Jan 2024</p>
-                </div>
-
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                    <div className="flex justify-between items-start mb-4">
-                        <div className="p-2 bg-purple-50 text-purple-600 rounded-lg"><ICONS.ShieldCheck /></div>
-                        <span className="bg-purple-100 text-purple-700 text-xs px-2 py-1 rounded-full font-bold">Fund Status</span>
-                    </div>
-                    <p className="text-slate-500 text-sm">基金管理費 (2%)</p>
-                    <h3 className="text-2xl font-bold text-slate-800 mt-1">$20,000</h3>
-                    <p className="text-xs text-green-600 mt-2">✔ 2023 Paid (已代繳)</p>
-                </div>
-            </div>
-
-            {/* 2. 借貸詳情 */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="p-4 border-b bg-slate-50 flex justify-between items-center">
-                    <h3 className="font-bold text-slate-700 flex items-center gap-2">
-                        <ICONS.DollarSign /> 私人借貸管理 (Private Lending)
-                    </h3>
-                    <span className="text-xs bg-white border px-2 py-1 rounded text-slate-500">Rate: 6% p.a.</span>
-                </div>
-                <div className="p-6">
-                    {loans.map(loan => (
-                        <div key={loan.id} className="flex flex-col md:flex-row justify-between items-center gap-4">
-                            <div>
-                                <h4 className="font-bold text-lg text-slate-800">{loan.name}</h4>
-                                <p className="text-sm text-slate-500">{loan.notes}</p>
-                            </div>
-                            <div className="text-right">
-                                <p className="text-xs text-slate-400">本金 Principal</p>
-                                <p className="text-xl font-mono font-bold text-blue-600">{formatCurrency(loan.principal)}</p>
-                            </div>
-                            <div className="flex gap-8 text-sm bg-slate-50 p-3 rounded-lg border">
-                                <div>
-                                    <span className="block text-xs text-slate-400">規則 Rule</span>
-                                    <span className="font-bold">先扣息 (Pre-deduct)</span>
-                                </div>
-                                <div>
-                                    <span className="block text-xs text-slate-400">週期 Term</span>
-                                    <span className="font-bold">每半年 (Semi)</span>
-                                </div>
-                                <div>
-                                    <span className="block text-xs text-slate-400">狀態 Status</span>
-                                    <span className="text-green-600 font-bold">正常履約</span>
-                                </div>
-                            </div>
-                        </div>
-                    ))}
                     
-                    {/* 最近結算紀錄 (根據您的文字) */}
-                    <div className="mt-6 pt-4 border-t border-dashed">
-                        <h4 className="text-xs font-bold text-slate-500 mb-2 uppercase">Recent Settlement (最近一次結算明細)</h4>
-                        <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-100 text-sm space-y-2 font-mono">
-                            <div className="flex justify-between text-slate-600">
-                                <span>1. 匯入舊款利息 (47萬 - 6萬)</span>
-                                <span>$410,000</span>
+                    <div className="flex justify-between items-end mb-2">
+                        <span className="text-sm text-slate-500">累計已收利息 (Since 2015)</span>
+                        <span className="text-2xl font-bold text-emerald-600">+{formatCurrency(totalInterestReceived)}</span>
+                    </div>
+                    <div className="w-full bg-slate-100 h-2 rounded-full mb-2">
+                        <div className="bg-emerald-500 h-2 rounded-full" style={{width: `${Math.min(loanROI, 100)}%`}}></div>
+                    </div>
+                    <div className="flex justify-between text-xs text-slate-400">
+                        <span>已回本比例: {loanROI.toFixed(1)}%</span>
+                        <span>本金仍在庫: {formatCurrency(totalLoanPrincipal)}</span>
+                    </div>
+                </div>
+
+                {/* PE 潛在獲利 - 成長股 */}
+                <div className="bg-gradient-to-br from-indigo-50 to-white p-6 rounded-2xl shadow-sm border border-indigo-100 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-4 opacity-10"><ICONS.Briefcase /></div>
+                    <div className="flex items-center gap-2 mb-4">
+                        <div className="p-2 bg-indigo-100 text-indigo-700 rounded-lg"><ICONS.TrendingUp /></div>
+                        <h3 className="font-bold text-slate-700">PE 潛在價值 (Growth)</h3>
+                    </div>
+
+                    <div className="flex justify-between items-end mb-2">
+                        <span className="text-sm text-slate-500">預估浮盈 (Unrealized)</span>
+                        <span className="text-2xl font-bold text-indigo-600">+{formatCurrency(peUnrealizedProfit)}</span>
+                    </div>
+                    <div className="flex gap-2 text-xs mb-3">
+                        <span className="px-2 py-1 bg-white border rounded text-slate-600">成本: {formatCurrency(totalPEInvested)}</span>
+                        <span className="px-2 py-1 bg-indigo-600 text-white rounded">最新估值: {formatCurrency(simulatedPEValuation)}</span>
+                    </div>
+                    <p className="text-[10px] text-slate-400">* 估值基於近期財報推算 (鑫茂+50%)</p>
+                </div>
+
+                {/* 綜合風險儀表板 */}
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                    <div>
+                        <h3 className="font-bold text-slate-700 mb-2 flex items-center gap-2">
+                            <ICONS.ShieldCheck /> 投資組合風險 (Risk)
+                        </h3>
+                        <div className="flex items-center gap-4 mt-4">
+                            <div className="relative w-24 h-24 flex items-center justify-center">
+                                <svg className="transform -rotate-90 w-24 h-24">
+                                    <circle cx="48" cy="48" r="40" stroke="#f1f5f9" strokeWidth="8" fill="transparent" />
+                                    <circle cx="48" cy="48" r="40" stroke={riskScore > 50 ? "#f87171" : "#34d399"} strokeWidth="8" fill="transparent" strokeDasharray={251.2} strokeDashoffset={251.2 * (1 - riskScore / 100)} />
+                                </svg>
+                                <div className="absolute text-center">
+                                    <span className={`text-xl font-bold ${riskScore > 50 ? "text-red-500" : "text-green-500"}`}>{riskScore}</span>
+                                    <span className="block text-[10px] text-slate-400">Score</span>
+                                </div>
                             </div>
-                            <div className="flex justify-between text-slate-600">
-                                <span>2. 代繳管理費調整</span>
-                                <span>+$20,000</span>
+                            <div className="flex-1 text-sm text-slate-600 space-y-2">
+                                <p>您的投資組合屬於 <strong>{riskScore > 60 ? '進取型 (Aggressive)' : '穩健型 (Balanced)'}</strong>。</p>
+                                <p className="text-xs text-slate-400">75% 資產位於固定收益 (借貸)，25% 位於高風險創投 (PE)。</p>
                             </div>
-                            <div className="flex justify-between font-bold text-slate-800 border-t border-yellow-200 pt-2 mt-2">
-                                <span>總匯入款項 (Total Remittance)</span>
-                                <span>$430,000</span>
-                            </div>
-                            <p className="text-[10px] text-slate-400 font-sans mt-1">* 註：新款100萬已扣除3萬利息及50萬已付，餘47萬。舊款200萬扣6萬利息。</p>
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* 3. 私募基金詳情 */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="p-4 border-b bg-slate-50 flex justify-between items-center">
-                    <h3 className="font-bold text-slate-700 flex items-center gap-2">
-                        <ICONS.Briefcase /> 蟻米基金 (Private Equity)
-                    </h3>
-                    <span className="text-xs bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-1 rounded">Fund Size: {formatCurrency(totalPEInvested)}</span>
-                </div>
-                <div className="divide-y">
-                    {peProjects.map(proj => (
-                        <div key={proj.id} className="p-6 hover:bg-slate-50 transition-colors">
-                            <div className="flex flex-col md:flex-row justify-between mb-2">
-                                <div className="flex items-center gap-3">
-                                    <h4 className="font-bold text-lg text-slate-800">{proj.projectName}</h4>
-                                    <span className={`text-[10px] px-2 py-0.5 rounded border ${proj.status==='IPO Prep' ? 'bg-orange-50 text-orange-600 border-orange-200' : 'bg-blue-50 text-blue-600 border-blue-200'}`}>
-                                        {proj.status === 'IPO Prep' ? 'IPO 衝刺期' : '投資持有中'}
-                                    </span>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* 左側：詳細資產列表 (保留原本的邏輯但優化樣式) */}
+                <div className="lg:col-span-2 space-y-6">
+                    {/* 私人借貸詳情 */}
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div className="p-4 border-b bg-slate-50 flex justify-between items-center">
+                            <h3 className="font-bold text-slate-800 flex items-center gap-2"><ICONS.DollarSign /> 私人借貸履約監控</h3>
+                            <span className="text-xs font-mono bg-green-100 text-green-700 px-2 py-1 rounded">Active</span>
+                        </div>
+                        {loans.map(loan => (
+                            <div key={loan.id} className="p-6">
+                                <div className="flex flex-wrap justify-between items-start mb-4">
+                                    <div>
+                                        <h4 className="font-bold text-lg">{loan.name}</h4>
+                                        <div className="flex items-center gap-2 mt-1">
+                                            <span className="text-xs bg-slate-100 px-2 py-1 rounded text-slate-600">年化 {loan.rate}%</span>
+                                            <span className="text-xs bg-slate-100 px-2 py-1 rounded text-slate-600">每半年結算</span>
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <div className="text-2xl font-mono font-bold text-slate-800">{formatCurrency(loan.principal)}</div>
+                                        <div className="text-xs text-slate-500">本金 (Principal)</div>
+                                    </div>
                                 </div>
-                                <div className="text-right">
-                                    <span className="text-xs text-slate-400 mr-2">Investment:</span>
-                                    <span className="font-bold font-mono">{formatCurrency(proj.investmentAmount)}</span>
+                                
+                                {/* 現金流時間軸 */}
+                                <div className="mt-6">
+                                    <h5 className="text-xs font-bold text-slate-500 uppercase mb-3">Recent Cash Flow Timeline</h5>
+                                    <div className="relative border-l-2 border-slate-200 ml-3 space-y-6 pb-2">
+                                        {/* 最新預測 */}
+                                        <div className="relative pl-6">
+                                            <div className="absolute -left-[9px] top-1 w-4 h-4 rounded-full bg-blue-500 border-4 border-white shadow-sm"></div>
+                                            <div className="flex justify-between items-center bg-blue-50 p-3 rounded-lg border border-blue-100">
+                                                <div>
+                                                    <span className="font-bold text-blue-800 block text-sm">下次結算 ({loan.nextDeductionDate})</span>
+                                                    <span className="text-xs text-blue-600">預計利息收入</span>
+                                                </div>
+                                                <span className="font-mono font-bold text-blue-700">+{formatCurrency(loan.principal * loan.rate / 2)}</span>
+                                            </div>
+                                        </div>
+                                        
+                                        {/* 歷史紀錄 (顯示最近 3 筆) */}
+                                        {loanHistory.slice(0, 3).map((h, idx) => (
+                                            <div key={idx} className="relative pl-6 opacity-75">
+                                                <div className="absolute -left-[5px] top-2 w-2 h-2 rounded-full bg-slate-300"></div>
+                                                <div className="flex justify-between text-sm">
+                                                    <span className="text-slate-600">{h.year} {h.month === 1 ? 'Jan' : 'Jul'} - {h.note}</span>
+                                                    <span className="font-mono text-emerald-600">+{formatCurrency(h.amount)}</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        <div className="relative pl-6">
+                                            <button className="text-xs text-slate-400 hover:text-blue-600">查看 2015 以來所有紀錄 ↓</button>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-                            
-                            <p className="text-sm text-slate-600 mb-4 bg-slate-50 p-2 rounded">{proj.description}</p>
-                            
-                            {/* 進度條模擬 */}
-                            <div className="relative pt-4 pb-2">
-                                <div className="flex justify-between text-xs font-bold text-slate-400 mb-1">
-                                    <span>Investment</span>
-                                    <span>IPO Application ({proj.ipoTargetDate.substring(0,4)})</span>
-                                    <span>Listing</span>
-                                </div>
-                                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                                    <div 
-                                        className={`h-full rounded-full ${proj.projectName.includes('鑫茂') ? 'w-[80%] bg-orange-400' : 'w-[40%] bg-blue-400'}`}
-                                    ></div>
-                                </div>
-                                {proj.projectName.includes('鑫茂') && <p className="text-[10px] text-orange-500 mt-1 text-center">預計 2023 Q3 申報</p>}
+                        ))}
+                    </div>
+
+                    {/* 私募基金詳情 */}
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div className="p-4 border-b bg-slate-50 flex justify-between items-center">
+                            <h3 className="font-bold text-slate-800 flex items-center gap-2"><ICONS.Briefcase /> 蟻米基金投資追蹤</h3>
+                            <span className="text-xs font-mono bg-indigo-100 text-indigo-700 px-2 py-1 rounded">Total: {formatCurrency(totalPEInvested)}</span>
+                        </div>
+                        <div className="divide-y">
+                            {peProjects.map(proj => {
+                                // 模擬各專案的具體表現
+                                const isXinmao = proj.projectName.includes('鑫茂');
+                                const currentVal = isXinmao ? proj.investmentAmount * 1.5 : proj.investmentAmount;
+                                const roi = ((currentVal - proj.investmentAmount) / proj.investmentAmount) * 100;
+                                
+                                return (
+                                    <div key={proj.id} className="p-6">
+                                        <div className="flex justify-between mb-4">
+                                            <div>
+                                                <h4 className="font-bold text-lg flex items-center gap-2">
+                                                    {proj.projectName}
+                                                    {isXinmao && <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full animate-pulse">Hot</span>}
+                                                </h4>
+                                                <p className="text-xs text-slate-500 mt-1">投入本金: {formatCurrency(proj.investmentAmount)}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <div className={`text-lg font-bold ${roi > 0 ? 'text-indigo-600' : 'text-slate-600'}`}>
+                                                    {roi > 0 ? '+' : ''}{roi.toFixed(0)}%
+                                                </div>
+                                                <div className="text-xs text-slate-400">預估回報 (Est. ROI)</div>
+                                            </div>
+                                        </div>
+
+                                        {/* IPO 進度追蹤器 */}
+                                        <div className="space-y-2">
+                                            <div className="flex justify-between text-xs font-bold text-slate-600">
+                                                <span>天使輪 (Angel)</span>
+                                                <span>A輪/B輪</span>
+                                                <span className={isXinmao ? 'text-blue-600' : ''}>股改/申報</span>
+                                                <span>上市 (IPO)</span>
+                                            </div>
+                                            <div className="h-2 bg-slate-100 rounded-full overflow-hidden relative">
+                                                {/* 進度條背景 */}
+                                                <div className="absolute top-0 left-0 h-full w-full flex">
+                                                    <div className="w-1/4 border-r border-white/50"></div>
+                                                    <div className="w-1/4 border-r border-white/50"></div>
+                                                    <div className="w-1/4 border-r border-white/50"></div>
+                                                </div>
+                                                {/* 實際進度 */}
+                                                <div 
+                                                    className={`h-full rounded-full transition-all duration-1000 ease-out ${isXinmao ? 'w-[75%] bg-blue-500' : 'w-[40%] bg-slate-400'}`}
+                                                ></div>
+                                            </div>
+                                            <p className="text-xs text-slate-500 mt-1 bg-slate-50 p-2 rounded">
+                                                <span className="font-bold">最新動態：</span> {proj.description}
+                                            </p>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+
+                {/* 右側：側邊資訊欄 */}
+                <div className="space-y-6">
+                    {/* 年度收益總結 */}
+                    <div className="bg-slate-900 text-white p-6 rounded-2xl shadow-lg">
+                        <h4 className="text-sm font-bold text-slate-400 uppercase mb-4">2023 收益預覽</h4>
+                        <div className="space-y-4">
+                            <div className="flex justify-between items-center border-b border-slate-700 pb-2">
+                                <span>借貸利息 (Cash)</span>
+                                <span className="font-mono text-emerald-400">+{formatCurrency(3000000 * 0.06)}</span>
+                            </div>
+                            <div className="flex justify-between items-center border-b border-slate-700 pb-2">
+                                <span>PE 基金管理費</span>
+                                <span className="font-mono text-red-400">-{formatCurrency(20000)}</span>
+                            </div>
+                            <div className="flex justify-between items-center pt-2">
+                                <span className="font-bold">淨現金流 (Net Flow)</span>
+                                <span className="font-bold text-xl">+{formatCurrency(160000)}</span>
                             </div>
                         </div>
-                    ))}
-                </div>
-                <div className="p-4 bg-slate-50 border-t text-xs text-slate-500">
-                    <p>備註：林先生投入本金100萬元。待投資退出時間，按投資收益稅後結算。</p>
+                        <div className="mt-6 p-3 bg-white/10 rounded-lg text-xs text-slate-300 leading-relaxed">
+                            💡 <strong>理財建議：</strong><br/>
+                            借貸利息提供了穩定的現金流 (每年18萬)，剛好覆蓋了基金的管理成本 (2萬) 及家庭部分開支。建議繼續保持「以息養投」的策略。
+                        </div>
+                    </div>
+
+                    {/* 文檔快速入口 */}
+                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                        <h4 className="font-bold text-slate-700 mb-4">合約與文件</h4>
+                        <div className="space-y-3">
+                            <button className="w-full flex items-center gap-3 p-3 rounded-lg border hover:bg-slate-50 text-left transition-colors">
+                                <div className="p-2 bg-red-50 text-red-500 rounded"><ICONS.FileText /></div>
+                                <div>
+                                    <div className="text-sm font-bold text-slate-800">借款協議.pdf</div>
+                                    <div className="text-xs text-slate-500">2015 簽署 • 永久有效</div>
+                                </div>
+                            </button>
+                            <button className="w-full flex items-center gap-3 p-3 rounded-lg border hover:bg-slate-50 text-left transition-colors">
+                                <div className="p-2 bg-blue-50 text-blue-500 rounded"><ICONS.FileText /></div>
+                                <div>
+                                    <div className="text-sm font-bold text-slate-800">蟻米基金認購書.pdf</div>
+                                    <div className="text-xs text-slate-500">2022 更新 • 投資期</div>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

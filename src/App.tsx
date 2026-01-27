@@ -2014,7 +2014,6 @@ interface DocModalProps {
     settings: AppSettings; // <--- 5. 新增這裡
 }
 
-// 請將此組件完全替換掉原本的 InvestmentDashboard
 const InvestmentDashboard = () => {
     // --- 1. 模擬歷史數據 (為了動態分析) ---
     // 假設借貸從 2015 開始，我們生成一個現金流歷史
@@ -2045,6 +2044,8 @@ const InvestmentDashboard = () => {
     const totalLoanPrincipal = loans.reduce((acc, l) => acc + l.principal, 0);
     const totalPEInvested = peProjects.reduce((acc, p) => acc + p.investmentAmount, 0);
     const totalPEValuation = peProjects.reduce((acc, p) => acc + p.valuation, 0); // 這裡未來可改成動態估值
+    
+    // [修正 1] 計算總資產 (將在 JSX 中使用以解決 TS6133 錯誤)
     const totalAssets = totalLoanPrincipal + totalPEValuation;
 
     // --- 2. 風險與回報計算核心 ---
@@ -2060,6 +2061,8 @@ const InvestmentDashboard = () => {
         (peProjects.find(p=>p.projectName.includes('玻思韬'))?.investmentAmount || 0) * 1.0;
     
     const peUnrealizedProfit = simulatedPEValuation - totalPEInvested;
+    
+    // [修正 2] 計算 PE ROI (將在 JSX 中使用以解決 TS6133 錯誤)
     const peROI = (peUnrealizedProfit / totalPEInvested) * 100;
 
     // C. 風險評分 (0-100, 越高越危險)
@@ -2105,7 +2108,11 @@ const InvestmentDashboard = () => {
 
                     <div className="flex justify-between items-end mb-2">
                         <span className="text-sm text-slate-500">預估浮盈 (Unrealized)</span>
-                        <span className="text-2xl font-bold text-indigo-600">+{formatCurrency(peUnrealizedProfit)}</span>
+                        <div className="text-right">
+                            <span className="text-2xl font-bold text-indigo-600 block">+{formatCurrency(peUnrealizedProfit)}</span>
+                            {/* [使用點 1] 顯示 peROI */}
+                            <span className="text-xs font-bold text-indigo-400">ROI: +{peROI.toFixed(1)}%</span>
+                        </div>
                     </div>
                     <div className="flex gap-2 text-xs mb-3">
                         <span className="px-2 py-1 bg-white border rounded text-slate-600">成本: {formatCurrency(totalPEInvested)}</span>
@@ -2133,7 +2140,12 @@ const InvestmentDashboard = () => {
                             </div>
                             <div className="flex-1 text-sm text-slate-600 space-y-2">
                                 <p>您的投資組合屬於 <strong>{riskScore > 60 ? '進取型 (Aggressive)' : '穩健型 (Balanced)'}</strong>。</p>
-                                <p className="text-xs text-slate-400">75% 資產位於固定收益 (借貸)，25% 位於高風險創投 (PE)。</p>
+                                {/* [使用點 2] 顯示 totalAssets */}
+                                <p className="text-xs text-slate-400">
+                                    總資產 {formatCurrency(totalAssets)} 中，
+                                    {((totalLoanPrincipal/totalAssets)*100).toFixed(0)}% 位於固定收益，
+                                    {((totalPEValuation/totalAssets)*100).toFixed(0)}% 位於高風險創投。
+                                </p>
                             </div>
                         </div>
                     </div>

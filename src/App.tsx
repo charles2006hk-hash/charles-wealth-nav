@@ -20,6 +20,7 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
+console.log("Firebase 設定檢查：", firebaseConfig);
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);

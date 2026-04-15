@@ -1086,10 +1086,10 @@ const BulkClassifyModal = ({ isOpen, onClose, templateTx, transactions, properti
                     <div>
                         <label className="block text-xs font-bold text-indigo-900 mb-1">成員 Member</label>
                         <select className="w-full border border-indigo-300 rounded px-2 py-1.5 text-sm" value={targetMember} onChange={(e) => setTargetMember(e.target.value)}>
-                            {/* 改為讀取動態設定中的成員名單 */}
-                          {(settings?.members || ['Charles', 'Family']).map(m => (
-                              <option key={m} value={m}>{m}</option>
-                          ))}
+                            {/* 加上 (m: string) */}
+                            {(settings?.members || ['Charles', 'Family']).map((m: string) => (
+                                <option key={m} value={m}>{m}</option>
+                            ))}
                         </select>
                     </div>
                 </div>
@@ -2767,9 +2767,10 @@ const getTxType = (catName: string) => {
 
   const uniqueMembers = useMemo(() => {
       const mems = new Set(transactions.map(t => t.member).filter(Boolean));
-      MEMBERS.forEach(m => mems.add(m)); // 包含預設成員
+      // 改為讀取動態 settings，並加上 (m: string) 型別標註
+      (settings?.members || ['Charles', 'Family']).forEach((m: string) => mems.add(m)); 
       return Array.from(mems).sort();
-  }, [transactions]);
+  }, [transactions, settings]); // 注意：依賴陣列加上了 settings
 
   const uniqueCategories = useMemo(() => {
       const cats = new Set(transactions.map(t => t.category).filter(Boolean));
@@ -3985,7 +3986,7 @@ useEffect(() => {
                                     onChange={e=>setEditingTx({...editingTx, member: e.target.value} as any)}
                                 >
                                     {/* 同樣改為讀取動態 settings */}
-                                    {(settings?.members || ['Charles', 'Family']).map(m => (
+                                    {(settings?.members || ['Charles', 'Family']).map((m: string) => (
                                         <option key={m} value={m}>{m}</option>
                                     ))}
                                 </select>

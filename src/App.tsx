@@ -181,9 +181,10 @@ interface AppSettings {
     banks: string[];
     insuranceCompanies: string[];
     owners: string[];
-    agents: string[]; // 新增
-    tenants: string[]; // 新增
+    agents: string[];
+    tenants: string[];
     categories: CategoryConfig[];
+    members: string[]; // <-- 新增：動態成員名單
 }
 
 interface CategoryConfig {
@@ -418,7 +419,6 @@ const CATEGORIES = [
   'Insurance (保險)', 'Utilities (水電煤)', 'Other (其他)',
   'Credit Card', 'Education', 'Transport', 'Telecom', 'Shopping', 'Dining', 'Medical', 'General'
 ];
-const MEMBERS = ['Charles', 'Carmen', 'Virginia', 'Jason', 'Family'];
 
 const INITIAL_PROPERTIES_DATA: Property[] = [
     { id: 'p1', name: '京瑞二期 16E', address: '沙田安群街1號京瑞廣場二期16樓E室', type: 'Investment', status: 'Occupied', currentValue: 8000000, purchasePrice: 6000000, initialDeposit: 300000, furtherDeposit: 300000, balancePayment: 5400000, mortgageLoan: 3000000, mortgageAmount: 15000, outstandingLoan: 3000000, managementFee: 1200, govtRates: 1500, govtRent: 900, estRent: 25000, tenure: 15, interestRate: 3.5, bank: 'BOC', owner: 'Charles', ownershipType: 'Self-owned', tags: [], purchaseDate: '2015-01-01', purchaseAgent: '', purchaseCommission: 0 },
@@ -437,7 +437,8 @@ const INITIAL_SETTINGS: AppSettings = {
     owners: ['Charles', 'Carmen', 'Joint'],
     agents: ['Midland', 'Centaline', 'Ricacorp'],
     tenants: [],
-    categories: DEFAULT_CATEGORIES
+    categories: DEFAULT_CATEGORIES,
+    members: ['Charles', 'Carmen', 'Virginia', 'Jason', 'Family', '合夥人A']
 };
 
 const FAMILY_INFO = {
@@ -945,6 +946,7 @@ const SettingsView = ({ settings, setSettings, updateSettings }: { settings: App
             {/* 通用設定區塊 */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {[
+                    { key: 'members', title: '成員/合夥人 (Members)' },          
                     { key: 'banks', title: '銀行列表 (Banks)' },
                     { key: 'insuranceCompanies', title: '保險公司 (Insurance)' },
                     { key: 'owners', title: '業主名單 (Owners)' },
@@ -1084,7 +1086,10 @@ const BulkClassifyModal = ({ isOpen, onClose, templateTx, transactions, properti
                     <div>
                         <label className="block text-xs font-bold text-indigo-900 mb-1">成員 Member</label>
                         <select className="w-full border border-indigo-300 rounded px-2 py-1.5 text-sm" value={targetMember} onChange={(e) => setTargetMember(e.target.value)}>
-                            {MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
+                            {/* 改為讀取動態設定中的成員名單 */}
+                          {(settings?.members || ['Charles', 'Family']).map(m => (
+                              <option key={m} value={m}>{m}</option>
+                          ))}
                         </select>
                     </div>
                 </div>
@@ -3971,11 +3976,19 @@ useEffect(() => {
                                     系統將記錄為: {getTxType(editingTx?.category || '') === 'Income' ? '(+) 收入 Income' : '(-) 支出 Expense'}
                                 </div>
                             </div>
-                            {/* ------------------------------------- */}
-
+                            
                             <div>
                                 <label className="text-xs font-bold text-slate-500 mb-1 block">成員 Member</label>
-                                <select className="w-full border rounded p-2" value={editingTx?.member} onChange={e=>setEditingTx({...editingTx, member: e.target.value} as any)}>{MEMBERS.map(m=><option key={m} value={m}>{m}</option>)}</select>
+                                <select 
+                                    className="w-full border rounded p-2" 
+                                    value={editingTx?.member} 
+                                    onChange={e=>setEditingTx({...editingTx, member: e.target.value} as any)}
+                                >
+                                    {/* 同樣改為讀取動態 settings */}
+                                    {(settings?.members || ['Charles', 'Family']).map(m => (
+                                        <option key={m} value={m}>{m}</option>
+                                    ))}
+                                </select>
                             </div>
                             
                             {/* 圖片上傳區塊 */}

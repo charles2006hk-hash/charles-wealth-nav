@@ -1595,9 +1595,22 @@ const PropertyDetailView = ({
                     </table>
                 </div>
             </div>
+
+            {/* --- 新增：合夥人受益分配結算區塊 --- */}
+            {p.ownershipType === 'Joint' && (
+                <div className="mt-8">
+                    <PartnershipSettlement 
+                        property={p} 
+                        transactions={transactions} 
+                        settings={settings} 
+                    />
+                </div>
+            )}
+
         </div>
     );
 };
+
 
 // --- 請將此組件貼在 DocModal 之前 ---
 const DocPreviewContent = ({ 
@@ -2671,7 +2684,144 @@ const DocModal: React.FC<DocModalProps> = ({
     );
 }
 
+// --- 新增：合夥結算組件 ---
 
+interface PartnerShare {
+  name: string;
+  ratio: number; // 例如 0.6 代表 60%
+}
+
+const PartnershipSettlement = ({ property, transactions, settings }: any) => {
+  if (!property || property.status !== 'Sold') {
+    return (
+      <div className="p-8 text-center bg-slate-50 rounded-xl border-2 border-dashed border-slate-200">
+        <p className="text-slate-500">請選擇一個「已售出 (Sold)」的物業來查看結算報告。</p>
+      </div>
+    );
+  }
+
+  // 1. 定義合夥人與比例 (這部分未來可以存入 property 數據中)
+  // 假設預設為 Joyce 60%, Charles 40%
+  const shares: PartnerShare[] = [
+    { name: 'JOYCE LAU', ratio: 0.6 },
+    { name: 'Charles', ratio: 0.4 }
+  ];
+
+  // 2. 彙整該物業的所有交易
+  const propTxs = transactions.filter((t: any) => t.propertyId === property.id || t.propertyId === property.name);
+
+  // 3. 計算物業淨收益 (Capital Gain + Operating Net)
+  const capitalGain = (property.salePrice || 0) - (property.purchasePrice || 0) - (property.purchaseCommission || 0);
+  
+  const totalIncome = propTxs
+    .filter((t: any) => (t.category || '').includes('Income') || t.category?.includes('Sale'))
+    .reduce((sum: number, t: any) => sum + Math.abs(t.amount || 0), 0);
+
+  const totalExpense = propTxs
+    .filter((t: any) => !(t.category || '').includes('Income') && !t.category?.includes('Sale'))
+    .reduce((sum: number, t: any) => sum + Math.abs(t.amount || 0), 0);
+
+  const netOperatingProfit = totalIncome - totalExpense;
+  const totalProjectProfit = capitalGain + netOperatingProfit;
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4">
+      <div className="bg-slate-900 text-white p-6">
+        <div className="flex justify-between items-start">
+          <div>
+            <h2 className="text-2xl font-bold">{property.name} 投資結算報告</h2>
+            <p className="text-slate-400 text-sm mt-1">結算日期: {new Date().toLocaleDateString()}</p>
+          </div>
+          <div className="text-right">
+            <span className="text-xs font-bold uppercase tracking-widest text-emerald-400">Total Net Profit</span>
+            <div className="text-3xl font-mono font-bold">{formatCurrency(totalProjectProfit)}</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* 左側：物業損益摘要 */}
+        <div className="space-y-4">
+          <h3 className="font-bold text-slate-700 border-b pb-2 flex items-center gap-2">
+            <ICONS.Home /> 物業清算摘要
+          </h3>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-slate-500">資產增值 (Capital Gain)</span>
+              <span className="font-mono">{formatCurrency(capitalGain)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">歷年淨租金 (Net Rent)</span>
+              <span className="font-mono">{formatCurrency(netOperatingProfit)}</span>
+            </div>
+            <div className="pt-2 border-t flex justify-between font-bold text-lg">
+              <span>總結算利潤</span>
+              <span className="text-blue-600">{formatCurrency(totalProjectProfit)}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* 右側：各合夥人分配細節 */}
+        <div className="lg:col-span-2 space-y-4">
+          <h3 className="font-bold text-slate-700 border-b pb-2 flex items-center gap-2">
+            <ICONS.PieChart /> 收益分配表 (Distribution)
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {shares.map(partner => {
+              // 該合夥人已收取的現金 (收到的租金)
+              const alreadyReceived = propTxs
+                .filter((t: any) => t.member === partner.name && ((t.category || '').includes('Income')))
+                .reduce((sum: number, t: any) => sum + Math.abs(t.amount || 0), 0);
+
+              // 該合夥人已墊付的現金 (支付的維修、管理費)
+              const alreadyPaid = propTxs
+                .filter((t: any) => t.member === partner.name && !((t.category || '').includes('Income')))
+                .reduce((sum: number, t: any) => sum + Math.abs(t.amount || 0), 0);
+
+              // 應得份額
+              const dueShare = totalProjectProfit * partner.ratio;
+              // 最終應補貼/領取 = 應得份額 - 已拿走的租金 + 已墊付的支出
+              const finalSettlement = dueShare - alreadyReceived + alreadyPaid;
+
+              return (
+                <div key={partner.name} className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                  <div className="flex justify-between items-center mb-3">
+                    <span className="font-bold text-lg text-slate-800">{partner.name}</span>
+                    <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full font-bold">股份 {partner.ratio * 100}%</span>
+                  </div>
+                  <div className="space-y-1 text-xs mb-4">
+                    <div className="flex justify-between text-slate-500">
+                      <span>應得利潤份額 ({partner.ratio * 100}%):</span>
+                      <span className="font-mono">{formatCurrency(dueShare)}</span>
+                    </div>
+                    <div className="flex justify-between text-red-500">
+                      <span>已領取租金/現金 (-):</span>
+                      <span className="font-mono">-{formatCurrency(alreadyReceived)}</span>
+                    </div>
+                    <div className="flex justify-between text-emerald-600">
+                      <span>已墊付費用/支出 (+):</span>
+                      <span className="font-mono">+{formatCurrency(alreadyPaid)}</span>
+                    </div>
+                  </div>
+                  <div className="pt-2 border-t-2 border-dashed border-slate-200 flex justify-between items-end">
+                    <span className="text-xs font-bold text-slate-400">最終應收/付</span>
+                    <span className={`text-xl font-mono font-bold ${finalSettlement >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                      {formatCurrency(finalSettlement)}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+      
+      <div className="p-4 bg-amber-50 border-t border-amber-100 text-[11px] text-amber-700 flex items-center gap-2">
+        <ICONS.Shield /> 註：本報告根據「Member」欄位標記之資金往來進行自動核算。如需調整初始資本金，請於 Ledger 手動增加一筆「Capital Contribution」紀錄。
+      </div>
+    </div>
+  );
+};
 
 // --- 9. 主應用程式 ---
 const App: React.FC = () => {
@@ -3713,11 +3863,22 @@ useEffect(() => {
 
               {activeTab === 'dashboard' && propertyViewId && (
                   <PropertyDetailView 
-                      propId={propertyViewId} propStats={propStats} transactions={transactions} leases={leases}
-                      onBack={() => setPropertyViewId(null)} setDocConfig={setDocConfig} setModalMode={setModalMode}
-                      setEditingProp={setEditingProp} setEditingTx={setEditingTx} setEditingLease={setEditingLease}
-                      deleteItem={deleteItem} ledgerFilter={ledgerFilter} setLedgerFilter={setLedgerFilter}
-                      handleUpdateCategory={handleUpdateCategory} handleOpenReceipt={handleOpenReceipt}
+                      propId={propertyViewId} 
+                      propStats={propStats} 
+                      transactions={transactions} 
+                      leases={leases}
+                      settings={settings}
+                      onBack={() => setPropertyViewId(null)} 
+                      setDocConfig={setDocConfig} 
+                      setModalMode={setModalMode}
+                      setEditingProp={setEditingProp} 
+                      setEditingTx={setEditingTx} 
+                      setEditingLease={setEditingLease}
+                      deleteItem={deleteItem} 
+                      ledgerFilter={ledgerFilter} 
+                      setLedgerFilter={setLedgerFilter}
+                      handleUpdateCategory={handleUpdateCategory} 
+                      handleOpenReceipt={handleOpenReceipt}
                   />
               )}
               

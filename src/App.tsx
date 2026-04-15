@@ -12,13 +12,13 @@ import {
 
 // --- 1. Firebase 設定 ---
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
+  apiKey: "AIzaSyAeP-GggvT31EUY4TXEnX3GYVD8bcs8NJg",
+  authDomain: "charles-wealth-nav.firebaseapp.com",
+  projectId: "charles-wealth-nav",
+  storageBucket: "charles-wealth-nav.firebasestorage.app",
+  messagingSenderId: "1066128740156",
+  appId: "1:1066128740156:web:b69065931e28d7b4b59839",
+  measurementId: "G-82MQGSGT3B"
 };
 console.log("Firebase 設定檢查：", firebaseConfig);
 

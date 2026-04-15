@@ -1596,17 +1596,6 @@ const PropertyDetailView = ({
                 </div>
             </div>
 
-            {/* --- 新增：合夥人受益分配結算區塊 --- */}
-            {p.ownershipType === 'Joint' && (
-                <div className="mt-8">
-                    <PartnershipSettlement 
-                        property={p} 
-                        transactions={transactions} 
-                        settings={settings} 
-                    />
-                </div>
-            )}
-
         </div>
     );
 };
@@ -2691,7 +2680,7 @@ interface PartnerShare {
   ratio: number; // 例如 0.6 代表 60%
 }
 
-const PartnershipSettlement = ({ property, transactions, settings }: any) => {
+const PartnershipSettlement = ({ property, transactions }: any) => {
   if (!property || property.status !== 'Sold') {
     return (
       <div className="p-8 text-center bg-slate-50 rounded-xl border-2 border-dashed border-slate-200">

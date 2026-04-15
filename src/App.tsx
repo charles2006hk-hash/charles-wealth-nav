@@ -1365,44 +1365,31 @@ const PropertyDashboard = ({
     );
 };
 
+// --- 2. 物業詳情組件 (PropertyDetailView) ---
 const PropertyDetailView = ({ 
     propId, propStats, transactions, leases, 
     onBack, setDocConfig, setModalMode, setEditingProp, setEditingTx, 
     setEditingLease, deleteItem,
     ledgerFilter, setLedgerFilter, handleUpdateCategory,
     handleOpenReceipt,
-    settings // 接收 settings
+    settings 
 }: any) => {
     const p = propStats.find((x: any) => x.id === propId);
     
     if (!p) return <div className="p-8 text-center text-slate-500">找不到該物業資料 (Property not found)</div>;
 
-    // --- [修正 1] 強化的收支判斷邏輯 ---
     const getTxType = (catName: string) => {
         const cat = (catName || '').toLowerCase();
-        
-        // 1. 強制關鍵字判斷 (最優先)
-        // 只要包含這些字，絕對是收入
-        if (cat.includes('rental income') || 
-            cat.includes('rent') || 
-            cat.includes('sale') || 
-            cat.includes('deposit') || // 按金通常是收入(暫存)
-            cat.includes('income') || 
-            cat.includes('interest') || // 利息
-            cat.includes('收入')) {
+        if (cat.includes('rental income') || cat.includes('rent') || cat.includes('sale') || cat.includes('deposit') || cat.includes('income') || cat.includes('interest') || cat.includes('收入')) {
             return 'Income';
         }
-
-        // 2. 系統設定判斷
         if (settings?.categories) {
             const found = settings.categories.find((c: any) => c.name === catName);
             if (found) return found.type;
         }
-        
-        return 'Expense'; // 預設為支出
+        return 'Expense'; 
     };
     
-    // 篩選交易
     const filteredTxs = transactions
         .filter((t: any) => t.propertyId === propId)
         .filter((t: any) => (JSON.stringify(t) || '').toLowerCase().includes(ledgerFilter.toLowerCase()))
@@ -1410,7 +1397,6 @@ const PropertyDetailView = ({
     
     const pLeases = leases.filter((l: any) => l.propertyId === propId);
 
-    // --- [修正 2] 統計計算：強制取絕對值 (Math.abs) ---
     const periodIncome = filteredTxs
         .filter((t:any) => getTxType(t.category) === 'Income')
         .reduce((sum:number, t:any) => sum + Math.abs(t.amount || 0), 0);
@@ -1524,9 +1510,7 @@ const PropertyDetailView = ({
                         <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0"><tr><th className="p-3">Date</th><th className="p-3">Category</th><th className="p-3">Detail</th><th className="p-3 text-right">Amount</th><th className="p-3">Action</th></tr></thead>
                         <tbody className="divide-y">
                             {filteredTxs.map((t: any) => {
-                                // --- [修正 3] 行內判斷邏輯 ---
                                 const isIncome = getTxType(t.category) === 'Income';
-                                // 強制取絕對值
                                 const absAmount = Math.abs(t.amount || 0);
                                 
                                 return (
@@ -1562,7 +1546,6 @@ const PropertyDetailView = ({
                                             )}
                                         </td>
                                         
-                                        {/* [修正 4] 顏色與符號判斷 */}
                                         <td className={`p-3 text-right font-mono font-bold ${isIncome ? 'text-emerald-600' : 'text-red-500'}`}>
                                             {isIncome ? '+' : '-'}{formatCurrency(absAmount)}
                                         </td>
@@ -1596,10 +1579,18 @@ const PropertyDetailView = ({
                 </div>
             </div>
 
+            {/* --- 確定能被調用的結算區塊 --- */}
+            {p.ownershipType === 'Joint' && (
+                <div className="mt-8">
+                    <PartnershipSettlement 
+                        property={p} 
+                        transactions={transactions} 
+                    />
+                </div>
+            )}
         </div>
     );
 };
-
 
 // --- 請將此組件貼在 DocModal 之前 ---
 const DocPreviewContent = ({ 
@@ -2673,11 +2664,10 @@ const DocModal: React.FC<DocModalProps> = ({
     );
 }
 
-// --- 新增：合夥結算組件 ---
-
+// --- 1. 合夥結算組件 (PartnershipSettlement) ---
 interface PartnerShare {
   name: string;
-  ratio: number; // 例如 0.6 代表 60%
+  ratio: number;
 }
 
 const PartnershipSettlement = ({ property, transactions }: any) => {
@@ -2689,17 +2679,12 @@ const PartnershipSettlement = ({ property, transactions }: any) => {
     );
   }
 
-  // 1. 定義合夥人與比例 (這部分未來可以存入 property 數據中)
-  // 假設預設為 Joyce 60%, Charles 40%
   const shares: PartnerShare[] = [
     { name: 'JOYCE LAU', ratio: 0.6 },
     { name: 'Charles', ratio: 0.4 }
   ];
 
-  // 2. 彙整該物業的所有交易
   const propTxs = transactions.filter((t: any) => t.propertyId === property.id || t.propertyId === property.name);
-
-  // 3. 計算物業淨收益 (Capital Gain + Operating Net)
   const capitalGain = (property.salePrice || 0) - (property.purchasePrice || 0) - (property.purchaseCommission || 0);
   
   const totalIncome = propTxs
@@ -2729,7 +2714,6 @@ const PartnershipSettlement = ({ property, transactions }: any) => {
       </div>
 
       <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* 左側：物業損益摘要 */}
         <div className="space-y-4">
           <h3 className="font-bold text-slate-700 border-b pb-2 flex items-center gap-2">
             <ICONS.Home /> 物業清算摘要
@@ -2750,26 +2734,21 @@ const PartnershipSettlement = ({ property, transactions }: any) => {
           </div>
         </div>
 
-        {/* 右側：各合夥人分配細節 */}
         <div className="lg:col-span-2 space-y-4">
           <h3 className="font-bold text-slate-700 border-b pb-2 flex items-center gap-2">
             <ICONS.PieChart /> 收益分配表 (Distribution)
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {shares.map(partner => {
-              // 該合夥人已收取的現金 (收到的租金)
               const alreadyReceived = propTxs
                 .filter((t: any) => t.member === partner.name && ((t.category || '').includes('Income')))
                 .reduce((sum: number, t: any) => sum + Math.abs(t.amount || 0), 0);
 
-              // 該合夥人已墊付的現金 (支付的維修、管理費)
               const alreadyPaid = propTxs
                 .filter((t: any) => t.member === partner.name && !((t.category || '').includes('Income')))
                 .reduce((sum: number, t: any) => sum + Math.abs(t.amount || 0), 0);
 
-              // 應得份額
               const dueShare = totalProjectProfit * partner.ratio;
-              // 最終應補貼/領取 = 應得份額 - 已拿走的租金 + 已墊付的支出
               const finalSettlement = dueShare - alreadyReceived + alreadyPaid;
 
               return (

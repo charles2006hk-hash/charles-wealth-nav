@@ -2664,7 +2664,7 @@ const DocModal: React.FC<DocModalProps> = ({
     );
 }
 
-// --- 新增：合夥結算組件 (支援多物業不同比例) ---
+// --- 動態化：合夥結算組件 ---
 interface PartnerShare {
   name: string;
   ratio: number;
@@ -2673,31 +2673,22 @@ interface PartnerShare {
 const PartnershipSettlement = ({ property, transactions }: any) => {
   if (!property) return null;
 
-  // 判斷是否為最終結算 (Sold)
+  // 1. 直接從物業資料庫中讀取使用者設定的股份
+  const shares: PartnerShare[] = property.shares || [];
+
+  // 如果這間物業還沒有設定合夥人，顯示提示
+  if (shares.length === 0) {
+    return (
+      <div className="p-8 text-center bg-slate-50 rounded-xl border-2 border-dashed border-slate-200 mt-8">
+        <p className="text-slate-500 font-bold mb-2">此合夥物業尚未設定「股份比例」</p>
+        <p className="text-sm text-slate-400">請點擊右上角「鉛筆圖示」編輯物業，並在合夥人區塊加入成員。</p>
+      </div>
+    );
+  }
+
   const isFinal = property.status === 'Sold';
-
-  // 🌟 核心升級：物業股份配置表 (您可以在這裡自由新增/修改各物業的比例)
-  const partnershipConfig: Record<string, PartnerShare[]> = {
-    '星星中心19F12': [
-      { name: 'JOYCE LAU', ratio: 0.6 },
-      { name: 'Charles', ratio: 0.4 }
-    ],
-    '新達廣場19樓3室': [
-      { name: 'Charles', ratio: 0.5 },  // 假設是 50%，請依實際情況修改
-      { name: 'Carmen', ratio: 0.5 }    // 假設合夥人是 Carmen，請修改為真實的 Member 名稱
-    ]
-    // 未來如果有其他合夥物業，就依樣畫葫蘆加在這裡...
-  };
-
-  // 根據當前物業名稱抓取對應的股份設定。如果沒設定到，預設跑各佔 50%
-  const shares: PartnerShare[] = partnershipConfig[property.name] || [
-    { name: 'Charles', ratio: 0.5 },
-    { name: 'Partner', ratio: 0.5 }
-  ];
-
   const propTxs = transactions.filter((t: any) => t.propertyId === property.id || t.propertyId === property.name);
   
-  // 如果是最終結算用 salePrice，否則用 currentValue (現估值)
   const targetPrice = isFinal ? (property.salePrice || 0) : (property.currentValue || 0);
   const capitalGain = targetPrice - (property.purchasePrice || 0) - (property.purchaseCommission || 0);
   
@@ -2713,7 +2704,7 @@ const PartnershipSettlement = ({ property, transactions }: any) => {
   const totalProjectProfit = capitalGain + netOperatingProfit;
 
   return (
-    <div className={`bg-white rounded-2xl shadow-sm border overflow-hidden animate-in fade-in slide-in-from-bottom-4 ${isFinal ? 'border-slate-200' : 'border-blue-200'}`}>
+    <div className={`mt-8 bg-white rounded-2xl shadow-sm border overflow-hidden animate-in fade-in slide-in-from-bottom-4 ${isFinal ? 'border-slate-200' : 'border-blue-200'}`}>
       <div className={`p-6 text-white ${isFinal ? 'bg-slate-900' : 'bg-blue-600'}`}>
         <div className="flex justify-between items-start">
           <div>
@@ -2749,11 +2740,6 @@ const PartnershipSettlement = ({ property, transactions }: any) => {
               <span>{isFinal ? '總結算利潤' : '預計總利潤'}</span>
               <span className={isFinal ? 'text-blue-600' : 'text-blue-500'}>{formatCurrency(totalProjectProfit)}</span>
             </div>
-            {!isFinal && (
-              <p className="text-[10px] text-blue-400 italic mt-2">
-                * 以現估值 {formatCurrency(property.currentValue)} 作為計算基準
-              </p>
-            )}
           </div>
         </div>
 
@@ -2778,11 +2764,11 @@ const PartnershipSettlement = ({ property, transactions }: any) => {
                 <div key={partner.name} className="bg-slate-50 rounded-xl p-4 border border-slate-100">
                   <div className="flex justify-between items-center mb-3">
                     <span className="font-bold text-lg text-slate-800">{partner.name}</span>
-                    <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full font-bold">股份 {(partner.ratio * 100).toFixed(0)}%</span>
+                    <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full font-bold">股份 {Math.round(partner.ratio * 100)}%</span>
                   </div>
                   <div className="space-y-1 text-xs mb-4">
                     <div className="flex justify-between text-slate-500">
-                      <span>應得利潤份額 ({(partner.ratio * 100).toFixed(0)}%):</span>
+                      <span>應得利潤份額:</span>
                       <span className="font-mono">{formatCurrency(dueShare)}</span>
                     </div>
                     <div className="flex justify-between text-red-500">
@@ -2805,13 +2791,6 @@ const PartnershipSettlement = ({ property, transactions }: any) => {
             })}
           </div>
         </div>
-      </div>
-      
-      <div className={`p-4 border-t text-[11px] flex items-center gap-2 ${isFinal ? 'bg-amber-50 border-amber-100 text-amber-700' : 'bg-blue-50/50 border-blue-100 text-blue-600'}`}>
-        <ICONS.Shield /> 
-        {isFinal 
-          ? "註：已售出結算。本報告根據「Member」欄位標記之資金往來進行自動核算。" 
-          : "註：預計結算。這是基於「現值」的模擬結算，方便合夥人掌握當前投資狀況。"}
       </div>
     </div>
   );
@@ -4176,10 +4155,8 @@ useEffect(() => {
 
           {modalMode === 'property' && (
               <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
-                  {/* [修改] 寬度響應式 w-[95%] md:w-[600px] */}
                   <div className="bg-white rounded-xl shadow-2xl p-6 w-[95%] md:w-[600px] max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in duration-200">
                       <h3 className="font-bold text-xl mb-6">Edit Property</h3>
-                      {/* ... Property Modal 內容 ... */}
                       <div className="space-y-6">
                           <div className="space-y-2">
                               <label className="text-xs font-bold text-slate-500 uppercase">Basic Info</label>
@@ -4187,13 +4164,98 @@ useEffect(() => {
                               <input className="border w-full p-2 rounded" placeholder="Full Address" value={editingProp?.address || ''} onChange={e => setEditingProp({...editingProp, address: e.target.value} as any)} />
                               <div className="flex gap-2">
                                 <select className="border w-full p-2 rounded" value={editingProp?.status} onChange={e => setEditingProp({...editingProp, status: e.target.value} as any)}><option value="Occupied">Occupied</option><option value="Vacant">Vacant</option><option value="Sold">Sold</option></select>
-                                <select className="border w-full p-2 rounded" value={editingProp?.ownershipType} onChange={e => setEditingProp({...editingProp, ownershipType: e.target.value} as any)}><option value="Self-owned">Self-owned</option><option value="Managed">Managed</option></select>
+                                <select className="border w-full p-2 rounded" value={editingProp?.ownershipType} onChange={e => setEditingProp({...editingProp, ownershipType: e.target.value} as any)}>
+                                    <option value="Self-owned">Self-owned</option>
+                                    <option value="Managed">Managed</option>
+                                    <option value="Joint">Joint (合夥)</option>
+                                </select>
                               </div>
                               <div className="flex gap-2">
-                                  <div className="flex-1"><label className="text-xs block text-slate-500">Owner</label><select className="border w-full p-2 rounded" value={editingProp?.owner} onChange={e => setEditingProp({...editingProp, owner: e.target.value} as any)}><option value="">Select...</option>{settings.owners.map(o => <option key={o} value={o}>{o}</option>)}</select></div>
-                                  <div className="flex-1"><label className="text-xs block text-slate-500">Tags (Enter to add)</label><div className="border rounded p-2 flex flex-wrap gap-1 min-h-[42px]">{editingProp?.tags?.map(t => (<span key={t} className="text-xs bg-slate-100 px-1 rounded flex items-center">{t} <button className="ml-1 text-red-400" onClick={()=>setEditingProp({...editingProp, tags: editingProp!.tags.filter(x=>x!==t)} as any)}>x</button></span>))}<input className="outline-none text-xs w-20" onKeyDown={(e)=>{if(e.key==='Enter' && editingProp) { const val = (e.target as HTMLInputElement).value; if(val) { setEditingProp({...editingProp, tags: [...(editingProp.tags||[]), val]} as any); (e.target as HTMLInputElement).value = ''; }}}} /></div></div>
+                                  <div className="flex-1"><label className="text-xs block text-slate-500">Owner</label>
+                                      <select className="border w-full p-2 rounded" value={editingProp?.owner} onChange={e => setEditingProp({...editingProp, owner: e.target.value} as any)}>
+                                          <option value="">Select...</option>
+                                          <option value="Joint">Joint (合夥)</option>
+                                          {settings.owners.map(o => <option key={o} value={o}>{o}</option>)}
+                                      </select>
+                                  </div>
+                                  <div className="flex-1"><label className="text-xs block text-slate-500">Tags (Enter to add)</label><div className="border rounded p-2 flex flex-wrap gap-1 min-h-[42px]">{editingProp?.tags?.map((t: string) => (<span key={t} className="text-xs bg-slate-100 px-1 rounded flex items-center">{t} <button className="ml-1 text-red-400" onClick={()=>setEditingProp({...editingProp, tags: editingProp!.tags.filter((x: string)=>x!==t)} as any)}>x</button></span>))}<input className="outline-none text-xs w-20" onKeyDown={(e)=>{if(e.key==='Enter' && editingProp) { const val = (e.target as HTMLInputElement).value; if(val) { setEditingProp({...editingProp, tags: [...(editingProp.tags||[]), val]} as any); (e.target as HTMLInputElement).value = ''; }}}} /></div></div>
                               </div>
                           </div>
+
+                          {/* 👇 新增：合夥人動態設定區塊 👇 */}
+                          {(editingProp?.ownershipType === 'Joint' || editingProp?.owner === 'Joint') && (
+                              <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg space-y-3">
+                                  <div className="flex justify-between items-center">
+                                      <label className="text-xs font-bold text-purple-700 uppercase">合夥人股份設定 (Partners)</label>
+                                      <button 
+                                        onClick={() => {
+                                            const currentShares = editingProp.shares || [];
+                                            setEditingProp({ ...editingProp, shares: [...currentShares, { name: '', ratio: 0 }] } as any);
+                                        }}
+                                        className="text-xs bg-purple-200 text-purple-800 px-2 py-1 rounded font-bold hover:bg-purple-300 transition-colors"
+                                      >
+                                          + 加入合夥人
+                                      </button>
+                                  </div>
+                                  
+                                  {(editingProp?.shares || []).map((share: any, idx: number) => (
+                                      <div key={idx} className="flex gap-2 items-center">
+                                          <select 
+                                              className="border p-2 rounded text-sm flex-1"
+                                              value={share.name}
+                                              onChange={(e) => {
+                                                  const newShares = [...(editingProp.shares || [])];
+                                                  newShares[idx].name = e.target.value;
+                                                  setEditingProp({ ...editingProp, shares: newShares } as any);
+                                              }}
+                                          >
+                                              <option value="">選擇系統成員...</option>
+                                              {/* 完美連動系統的 Member 名單 */}
+                                              {(settings?.members || []).map((m: string) => (
+                                                  <option key={m} value={m}>{m}</option>
+                                              ))}
+                                          </select>
+                                          <div className="relative w-28">
+                                              <input 
+                                                  type="number" 
+                                                  className="border w-full p-2 pr-6 rounded text-sm" 
+                                                  placeholder="比例"
+                                                  value={share.ratio ? Math.round(share.ratio * 100) : ''}
+                                                  onChange={(e) => {
+                                                      const newShares = [...(editingProp.shares || [])];
+                                                      newShares[idx].ratio = Number(e.target.value) / 100;
+                                                      setEditingProp({ ...editingProp, shares: newShares } as any);
+                                                  }}
+                                              />
+                                              <span className="absolute right-2 top-2 text-slate-400 text-sm">%</span>
+                                          </div>
+                                          <button 
+                                              onClick={() => {
+                                                  const newShares = [...(editingProp.shares || [])];
+                                                  newShares.splice(idx, 1);
+                                                  setEditingProp({ ...editingProp, shares: newShares } as any);
+                                              }}
+                                              className="text-red-400 hover:text-red-600 p-1 font-bold"
+                                          >✕</button>
+                                      </div>
+                                  ))}
+                                  
+                                  {/* 防呆計算：總和提示 */}
+                                  {(() => {
+                                      const total = (editingProp?.shares || []).reduce((sum: number, s: any) => sum + (s.ratio || 0), 0);
+                                      if (editingProp?.shares?.length > 0) {
+                                          if (Math.abs(total - 1) > 0.001) {
+                                              return <div className="text-xs text-red-500 font-bold mt-1">⚠️ 目前總比例為 {(total * 100).toFixed(0)}%，請調整至 100%。</div>;
+                                          } else {
+                                              return <div className="text-xs text-emerald-600 font-bold mt-1">✅ 總比例 100% 正確</div>;
+                                          }
+                                      }
+                                      return null;
+                                  })()}
+                              </div>
+                          )}
+                          {/* 👆 新增結束 👆 */}
+
                           <div className="space-y-2"><label className="text-xs font-bold text-slate-500 uppercase">Purchase & Sale Detail</label><div className="p-4 bg-blue-50 rounded-lg border border-blue-100 space-y-3"><div className="grid grid-cols-2 gap-2"><div className="relative"><label className="text-xs text-slate-500 block mb-1">Purchase Price</label><input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.purchasePrice || ''} onChange={e => setEditingProp({...editingProp, purchasePrice: Number(e.target.value)} as any)} /><span className="absolute right-2 top-8 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.purchasePrice)}</span></div><div><label className="text-xs text-slate-500 block mb-1">Purchase Date</label><input className="border w-full p-2 rounded text-sm" type="date" value={editingProp?.purchaseDate || ''} onChange={e => setEditingProp({...editingProp, purchaseDate: e.target.value} as any)} /></div></div><div className="grid grid-cols-2 gap-2"><div><label className="text-xs text-slate-500 block mb-1">Agent</label><select className="border w-full p-2 rounded text-sm" value={editingProp?.purchaseAgent} onChange={e => setEditingProp({...editingProp, purchaseAgent: e.target.value} as any)}><option value="">Select...</option>{settings.agents.map(a => <option key={a} value={a}>{a}</option>)}</select></div><div className="relative"><label className="text-xs text-slate-500 block mb-1">Commission</label><input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.purchaseCommission || ''} onChange={e => setEditingProp({...editingProp, purchaseCommission: Number(e.target.value)} as any)} /><span className="absolute right-2 top-8 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.purchaseCommission)}</span></div></div>{editingProp?.status === 'Sold' && (<div className="mt-2 border-t pt-2 border-blue-200 bg-blue-100/50 p-2 rounded"><div className="grid grid-cols-2 gap-2"><div className="relative"><label className="text-xs text-slate-700 font-bold block mb-1">Sale Price (賣出價)</label><input className="border w-full p-2 rounded text-sm font-bold text-green-700" type="number" value={editingProp?.salePrice || ''} onChange={e => setEditingProp({...editingProp, salePrice: Number(e.target.value)} as any)} /><span className="absolute right-2 top-8 text-xs text-gray-500 pointer-events-none">{formatCurrency(editingProp?.salePrice)}</span></div><div><label className="text-xs text-slate-700 font-bold block mb-1">Sale Date (賣出日)</label><input className="border w-full p-2 rounded text-sm" type="date" value={editingProp?.saleDate || ''} onChange={e => setEditingProp({...editingProp, saleDate: e.target.value} as any)} /></div></div></div>)}</div></div>
                           <details className="group border rounded-lg p-2"><summary className="font-bold text-sm cursor-pointer text-slate-700 flex justify-between items-center">銀行按揭設定 (點擊展開) <span className="text-xs text-slate-400">▼</span></summary><div className="p-4 bg-yellow-50 rounded-lg border border-yellow-100 grid grid-cols-2 gap-4 mt-2"><div><label className="text-xs text-slate-500 block mb-1">Bank</label><select className="border w-full p-2 rounded text-sm" value={editingProp?.bank} onChange={e => setEditingProp({...editingProp, bank: e.target.value} as any)}><option value="">Select...</option>{settings.banks.map(b => <option key={b} value={b}>{b}</option>)}</select></div><div><label className="text-xs text-slate-500 block mb-1">Mortgage Loan</label><div className="relative"><input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.mortgageLoan || ''} onChange={e => setEditingProp({...editingProp, mortgageLoan: Number(e.target.value)} as any)} /><span className="absolute right-2 top-2 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.mortgageLoan)}</span></div></div><div><label className="text-xs text-slate-500 block mb-1">Outstanding</label><div className="relative"><input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.outstandingLoan || ''} onChange={e => setEditingProp({...editingProp, outstandingLoan: Number(e.target.value)} as any)} /><span className="absolute right-2 top-2 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.outstandingLoan)}</span></div></div><div><label className="text-xs text-slate-500 block mb-1">Rate (%)</label><input className="border w-full p-2 rounded text-sm" type="number" step="0.1" value={editingProp?.interestRate || ''} onChange={e => setEditingProp({...editingProp, interestRate: Number(e.target.value)} as any)} /></div><div><label className="text-xs text-slate-500 block mb-1">Tenure (Yrs)</label><input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.tenure || ''} onChange={e => setEditingProp({...editingProp, tenure: Number(e.target.value)} as any)} /></div><div><label className="text-xs text-slate-500 block mb-1">Monthly Pay</label><div className="relative"><input className="border w-full p-2 rounded text-sm bg-white font-bold text-red-600" type="number" value={editingProp?.mortgageAmount || ''} onChange={e => setEditingProp({...editingProp, mortgageAmount: Number(e.target.value)} as any)} /><span className="absolute right-2 top-2 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.mortgageAmount)}</span></div></div></div></details>
                           <div className="space-y-2"><label className="text-xs font-bold text-slate-500 uppercase">Valuation & Expenses</label><div className="grid grid-cols-2 gap-3"><div><label className="text-xs">Current Value</label><div className="relative"><input className="border w-full p-2 rounded" type="number" value={editingProp?.currentValue || ''} onChange={e => setEditingProp({...editingProp, currentValue: Number(e.target.value)} as any)} /><span className="absolute right-2 top-2 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.currentValue)}</span></div></div><div><label className="text-xs">Est. Rent</label><div className="relative"><input className="border w-full p-2 rounded" type="number" value={editingProp?.estRent || ''} onChange={e => setEditingProp({...editingProp, estRent: Number(e.target.value)} as any)} /><span className="absolute right-2 top-2 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.estRent)}</span></div></div></div><div className="grid grid-cols-3 gap-2"><div><label className="text-xs">Mgt Fee</label><input className="border p-1 text-sm w-full rounded" type="number" value={editingProp?.managementFee || ''} onChange={e=>setEditingProp({...editingProp, managementFee: Number(e.target.value)} as any)} /></div><div><label className="text-xs">Rates (Qtr)</label><input className="border p-1 text-sm w-full rounded" type="number" value={editingProp?.govtRates || ''} onChange={e=>setEditingProp({...editingProp, govtRates: Number(e.target.value)} as any)} /></div><div><label className="text-xs">Govt Rent</label><input className="border p-1 text-sm w-full rounded" type="number" value={editingProp?.govtRent || ''} onChange={e=>setEditingProp({...editingProp, govtRent: Number(e.target.value)} as any)} /></div></div></div>

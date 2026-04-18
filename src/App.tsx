@@ -83,6 +83,11 @@ interface Lease {
   attachments?: string[]; 
 }
 
+interface PartnerShare {
+  name: string;
+  ratio: number;
+}
+
 interface Property {
   id: string;
   name: string;
@@ -91,10 +96,10 @@ interface Property {
   status: 'Occupied' | 'Vacant' | 'Renovation' | 'Sold';
   
   owner: string; 
-  ownershipType: 'Self-owned' | 'Managed'; 
+  ownershipType: 'Self-owned' | 'Managed' | 'Joint';
   tags: string[]; 
   lastViewed?: number;
-
+  shares?: PartnerShare[];
   purchaseDate: string;       
   purchasePrice: number; 
   purchaseAgent: string;      

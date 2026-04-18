@@ -2664,7 +2664,7 @@ const DocModal: React.FC<DocModalProps> = ({
     );
 }
 
-// --- 新增：合夥結算組件 ---
+// --- 新增：合夥結算組件 (支援多物業不同比例) ---
 interface PartnerShare {
   name: string;
   ratio: number;
@@ -2676,14 +2676,28 @@ const PartnershipSettlement = ({ property, transactions }: any) => {
   // 判斷是否為最終結算 (Sold)
   const isFinal = property.status === 'Sold';
 
-  const shares: PartnerShare[] = [
-    { name: 'JOYCE LAU', ratio: 0.6 },
-    { name: 'Charles', ratio: 0.4 }
+  // 🌟 核心升級：物業股份配置表 (您可以在這裡自由新增/修改各物業的比例)
+  const partnershipConfig: Record<string, PartnerShare[]> = {
+    '星星中心19F12': [
+      { name: 'JOYCE LAU', ratio: 0.6 },
+      { name: 'Charles', ratio: 0.4 }
+    ],
+    '新達廣場19樓3室': [
+      { name: 'Charles', ratio: 0.5 },  // 假設是 50%，請依實際情況修改
+      { name: 'Carmen', ratio: 0.5 }    // 假設合夥人是 Carmen，請修改為真實的 Member 名稱
+    ]
+    // 未來如果有其他合夥物業，就依樣畫葫蘆加在這裡...
+  };
+
+  // 根據當前物業名稱抓取對應的股份設定。如果沒設定到，預設跑各佔 50%
+  const shares: PartnerShare[] = partnershipConfig[property.name] || [
+    { name: 'Charles', ratio: 0.5 },
+    { name: 'Partner', ratio: 0.5 }
   ];
 
   const propTxs = transactions.filter((t: any) => t.propertyId === property.id || t.propertyId === property.name);
   
-  // 關鍵改良：如果是最終結算用 salePrice，否則用 currentValue (現估值)
+  // 如果是最終結算用 salePrice，否則用 currentValue (現估值)
   const targetPrice = isFinal ? (property.salePrice || 0) : (property.currentValue || 0);
   const capitalGain = targetPrice - (property.purchasePrice || 0) - (property.purchaseCommission || 0);
   
@@ -2724,7 +2738,7 @@ const PartnershipSettlement = ({ property, transactions }: any) => {
           </h3>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-slate-500">{isFinal ? '資產增值 (Capital Gain)' : '預計增值 (Unrealized)'}</span>
+              <span className="text-slate-500">{isFinal ? '資產增值 (Gain)' : '預計增值 (Unrealized)'}</span>
               <span className="font-mono">{formatCurrency(capitalGain)}</span>
             </div>
             <div className="flex justify-between">
@@ -2764,11 +2778,11 @@ const PartnershipSettlement = ({ property, transactions }: any) => {
                 <div key={partner.name} className="bg-slate-50 rounded-xl p-4 border border-slate-100">
                   <div className="flex justify-between items-center mb-3">
                     <span className="font-bold text-lg text-slate-800">{partner.name}</span>
-                    <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full font-bold">股份 {partner.ratio * 100}%</span>
+                    <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full font-bold">股份 {(partner.ratio * 100).toFixed(0)}%</span>
                   </div>
                   <div className="space-y-1 text-xs mb-4">
                     <div className="flex justify-between text-slate-500">
-                      <span>應得利潤份額 ({partner.ratio * 100}%):</span>
+                      <span>應得利潤份額 ({(partner.ratio * 100).toFixed(0)}%):</span>
                       <span className="font-mono">{formatCurrency(dueShare)}</span>
                     </div>
                     <div className="flex justify-between text-red-500">

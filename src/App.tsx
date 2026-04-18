@@ -2669,11 +2669,6 @@ const DocModal: React.FC<DocModalProps> = ({
     );
 }
 
-// --- 動態化：合夥結算組件 ---
-interface PartnerShare {
-  name: string;
-  ratio: number;
-}
 
 const PartnershipSettlement = ({ property, transactions }: any) => {
   if (!property) return null;
@@ -4246,17 +4241,20 @@ useEffect(() => {
                                   ))}
                                   
                                   {/* 防呆計算：總和提示 */}
-                                  {(() => {
-                                      const total = (editingProp?.shares || []).reduce((sum: number, s: any) => sum + (s.ratio || 0), 0);
-                                      if (editingProp?.shares?.length > 0) {
-                                          if (Math.abs(total - 1) > 0.001) {
-                                              return <div className="text-xs text-red-500 font-bold mt-1">⚠️ 目前總比例為 {(total * 100).toFixed(0)}%，請調整至 100%。</div>;
-                                          } else {
-                                              return <div className="text-xs text-emerald-600 font-bold mt-1">✅ 總比例 100% 正確</div>;
-                                          }
+                              {(() => {
+                                  // 先定義一個安全的常數，確保它絕對是個陣列，不會是 undefined
+                                  const currentShares = editingProp?.shares || []; 
+                                  const total = currentShares.reduce((sum: number, s: any) => sum + (s.ratio || 0), 0);
+                                  
+                                  if (currentShares.length > 0) {
+                                      if (Math.abs(total - 1) > 0.001) {
+                                          return <div className="text-xs text-red-500 font-bold mt-1">⚠️ 目前總比例為 {(total * 100).toFixed(0)}%，請調整至 100%。</div>;
+                                      } else {
+                                          return <div className="text-xs text-emerald-600 font-bold mt-1">✅ 總比例 100% 正確</div>;
                                       }
-                                      return null;
-                                  })()}
+                                  }
+                                  return null;
+                              })()}
                               </div>
                           )}
                           {/* 👆 新增結束 👆 */}

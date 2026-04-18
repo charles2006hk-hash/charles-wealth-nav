@@ -1580,7 +1580,7 @@ const PropertyDetailView = ({
             </div>
 
             {/* --- 確定能被調用的結算區塊 --- */}
-            {p.ownershipType === 'Joint' && (
+            {(p.owner === 'Joint' || p.ownershipType === 'Joint') && (
                 <div className="mt-8">
                     <PartnershipSettlement 
                         property={p} 
@@ -2664,7 +2664,7 @@ const DocModal: React.FC<DocModalProps> = ({
     );
 }
 
-// --- 1. 改良版：合夥結算組件 (PartnershipSettlement) 支援預計結算 ---
+// --- 新增：合夥結算組件 ---
 interface PartnerShare {
   name: string;
   ratio: number;
@@ -2772,11 +2772,11 @@ const PartnershipSettlement = ({ property, transactions }: any) => {
                       <span className="font-mono">{formatCurrency(dueShare)}</span>
                     </div>
                     <div className="flex justify-between text-red-500">
-                      <span>已領取租金/現金 (-):</span>
+                      <span>已領取現金 (-):</span>
                       <span className="font-mono">-{formatCurrency(alreadyReceived)}</span>
                     </div>
                     <div className="flex justify-between text-emerald-600">
-                      <span>已墊付費用/支出 (+):</span>
+                      <span>已墊付費用 (+):</span>
                       <span className="font-mono">+{formatCurrency(alreadyPaid)}</span>
                     </div>
                   </div>

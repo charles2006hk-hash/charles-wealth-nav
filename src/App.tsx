@@ -1370,7 +1370,7 @@ const PropertyDashboard = ({
     );
 };
 
-// --- 2. 物業詳情組件 (PropertyDetailView) ---
+// --- 2. 升級版：物業詳情組件 (PropertyDetailView) 支援批量過濾與修改 ---
 const PropertyDetailView = ({ 
     propId, propStats, transactions, leases, 
     onBack, setDocConfig, setModalMode, setEditingProp, setEditingTx, 
@@ -1381,6 +1381,16 @@ const PropertyDetailView = ({
 }: any) => {
     const p = propStats.find((x: any) => x.id === propId);
     
+    // --- 新增：批量與進階過濾狀態 ---
+    const [filterStartDate, setFilterStartDate] = useState('');
+    const [filterEndDate, setFilterEndDate] = useState('');
+    const [filterCat, setFilterCat] = useState('All');
+
+    const [isBulkMode, setIsBulkMode] = useState(false);
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [bulkMember, setBulkMember] = useState('');
+    const [bulkCategory, setBulkCategory] = useState('');
+
     if (!p) return <div className="p-8 text-center text-slate-500">找不到該物業資料 (Property not found)</div>;
 
     const getTxType = (catName: string) => {
@@ -1395,9 +1405,13 @@ const PropertyDetailView = ({
         return 'Expense'; 
     };
     
+    // 💡 強化篩選邏輯：加入日期與類別過濾
     const filteredTxs = transactions
         .filter((t: any) => t.propertyId === propId)
         .filter((t: any) => (JSON.stringify(t) || '').toLowerCase().includes(ledgerFilter.toLowerCase()))
+        .filter((t: any) => filterStartDate ? t.date >= filterStartDate : true)
+        .filter((t: any) => filterEndDate ? t.date <= filterEndDate : true)
+        .filter((t: any) => filterCat === 'All' ? true : t.category === filterCat)
         .sort((a: any,b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
     
     const pLeases = leases.filter((l: any) => l.propertyId === propId);
@@ -1409,6 +1423,51 @@ const PropertyDetailView = ({
     const periodExpense = filteredTxs
         .filter((t:any) => getTxType(t.category) === 'Expense')
         .reduce((sum:number, t:any) => sum + Math.abs(t.amount || 0), 0);
+
+    // --- 批量操作邏輯 ---
+    const toggleSelectAll = () => {
+        if (selectedIds.size === filteredTxs.length) {
+            setSelectedIds(new Set());
+        } else {
+            setSelectedIds(new Set(filteredTxs.map((t: any) => t.id)));
+        }
+    };
+
+    const toggleSelect = (id: string) => {
+        const newSet = new Set(selectedIds);
+        if (newSet.has(id)) newSet.delete(id);
+        else newSet.add(id);
+        setSelectedIds(newSet);
+    };
+
+    const executeBulkUpdate = async () => {
+        if (selectedIds.size === 0) return alert('請先選擇要修改的交易');
+        if (!bulkMember && !bulkCategory) return alert('請選擇要批量修改的目標「成員」或「類別」');
+
+        if (!window.confirm(`確定要修改勾選的 ${selectedIds.size} 筆交易嗎？`)) return;
+
+        try {
+            const updates: any = {};
+            if (bulkMember) updates.member = bulkMember;
+            if (bulkCategory) updates.category = bulkCategory;
+
+            const batch = writeBatch(db);
+            selectedIds.forEach(id => {
+                const ref = doc(db, "transactions", id);
+                batch.update(ref, updates);
+            });
+            await batch.commit();
+
+            alert('批量更新成功！');
+            setIsBulkMode(false);
+            setSelectedIds(new Set());
+            setBulkMember('');
+            setBulkCategory('');
+        } catch (e) {
+            console.error(e);
+            alert('更新失敗，請檢查網絡連線');
+        }
+    };
 
     return (
         <div className="space-y-6 animate-in fade-in">
@@ -1488,20 +1547,73 @@ const PropertyDetailView = ({
                  ))}
             </div>
 
+            {/* 🌟 核心升級區：流水帳面板 */}
             <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
                 <div className="p-4 bg-slate-50 flex justify-between items-center border-b">
-                    <h3 className="font-bold">流水帳 Ledger</h3>
-                    <button onClick={() => { setEditingTx({ propertyId: p.id, date: new Date().toISOString().split('T')[0], attachments: [] } as any); setModalMode('transaction'); }} className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 font-bold">+ 新增紀錄 Add Record</button>
+                    <h3 className="font-bold flex items-center gap-3">
+                        流水帳 Ledger
+                        <button 
+                            onClick={() => { setIsBulkMode(!isBulkMode); setSelectedIds(new Set()); }}
+                            className={`text-xs px-3 py-1 rounded-full font-bold transition-colors ${isBulkMode ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
+                        >
+                            {isBulkMode ? '退出批量模式' : '批量修改成員'}
+                        </button>
+                    </h3>
+                    <button onClick={() => { setEditingTx({ propertyId: p.id, date: new Date().toISOString().split('T')[0], attachments: [] } as any); setModalMode('transaction'); }} className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 font-bold">+ 新增紀錄</button>
                 </div>
+
                 <div className="p-4 bg-slate-50 border-b space-y-3">
-                    <input 
-                        type="text" 
-                        placeholder="Search transactions..." 
-                        className="border rounded px-2 py-1 text-sm w-full" 
-                        value={ledgerFilter} 
-                        onChange={e => setLedgerFilter(e.target.value)} 
-                    />
-                    <div className="flex gap-4 text-sm">
+                    {/* 進階過濾器區塊 */}
+                    <div className="flex flex-wrap gap-2 items-center">
+                        <div className="flex-1 min-w-[200px] relative">
+                            <ICONS.Search />
+                            <input type="text" placeholder="搜尋商戶、金額或備註..." className="pl-8 border rounded px-2 py-1 text-sm w-full outline-none focus:border-blue-400" value={ledgerFilter} onChange={e => setLedgerFilter(e.target.value)} />
+                        </div>
+                        <div className="flex items-center bg-white border rounded overflow-hidden">
+                            <input type="date" className="px-2 py-1 text-sm text-slate-600 border-none focus:ring-0 outline-none" value={filterStartDate} onChange={e => setFilterStartDate(e.target.value)} title="開始日期" />
+                            <span className="text-slate-300 bg-slate-50 px-2 py-1 text-xs border-l border-r">至</span>
+                            <input type="date" className="px-2 py-1 text-sm text-slate-600 border-none focus:ring-0 outline-none" value={filterEndDate} onChange={e => setFilterEndDate(e.target.value)} title="結束日期" />
+                        </div>
+                        <select className="border rounded px-2 py-1 text-sm bg-white min-w-[120px] outline-none" value={filterCat} onChange={e => setFilterCat(e.target.value)}>
+                            <option value="All">所有類別 (All)</option>
+                            {(settings?.categories || []).map((c: any) => <option key={c.name} value={c.name}>{c.name}</option>)}
+                        </select>
+                        {(filterStartDate || filterEndDate || filterCat !== 'All' || ledgerFilter) && (
+                            <button onClick={() => { setFilterStartDate(''); setFilterEndDate(''); setFilterCat('All'); setLedgerFilter(''); }} className="text-xs text-red-500 hover:bg-red-50 px-2 py-1 rounded">清除</button>
+                        )}
+                    </div>
+
+                    {/* 批量操作控制列 */}
+                    {isBulkMode && (
+                        <div className="bg-indigo-50 border border-indigo-200 p-3 rounded-lg flex flex-wrap gap-3 items-center animate-in fade-in slide-in-from-top-2">
+                            <span className="text-xs font-bold text-indigo-700 bg-white px-2 py-1.5 rounded shadow-sm border border-indigo-100">
+                                已選中 {selectedIds.size} 筆
+                            </span>
+                            <div className="flex items-center gap-1">
+                                <span className="text-xs text-indigo-600 font-bold">修改成員為：</span>
+                                <select className="border-indigo-300 text-indigo-900 rounded px-2 py-1 text-sm bg-white" value={bulkMember} onChange={e => setBulkMember(e.target.value)}>
+                                    <option value="">(不修改成員)</option>
+                                    {(settings?.members || []).map((m: string) => <option key={m} value={m}>{m}</option>)}
+                                </select>
+                            </div>
+                            <div className="flex items-center gap-1">
+                                <span className="text-xs text-indigo-600 font-bold">修改類別為：</span>
+                                <select className="border-indigo-300 text-indigo-900 rounded px-2 py-1 text-sm bg-white" value={bulkCategory} onChange={e => setBulkCategory(e.target.value)}>
+                                    <option value="">(不修改類別)</option>
+                                    {(settings?.categories || []).map((c: any) => <option key={c.name} value={c.name}>{c.name}</option>)}
+                                </select>
+                            </div>
+                            <button 
+                                onClick={executeBulkUpdate} 
+                                disabled={selectedIds.size === 0 || (!bulkMember && !bulkCategory)} 
+                                className="bg-indigo-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors ml-auto"
+                            >
+                                執行批量修改
+                            </button>
+                        </div>
+                    )}
+
+                    <div className="flex gap-4 text-sm mt-2">
                         <div className="bg-emerald-50 text-emerald-700 px-3 py-1 rounded font-bold border border-emerald-100">
                             區間總收入: {formatCurrency(periodIncome)}
                         </div>
@@ -1510,20 +1622,57 @@ const PropertyDetailView = ({
                         </div>
                     </div>
                 </div>
+
                 <div className="max-h-[500px] overflow-y-auto">
-                    <table className="w-full text-sm text-left">
-                        <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0"><tr><th className="p-3">Date</th><th className="p-3">Category</th><th className="p-3">Detail</th><th className="p-3 text-right">Amount</th><th className="p-3">Action</th></tr></thead>
+                    <table className="w-full text-sm text-left relative">
+                        <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0 z-10 shadow-sm">
+                            <tr>
+                                {isBulkMode && (
+                                    <th className="p-3 w-10 text-center">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={selectedIds.size === filteredTxs.length && filteredTxs.length > 0} 
+                                            onChange={toggleSelectAll} 
+                                            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" 
+                                        />
+                                    </th>
+                                )}
+                                <th className="p-3">Date</th>
+                                <th className="p-3">Category</th>
+                                <th className="p-3">Detail & Member</th>
+                                <th className="p-3 text-right">Amount</th>
+                                <th className="p-3 text-center">Action</th>
+                            </tr>
+                        </thead>
                         <tbody className="divide-y">
+                            {filteredTxs.length === 0 && (
+                                <tr>
+                                    <td colSpan={isBulkMode ? 6 : 5} className="p-8 text-center text-slate-400 bg-slate-50 border-b-0">
+                                        沒有符合條件的交易紀錄
+                                    </td>
+                                </tr>
+                            )}
                             {filteredTxs.map((t: any) => {
                                 const isIncome = getTxType(t.category) === 'Income';
                                 const absAmount = Math.abs(t.amount || 0);
+                                const isSelected = selectedIds.has(t.id);
                                 
                                 return (
-                                    <tr key={t.id} className="hover:bg-blue-50">
-                                        <td className="p-3">{t.date}</td>
-                                        <td className="p-3">
+                                    <tr key={t.id} className={`transition-colors ${isSelected ? 'bg-indigo-50/50' : 'hover:bg-blue-50'} cursor-pointer`} onClick={() => isBulkMode && toggleSelect(t.id)}>
+                                        {isBulkMode && (
+                                            <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={isSelected} 
+                                                    onChange={() => toggleSelect(t.id)} 
+                                                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" 
+                                                />
+                                            </td>
+                                        )}
+                                        <td className="p-3 text-xs text-slate-600 font-mono">{t.date}</td>
+                                        <td className="p-3" onClick={(e) => e.stopPropagation()}>
                                             <select 
-                                                className="bg-transparent border-none max-w-[140px] truncate" 
+                                                className={`bg-transparent border-none max-w-[140px] truncate focus:ring-0 ${isSelected ? 'text-indigo-900' : ''}`}
                                                 value={t.category} 
                                                 onChange={e => handleUpdateCategory(t.id, e.target.value)}
                                             >
@@ -1536,18 +1685,26 @@ const PropertyDetailView = ({
                                             </select>
                                         </td>
                                         <td className="p-3 font-medium">
-                                            <div>{t.merchant} <span className="text-slate-400 text-xs">{t.note}</span></div>
+                                            <div className={isSelected ? 'text-indigo-900' : ''}>{t.merchant} <span className="text-slate-400 text-xs font-normal ml-1">{t.note}</span></div>
+                                            
+                                            {/* 直觀顯示該筆交易的成員 */}
+                                            <div className="mt-1 flex items-center gap-2">
+                                                <span className={`text-[10px] px-1.5 py-0.5 rounded border ${isSelected ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                                                    🙋‍♂️ {t.member || '未指定'}
+                                                </span>
+                                                {t.receiptNo && (
+                                                    <span className="text-[10px] text-green-700 bg-green-100 px-1.5 py-0.5 rounded border border-green-200 font-bold">
+                                                        🧾 {t.receiptNo}
+                                                    </span>
+                                                )}
+                                            </div>
+
                                             {t.attachments && t.attachments.length > 0 && (
-                                                <div className="flex gap-1 mt-1">
+                                                <div className="flex gap-1 mt-1.5">
                                                     {t.attachments.map((img:string, idx:number) => (
                                                         <img key={idx} src={img} className="w-6 h-6 object-cover rounded border" alt="receipt" />
                                                     ))}
                                                 </div>
-                                            )}
-                                            {t.receiptNo && (
-                                                <span className="inline-block mt-1 text-[10px] text-green-700 bg-green-100 px-2 py-0.5 rounded border border-green-200 font-bold">
-                                                    🧾 {t.receiptNo}
-                                                </span>
                                             )}
                                         </td>
                                         
@@ -1555,21 +1712,18 @@ const PropertyDetailView = ({
                                             {isIncome ? '+' : '-'}{formatCurrency(absAmount)}
                                         </td>
                                         
-                                        <td className="p-3">
-                                            <div className="flex items-center gap-2">
+                                        <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
+                                            <div className="flex items-center justify-center gap-2">
                                                 <button 
                                                     onClick={() => handleOpenReceipt(t)} 
-                                                    className={`text-xs px-2 py-1 rounded border flex flex-col items-center min-w-[70px] transition-colors ${
+                                                    className={`text-xs p-1.5 rounded transition-colors ${
                                                         t.receiptNo 
-                                                        ? 'bg-green-100 text-green-700 border-green-300 hover:bg-green-200' 
-                                                        : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                                                        ? 'bg-green-100 text-green-700 hover:bg-green-200' 
+                                                        : 'text-slate-400 hover:bg-slate-200 hover:text-slate-700'
                                                     }`}
                                                     title={t.receiptNo ? "查看已存檔收據" : "建立新收據"}
                                                 >
-                                                    <span className="font-bold flex items-center gap-1">
-                                                        <ICONS.FileText /> {t.receiptNo ? 'View' : 'Receipt'}
-                                                    </span>
-                                                    {t.receiptNo && <span className="text-[9px]">{t.receiptNo}</span>}
+                                                    <ICONS.FileText />
                                                 </button>
 
                                                 <button onClick={() => { setEditingTx(t); setModalMode('transaction'); }} className="text-blue-400 hover:text-blue-600 p-1"><ICONS.Edit /></button>
@@ -1584,19 +1738,16 @@ const PropertyDetailView = ({
                 </div>
             </div>
 
-            {/* --- 確定能被調用的結算區塊 --- */}
+            {/* 結算區塊 */}
             {(p.owner === 'Joint' || p.ownershipType === 'Joint') && (
-                <div className="mt-8">
-                    <PartnershipSettlement 
-                        property={p} 
-                        transactions={transactions} 
-                    />
-                </div>
+                <PartnershipSettlement 
+                    property={p} 
+                    transactions={transactions} 
+                />
             )}
         </div>
     );
 };
-
 // --- 請將此組件貼在 DocModal 之前 ---
 const DocPreviewContent = ({ 
     docConfig, 

@@ -2664,20 +2664,17 @@ const DocModal: React.FC<DocModalProps> = ({
     );
 }
 
-// --- 1. 合夥結算組件 (PartnershipSettlement) ---
+// --- 1. 改良版：合夥結算組件 (PartnershipSettlement) 支援預計結算 ---
 interface PartnerShare {
   name: string;
   ratio: number;
 }
 
 const PartnershipSettlement = ({ property, transactions }: any) => {
-  if (!property || property.status !== 'Sold') {
-    return (
-      <div className="p-8 text-center bg-slate-50 rounded-xl border-2 border-dashed border-slate-200">
-        <p className="text-slate-500">請選擇一個「已售出 (Sold)」的物業來查看結算報告。</p>
-      </div>
-    );
-  }
+  if (!property) return null;
+
+  // 判斷是否為最終結算 (Sold)
+  const isFinal = property.status === 'Sold';
 
   const shares: PartnerShare[] = [
     { name: 'JOYCE LAU', ratio: 0.6 },
@@ -2685,7 +2682,10 @@ const PartnershipSettlement = ({ property, transactions }: any) => {
   ];
 
   const propTxs = transactions.filter((t: any) => t.propertyId === property.id || t.propertyId === property.name);
-  const capitalGain = (property.salePrice || 0) - (property.purchasePrice || 0) - (property.purchaseCommission || 0);
+  
+  // 關鍵改良：如果是最終結算用 salePrice，否則用 currentValue (現估值)
+  const targetPrice = isFinal ? (property.salePrice || 0) : (property.currentValue || 0);
+  const capitalGain = targetPrice - (property.purchasePrice || 0) - (property.purchaseCommission || 0);
   
   const totalIncome = propTxs
     .filter((t: any) => (t.category || '').includes('Income') || t.category?.includes('Sale'))
@@ -2699,15 +2699,19 @@ const PartnershipSettlement = ({ property, transactions }: any) => {
   const totalProjectProfit = capitalGain + netOperatingProfit;
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4">
-      <div className="bg-slate-900 text-white p-6">
+    <div className={`bg-white rounded-2xl shadow-sm border overflow-hidden animate-in fade-in slide-in-from-bottom-4 ${isFinal ? 'border-slate-200' : 'border-blue-200'}`}>
+      <div className={`p-6 text-white ${isFinal ? 'bg-slate-900' : 'bg-blue-600'}`}>
         <div className="flex justify-between items-start">
           <div>
-            <h2 className="text-2xl font-bold">{property.name} 投資結算報告</h2>
-            <p className="text-slate-400 text-sm mt-1">結算日期: {new Date().toLocaleDateString()}</p>
+            <h2 className="text-2xl font-bold">
+              {property.name} {isFinal ? '投資結算報告' : '預計結算報告 (Holding)'}
+            </h2>
+            <p className="text-white/80 text-sm mt-1">基準日期: {new Date().toLocaleDateString()}</p>
           </div>
           <div className="text-right">
-            <span className="text-xs font-bold uppercase tracking-widest text-emerald-400">Total Net Profit</span>
+            <span className="text-xs font-bold uppercase tracking-widest opacity-80">
+              {isFinal ? 'Total Net Profit' : 'Est. Net Profit'}
+            </span>
             <div className="text-3xl font-mono font-bold">{formatCurrency(totalProjectProfit)}</div>
           </div>
         </div>
@@ -2716,11 +2720,11 @@ const PartnershipSettlement = ({ property, transactions }: any) => {
       <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="space-y-4">
           <h3 className="font-bold text-slate-700 border-b pb-2 flex items-center gap-2">
-            <ICONS.Home /> 物業清算摘要
+            <ICONS.Home /> {isFinal ? '物業清算摘要' : '估算摘要'}
           </h3>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-slate-500">資產增值 (Capital Gain)</span>
+              <span className="text-slate-500">{isFinal ? '資產增值 (Capital Gain)' : '預計增值 (Unrealized)'}</span>
               <span className="font-mono">{formatCurrency(capitalGain)}</span>
             </div>
             <div className="flex justify-between">
@@ -2728,9 +2732,14 @@ const PartnershipSettlement = ({ property, transactions }: any) => {
               <span className="font-mono">{formatCurrency(netOperatingProfit)}</span>
             </div>
             <div className="pt-2 border-t flex justify-between font-bold text-lg">
-              <span>總結算利潤</span>
-              <span className="text-blue-600">{formatCurrency(totalProjectProfit)}</span>
+              <span>{isFinal ? '總結算利潤' : '預計總利潤'}</span>
+              <span className={isFinal ? 'text-blue-600' : 'text-blue-500'}>{formatCurrency(totalProjectProfit)}</span>
             </div>
+            {!isFinal && (
+              <p className="text-[10px] text-blue-400 italic mt-2">
+                * 以現估值 {formatCurrency(property.currentValue)} 作為計算基準
+              </p>
+            )}
           </div>
         </div>
 
@@ -2772,7 +2781,7 @@ const PartnershipSettlement = ({ property, transactions }: any) => {
                     </div>
                   </div>
                   <div className="pt-2 border-t-2 border-dashed border-slate-200 flex justify-between items-end">
-                    <span className="text-xs font-bold text-slate-400">最終應收/付</span>
+                    <span className="text-xs font-bold text-slate-400">{isFinal ? '最終應收/付' : '目前應收/付'}</span>
                     <span className={`text-xl font-mono font-bold ${finalSettlement >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
                       {formatCurrency(finalSettlement)}
                     </span>
@@ -2784,8 +2793,11 @@ const PartnershipSettlement = ({ property, transactions }: any) => {
         </div>
       </div>
       
-      <div className="p-4 bg-amber-50 border-t border-amber-100 text-[11px] text-amber-700 flex items-center gap-2">
-        <ICONS.Shield /> 註：本報告根據「Member」欄位標記之資金往來進行自動核算。如需調整初始資本金，請於 Ledger 手動增加一筆「Capital Contribution」紀錄。
+      <div className={`p-4 border-t text-[11px] flex items-center gap-2 ${isFinal ? 'bg-amber-50 border-amber-100 text-amber-700' : 'bg-blue-50/50 border-blue-100 text-blue-600'}`}>
+        <ICONS.Shield /> 
+        {isFinal 
+          ? "註：已售出結算。本報告根據「Member」欄位標記之資金往來進行自動核算。" 
+          : "註：預計結算。這是基於「現值」的模擬結算，方便合夥人掌握當前投資狀況。"}
       </div>
     </div>
   );

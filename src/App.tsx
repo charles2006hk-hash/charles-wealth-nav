@@ -4322,11 +4322,14 @@ useEffect(() => {
                                 </select>
                               </div>
                               <div className="flex gap-2">
-                                  <div className="flex-1"><label className="text-xs block text-slate-500">Owner</label>
+                                  <div className="flex-1"><label className="text-xs block text-slate-500">Owner (業主)</label>
                                       <select className="border w-full p-2 rounded" value={editingProp?.owner} onChange={e => setEditingProp({...editingProp, owner: e.target.value} as any)}>
                                           <option value="">Select...</option>
                                           <option value="Joint">Joint (合夥)</option>
-                                          {settings.owners.map(o => <option key={o} value={o}>{o}</option>)}
+                                          {/* 👇 自動同步系統的 Members (成員/合夥人) 名單 👇 */}
+                                          {(settings?.members || []).map((m: string) => (
+                                              <option key={m} value={m}>{m}</option>
+                                          ))}
                                       </select>
                                   </div>
                                   <div className="flex-1"><label className="text-xs block text-slate-500">Tags (Enter to add)</label><div className="border rounded p-2 flex flex-wrap gap-1 min-h-[42px]">{editingProp?.tags?.map((t: string) => (<span key={t} className="text-xs bg-slate-100 px-1 rounded flex items-center">{t} <button className="ml-1 text-red-400" onClick={()=>setEditingProp({...editingProp, tags: editingProp!.tags.filter((x: string)=>x!==t)} as any)}>x</button></span>))}<input className="outline-none text-xs w-20" onKeyDown={(e)=>{if(e.key==='Enter' && editingProp) { const val = (e.target as HTMLInputElement).value; if(val) { setEditingProp({...editingProp, tags: [...(editingProp.tags||[]), val]} as any); (e.target as HTMLInputElement).value = ''; }}}} /></div></div>

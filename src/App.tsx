@@ -2482,274 +2482,428 @@ const InvestorDetailModal = ({ investor, onClose }: { investor: OtherInvestor | 
     );
 };
 
-const InvestmentDashboard = () => {
-    // --- 1. [Fix] 修復借貸日期邏輯 ---
-    // 改進：動態計算下一個扣款日，解決 2026 年顯示 2024 的問題
-    const loanHistory = useMemo(() => {
-        const principal = 3000000;
-        const rate = 0.06;
-        const history = [];
-        const startYear = 2015;
-        const currentYear = new Date().getFullYear(); // 2026
-        const currentDate = new Date();
+// --- 新增：合夥往來對數中心 (Partner Clearing Hub) ---
+const PartnerClearingHub = ({ transactions, settings, setEditingTx, setModalMode }: any) => {
+    const [selectedPartner, setSelectedPartner] = useState('');
 
-        // 1. 生成過去所有紀錄 (從 2015 到 今年)
-        for (let y = startYear; y <= currentYear; y++) {
-            // 上半年 1/1
-            if (new Date(y, 0, 1) < currentDate) {
-                 history.push({ year: y, month: 1, amount: principal * rate / 2, type: 'Interest', note: '上半年利息' });
-            }
-            // 下半年 7/1
-            if (new Date(y, 6, 1) < currentDate) {
-                 history.push({ year: y, month: 7, amount: principal * rate / 2, type: 'Interest', note: '下半年利息' });
-            }
-        }
-        
-        // 2. 預測「下一次」扣款日
-        let nextDate = new Date(currentYear, 0, 1); // 今年 1/1
-        if (nextDate < currentDate) nextDate = new Date(currentYear, 6, 1); // 今年 7/1
-        if (nextDate < currentDate) nextDate = new Date(currentYear + 1, 0, 1); // 明年 1/1
-        
-        const nextDateStr = nextDate.toISOString().split('T')[0];
-        const nextAmount = principal * rate / 2;
+    // 過濾出選定合夥人的所有交易
+    const partnerTxs = useMemo(() => {
+        if (!selectedPartner) return [];
+        return transactions
+            .filter((t: any) => t.member === selectedPartner)
+            .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }, [transactions, selectedPartner]);
 
-        return {
-            history: history.sort((a,b) => b.year - a.year),
-            totalReceived: history.reduce((acc, h) => acc + h.amount, 0),
-            nextDate: nextDateStr,
-            nextAmount: nextAmount
-        };
-    }, []);
+    // 判斷收支
+    const getTxType = (catName: string) => {
+        const found = settings?.categories?.find((c: any) => c.name === catName);
+        if (found) return found.type;
+        if ((catName || '').includes('Income') || (catName || '').includes('Sale') || (catName || '').includes('收入')) return 'Income';
+        return 'Expense';
+    };
 
-    const totalInterestReceived = loanHistory.totalReceived;
-    
-    // 定義現在的資產狀態
-    const loans = INITIAL_LOANS;
-    const peProjects = INITIAL_PE_PROJECTS;
+    // 計算總計
+    const totalIncome = partnerTxs.filter((t: any) => getTxType(t.category) === 'Income').reduce((sum: number, t: any) => sum + Math.abs(t.amount || 0), 0);
+    const totalExpense = partnerTxs.filter((t: any) => getTxType(t.category) === 'Expense').reduce((sum: number, t: any) => sum + Math.abs(t.amount || 0), 0);
+    const netBalance = totalIncome - totalExpense;
 
-    const totalLoanPrincipal = loans.reduce((acc, l) => acc + l.principal, 0);
-    const totalPEInvested = peProjects.reduce((acc, p) => acc + p.investmentAmount, 0);
-    const totalPEValuation = peProjects.reduce((acc, p) => acc + p.valuation, 0); 
-    const totalAssets = totalLoanPrincipal + totalPEValuation;
+    // 按類別分佈 (用於顯示資金在哪裡，例如 股票 vs 銀行)
+    const positionBreakdown = useMemo(() => {
+        const breakdown: Record<string, number> = {};
+        partnerTxs.forEach((t: any) => {
+            const isIncome = getTxType(t.category) === 'Income';
+            const val = isIncome ? Math.abs(t.amount) : -Math.abs(t.amount);
+            breakdown[t.category] = (breakdown[t.category] || 0) + val;
+        });
+        return Object.entries(breakdown).sort((a, b) => b[1] - a[1]);
+    }, [partnerTxs]);
 
-    // A. 借貸回報分析
-    const loanROI = (totalInterestReceived / totalLoanPrincipal) * 100;
-    
-    // B. 私募基金潛在回報
-    const simulatedPEValuation = 
-        (peProjects.find(p=>p.projectName.includes('鑫茂'))?.investmentAmount || 0) * 1.5 + 
-        (peProjects.find(p=>p.projectName.includes('玻思韬'))?.investmentAmount || 0) * 1.0;
-    
-    const peUnrealizedProfit = simulatedPEValuation - totalPEInvested;
-    const peROI = (peUnrealizedProfit / totalPEInvested) * 100;
-
-    // C. 風險評分
-    const riskScore = Math.round(
-        (totalLoanPrincipal * 20 + totalPEInvested * 80) / (totalLoanPrincipal + totalPEInvested)
-    );
-
-    // D. 處理家庭基金
-    const [selectedInvestor, setSelectedInvestor] = useState<OtherInvestor | null>(null);
+    // 列印功能
+    const handlePrintRecon = () => {
+        if (!selectedPartner) return alert('請先選擇合夥人');
+        const printContent = document.getElementById('recon-print-container');
+        if (!printContent) return;
+        const clone = printContent.cloneNode(true) as HTMLElement;
+        clone.classList.remove('hidden'); // 確保列印時可見
+        const wrapper = document.createElement('div');
+        wrapper.id = 'print-clone-root';
+        wrapper.appendChild(clone);
+        document.body.appendChild(wrapper);
+        document.body.classList.add('printing-mode');
+        setTimeout(() => {
+            window.print();
+            document.body.classList.remove('printing-mode');
+            if (document.body.contains(wrapper)) document.body.removeChild(wrapper);
+        }, 500);
+    };
 
     return (
-        <div className="space-y-6 animate-in fade-in pb-10">
-            {/* 1. 動態獲利分析卡 */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                
-                {/* 借貸獲利分析 */}
-                <div className="bg-gradient-to-br from-emerald-50 to-white p-6 rounded-2xl shadow-sm border border-emerald-100 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-4 opacity-10"><ICONS.DollarSign /></div>
-                    <div className="flex items-center gap-2 mb-4">
-                        <div className="p-2 bg-emerald-100 text-emerald-700 rounded-lg"><ICONS.TrendingUp /></div>
-                        <h3 className="font-bold text-slate-700">借貸現金流 (Cash Cow)</h3>
-                    </div>
-                    
-                    <div className="flex justify-between items-end mb-2">
-                        <span className="text-sm text-slate-500">累計已收利息 (Since 2015)</span>
-                        <span className="text-2xl font-bold text-emerald-600">+{formatCurrency(totalInterestReceived)}</span>
-                    </div>
-                    <div className="w-full bg-slate-100 h-2 rounded-full mb-2">
-                        <div className="bg-emerald-500 h-2 rounded-full" style={{width: `${Math.min(loanROI, 100)}%`}}></div>
-                    </div>
-                    <div className="flex justify-between text-xs text-slate-400">
-                        <span>已回本比例: {loanROI.toFixed(1)}%</span>
-                        <span>本金仍在庫: {formatCurrency(totalLoanPrincipal)}</span>
-                    </div>
-                </div>
-
-                {/* PE 潛在獲利 */}
-                <div className="bg-gradient-to-br from-indigo-50 to-white p-6 rounded-2xl shadow-sm border border-indigo-100 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-4 opacity-10"><ICONS.Briefcase /></div>
-                    <div className="flex items-center gap-2 mb-4">
-                        <div className="p-2 bg-indigo-100 text-indigo-700 rounded-lg"><ICONS.TrendingUp /></div>
-                        <h3 className="font-bold text-slate-700">PE 潛在價值 (Growth)</h3>
-                    </div>
-
-                    <div className="flex justify-between items-end mb-2">
-                        <span className="text-sm text-slate-500">預估浮盈 (Unrealized)</span>
-                        <div className="text-right">
-                            <span className="text-2xl font-bold text-indigo-600 block">+{formatCurrency(peUnrealizedProfit)}</span>
-                            <span className="text-xs font-bold text-indigo-400">ROI: +{peROI.toFixed(1)}%</span>
-                        </div>
-                    </div>
-                    <div className="flex gap-2 text-xs mb-3">
-                        <span className="px-2 py-1 bg-white border rounded text-slate-600">成本: {formatCurrency(totalPEInvested)}</span>
-                        <span className="px-2 py-1 bg-indigo-600 text-white rounded">最新估值: {formatCurrency(simulatedPEValuation)}</span>
-                    </div>
-                </div>
-
-                {/* 風險儀表板 */}
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
-                    <div>
-                        <h3 className="font-bold text-slate-700 mb-2 flex items-center gap-2">
-                            <ICONS.ShieldCheck /> 投資組合風險 (Risk)
-                        </h3>
-                        <div className="flex items-center gap-4 mt-4">
-                            <div className="relative w-24 h-24 flex items-center justify-center">
-                                <svg className="transform -rotate-90 w-24 h-24">
-                                    <circle cx="48" cy="48" r="40" stroke="#f1f5f9" strokeWidth="8" fill="transparent" />
-                                    <circle cx="48" cy="48" r="40" stroke={riskScore > 50 ? "#f87171" : "#34d399"} strokeWidth="8" fill="transparent" strokeDasharray={251.2} strokeDashoffset={251.2 * (1 - riskScore / 100)} />
-                                </svg>
-                                <div className="absolute text-center">
-                                    <span className={`text-xl font-bold ${riskScore > 50 ? "text-red-500" : "text-green-500"}`}>{riskScore}</span>
-                                    <span className="block text-[10px] text-slate-400">Score</span>
-                                </div>
-                            </div>
-                            <div className="flex-1 text-sm text-slate-600 space-y-2">
-                                <p>您的投資組合屬於 <strong>{riskScore > 60 ? '進取型 (Aggressive)' : '穩健型 (Balanced)'}</strong>。</p>
-                                <p className="text-xs text-slate-400">
-                                    總資產 {formatCurrency(totalAssets)} 中，
-                                    {((totalLoanPrincipal/totalAssets)*100).toFixed(0)}% 位於固定收益，
-                                    {((totalPEValuation/totalAssets)*100).toFixed(0)}% 位於高風險創投。
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* --- 2. 原始投資模塊 (借貸 & PE) --- */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                    <div className="p-4 border-b bg-slate-50 flex justify-between items-center">
-                        <h3 className="font-bold text-slate-800 flex items-center gap-2"><ICONS.DollarSign /> 私人借貸履約監控</h3>
-                        <span className="text-xs font-mono bg-green-100 text-green-700 px-2 py-1 rounded">Active</span>
-                    </div>
-                    {loans.map(loan => (
-                        <div key={loan.id} className="p-6">
-                            <div className="flex flex-wrap justify-between items-start mb-4">
-                                <div>
-                                    <h4 className="font-bold text-lg">{loan.name}</h4>
-                                    <div className="flex items-center gap-2 mt-1">
-                                        <span className="text-xs bg-slate-100 px-2 py-1 rounded text-slate-600">年化 {loan.rate}%</span>
-                                        <span className="text-xs bg-slate-100 px-2 py-1 rounded text-slate-600">每半年結算</span>
-                                    </div>
-                                </div>
-                                <div className="text-right">
-                                    <div className="text-2xl font-mono font-bold text-slate-800">{formatCurrency(loan.principal)}</div>
-                                    <div className="text-xs text-slate-500">本金 (Principal)</div>
-                                </div>
-                            </div>
-                            
-                            <div className="mt-6">
-                                <h5 className="text-xs font-bold text-slate-500 uppercase mb-3">Recent Cash Flow Timeline</h5>
-                                <div className="relative border-l-2 border-slate-200 ml-3 space-y-6 pb-2">
-                                    {/* [Fix] 使用動態計算的 Next Date */}
-                                    <div className="relative pl-6">
-                                        <div className="absolute -left-[9px] top-1 w-4 h-4 rounded-full bg-blue-500 border-4 border-white shadow-sm"></div>
-                                        <div className="flex justify-between items-center bg-blue-50 p-3 rounded-lg border border-blue-100">
-                                            <div>
-                                                <span className="font-bold text-blue-800 block text-sm">下次結算 ({loanHistory.nextDate})</span>
-                                                <span className="text-xs text-blue-600">預計利息收入</span>
-                                            </div>
-                                            <span className="font-mono font-bold text-blue-700">+{formatCurrency(loanHistory.nextAmount)}</span>
-                                        </div>
-                                    </div>
-                                    
-                                    {loanHistory.history.slice(0, 3).map((h, idx) => (
-                                        <div key={idx} className="relative pl-6 opacity-75">
-                                            <div className="absolute -left-[5px] top-2 w-2 h-2 rounded-full bg-slate-300"></div>
-                                            <div className="flex justify-between text-sm">
-                                                <span className="text-slate-600">{h.year} {h.month === 1 ? 'Jan' : 'Jul'} - {h.note}</span>
-                                                <span className="font-mono text-emerald-600">+{formatCurrency(h.amount)}</span>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-
-                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                    <div className="p-4 border-b bg-slate-50 flex justify-between items-center">
-                        <h3 className="font-bold text-slate-800 flex items-center gap-2"><ICONS.Briefcase /> 蟻米基金投資追蹤</h3>
-                        <span className="text-xs font-mono bg-indigo-100 text-indigo-700 px-2 py-1 rounded">Total: {formatCurrency(totalPEInvested)}</span>
-                    </div>
-                    <div className="divide-y">
-                        {peProjects.map(proj => (
-                            <div key={proj.id} className="p-6">
-                                <div className="flex justify-between mb-4">
-                                    <div>
-                                        <h4 className="font-bold text-lg flex items-center gap-2">
-                                            {proj.projectName}
-                                            {proj.projectName.includes('鑫茂') && <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full animate-pulse">Hot</span>}
-                                        </h4>
-                                        <p className="text-xs text-slate-500 mt-1">投入本金: {formatCurrency(proj.investmentAmount)}</p>
-                                    </div>
-                                    <div className="text-right">
-                                        <div className="text-lg font-bold text-indigo-600">+{(peROI > 0 ? peROI : 0).toFixed(0)}%</div>
-                                        <div className="text-xs text-slate-400">預估回報</div>
-                                    </div>
-                                </div>
-                                <div className="h-2 bg-slate-100 rounded-full overflow-hidden relative mb-2">
-                                    <div className={`h-full rounded-full transition-all duration-1000 ${proj.projectName.includes('鑫茂') ? 'w-[75%] bg-blue-500' : 'w-[40%] bg-slate-400'}`}></div>
-                                </div>
-                                <p className="text-xs text-slate-500 mt-1 bg-slate-50 p-2 rounded"><span className="font-bold">最新動態：</span> {proj.description}</p>
-                            </div>
+        <div className="space-y-6 animate-in fade-in">
+            {/* 控制列 */}
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap justify-between items-center gap-4">
+                <div className="flex items-center gap-3">
+                    <span className="font-bold text-slate-700">選擇對數合夥人:</span>
+                    <select 
+                        className="border rounded-lg px-3 py-2 text-sm bg-slate-50 font-bold text-indigo-700 outline-none" 
+                        value={selectedPartner} 
+                        onChange={e => setSelectedPartner(e.target.value)}
+                    >
+                        <option value="">-- 請選擇 (Select Partner) --</option>
+                        {(settings?.members || []).map((m: string) => (
+                            <option key={m} value={m}>{m}</option>
                         ))}
+                    </select>
+                </div>
+                {selectedPartner && (
+                    <div className="flex gap-2">
+                        <button onClick={() => { 
+                            setEditingTx({ id: '', date: new Date().toISOString().split('T')[0], merchant: '', amount: 0, category: settings?.categories?.[0]?.name || 'General', member: selectedPartner, note: '', year: new Date().getFullYear(), month: new Date().getMonth() + 1, attachments: [] } as any); 
+                            setModalMode('transaction'); 
+                        }} className="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-bold hover:bg-indigo-100 flex items-center gap-2"><ICONS.Plus /> 新增帳目</button>
+                        <button onClick={handlePrintRecon} className="px-4 py-2 bg-slate-800 text-white rounded-lg text-sm font-bold hover:bg-slate-900 flex items-center gap-2"><ICONS.Printer /> 導出 PDF</button>
+                    </div>
+                )}
+            </div>
+
+            {!selectedPartner ? (
+                <div className="p-12 text-center text-slate-400 bg-white border border-dashed rounded-xl">請從上方選擇合夥人以查看對數明細。</div>
+            ) : (
+                <>
+                    {/* 數據看板 */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="bg-white p-6 rounded-xl border shadow-sm">
+                            <p className="text-sm text-slate-500 font-bold mb-1">累計注資 / 收入 (+)</p>
+                            <p className="text-2xl font-bold font-mono text-emerald-600">{formatCurrency(totalIncome)}</p>
+                        </div>
+                        <div className="bg-white p-6 rounded-xl border shadow-sm">
+                            <p className="text-sm text-slate-500 font-bold mb-1">代付 / 支出 / 提款 (-)</p>
+                            <p className="text-2xl font-bold font-mono text-red-500">{formatCurrency(totalExpense)}</p>
+                        </div>
+                        <div className="bg-indigo-50 p-6 rounded-xl border border-indigo-100 shadow-sm">
+                            <p className="text-sm text-indigo-600 font-bold mb-1">當前清算總權益 (Net Balance)</p>
+                            <p className={`text-3xl font-bold font-mono ${netBalance >= 0 ? 'text-indigo-700' : 'text-red-600'}`}>{formatCurrency(netBalance)}</p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        {/* 左側：資產分佈 */}
+                        <div className="bg-white rounded-xl border shadow-sm p-4">
+                            <h3 className="font-bold border-b pb-2 mb-3">資金留存分佈 (按類別)</h3>
+                            <div className="space-y-3">
+                                {positionBreakdown.map(([cat, val]) => (
+                                    <div key={cat} className="flex justify-between items-center text-sm">
+                                        <span className="text-slate-600 bg-slate-50 px-2 py-1 rounded">{cat}</span>
+                                        <span className={`font-mono font-bold ${val >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{formatCurrency(val)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="mt-4 p-3 bg-blue-50 text-blue-700 text-xs rounded border border-blue-100">
+                                💡 <strong>提示：</strong> 您可以在系統設定新增「股票投資」、「代繳稅款」、「現金注資」等類別，方便在這裡對數。
+                            </div>
+                        </div>
+
+                        {/* 右側：流水帳 */}
+                        <div className="lg:col-span-2 bg-white rounded-xl border shadow-sm overflow-hidden">
+                            <div className="bg-slate-50 p-3 border-b font-bold flex justify-between items-center">
+                                <span>對數流水明細 (Transaction History)</span>
+                                <span className="text-xs bg-slate-200 px-2 py-1 rounded text-slate-600">{partnerTxs.length} 筆紀錄</span>
+                            </div>
+                            <div className="max-h-[400px] overflow-y-auto">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="bg-white sticky top-0 border-b">
+                                        <tr><th className="p-3">日期</th><th className="p-3">類別</th><th className="p-3">詳細說明</th><th className="p-3 text-right">金額</th></tr>
+                                    </thead>
+                                    <tbody className="divide-y">
+                                        {partnerTxs.map((t: any) => {
+                                            const isIncome = getTxType(t.category) === 'Income';
+                                            return (
+                                                <tr key={t.id} className="hover:bg-slate-50">
+                                                    <td className="p-3 text-xs text-slate-500 font-mono">{t.date}</td>
+                                                    <td className="p-3"><span className="px-2 py-1 bg-slate-100 rounded text-xs">{t.category}</span></td>
+                                                    <td className="p-3 font-medium">{t.merchant} {t.note && <span className="text-xs text-slate-400 font-normal ml-1">({t.note})</span>}</td>
+                                                    <td className={`p-3 text-right font-mono font-bold ${isIncome ? 'text-emerald-600' : 'text-red-500'}`}>{isIncome ? '+' : '-'}{formatCurrency(Math.abs(t.amount))}</td>
+                                                </tr>
+                                            );
+                                        })}
+                                        {partnerTxs.length === 0 && <tr><td colSpan={4} className="p-8 text-center text-slate-400">目前尚無紀錄</td></tr>}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </>
+            )}
+
+            {/* --- 隱藏的 PDF 列印視圖 --- */}
+            <div id="recon-print-container" className="hidden doc-print-container bg-white w-full text-black font-serif mx-auto p-8 relative">
+                <div className="border-b-2 border-slate-800 pb-4 mb-6">
+                    <h1 className="text-3xl font-bold text-slate-900 mb-1">合夥投資與資金往來對數報告</h1>
+                    <p className="text-slate-500 uppercase tracking-widest text-sm">Partnership Reconciliation Statement</p>
+                </div>
+
+                <div className="flex justify-between mb-8 text-sm">
+                    <div>
+                        <p><span className="font-bold inline-block w-24">對數合夥人:</span> <span className="text-lg font-bold">{selectedPartner}</span></p>
+                        <p><span className="font-bold inline-block w-24">報告主體:</span> Charles 帳戶代管盤點</p>
+                    </div>
+                    <div className="text-right">
+                        <p><span className="font-bold">報告日期:</span> {new Date().toLocaleDateString()}</p>
+                        <p><span className="font-bold">貨幣單位:</span> 港幣 (HKD)</p>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4 mb-8">
+                    <div className="border p-4 bg-slate-50 text-center rounded"><p className="text-xs text-slate-500 font-bold mb-2">累計注資 / 收入</p><p className="text-xl font-bold font-mono">{formatCurrency(totalIncome)}</p></div>
+                    <div className="border p-4 bg-slate-50 text-center rounded"><p className="text-xs text-slate-500 font-bold mb-2">代付 / 支出 / 投資</p><p className="text-xl font-bold font-mono">{formatCurrency(totalExpense)}</p></div>
+                    <div className="border border-slate-800 p-4 bg-slate-800 text-white text-center rounded"><p className="text-xs text-slate-300 font-bold mb-2">當前清算總權益 (Net Balance)</p><p className="text-2xl font-bold font-mono">{formatCurrency(netBalance)}</p></div>
+                </div>
+
+                <h3 className="font-bold text-lg mb-2 border-l-4 border-slate-800 pl-2">留存資產分佈 (Asset Location)</h3>
+                <table className="w-full border-collapse border border-slate-300 mb-8 text-sm">
+                    <thead className="bg-slate-100"><tr><th className="border p-2 text-left">資產類別 / 資金存放處</th><th className="border p-2 text-right">留存金額 (HKD)</th></tr></thead>
+                    <tbody>
+                        {positionBreakdown.map(([cat, val]) => (
+                            <tr key={cat}><td className="border p-2 font-bold">{cat}</td><td className={`border p-2 text-right font-mono ${val >= 0 ? '' : 'text-red-600'}`}>{formatCurrency(val)}</td></tr>
+                        ))}
+                        <tr className="bg-slate-50"><td className="border p-2 font-bold text-right">合計驗算:</td><td className="border p-2 text-right font-mono font-bold text-lg">{formatCurrency(netBalance)}</td></tr>
+                    </tbody>
+                </table>
+
+                <h3 className="font-bold text-lg mb-2 border-l-4 border-slate-800 pl-2">往來明細 (Transaction History)</h3>
+                <table className="w-full border-collapse border border-slate-300 text-sm mb-12">
+                    <thead className="bg-slate-100"><tr><th className="border p-2 text-left w-24">日期 Date</th><th className="border p-2 text-left w-32">類別 Category</th><th className="border p-2 text-left">說明 Details</th><th className="border p-2 text-right w-32">金額 Amount</th></tr></thead>
+                    <tbody>
+                        {partnerTxs.map((t: any) => {
+                            const isIncome = getTxType(t.category) === 'Income';
+                            return (
+                                <tr key={t.id}>
+                                    <td className="border p-2">{t.date}</td><td className="border p-2 text-xs">{t.category}</td><td className="border p-2">{t.merchant} {t.note && <span className="text-slate-500">({t.note})</span>}</td><td className={`border p-2 text-right font-mono ${isIncome?'':'text-red-600'}`}>{isIncome?'+':'-'}{formatCurrency(Math.abs(t.amount))}</td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+
+                <div className="avoid-break mt-12">
+                    <div className="flex justify-between signature-section pt-8">
+                        <div className="w-[40%]"><div className="border-t border-black pt-2 text-center text-sm">報告編制人簽署 / Charles</div></div>
+                        <div className="w-[40%]"><div className="border-t border-black pt-2 text-center text-sm">合夥確認人簽署 / {selectedPartner}</div></div>
                     </div>
                 </div>
             </div>
+        </div>
+    );
+};
 
-            {/* --- 3. [New] 家庭基金與其他投資人 --- */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="p-4 border-b bg-slate-50">
-                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                        <ICONS.Data /> 家庭基金管理 (Family Fund / Other Investors)
-                    </h3>
+// --- 新增：合夥往來對數中心 (Partner Clearing Hub) ---
+const PartnerClearingHub = ({ transactions, settings, setEditingTx, setModalMode }: any) => {
+    const [selectedPartner, setSelectedPartner] = useState('');
+
+    // 過濾出選定合夥人的所有交易
+    const partnerTxs = useMemo(() => {
+        if (!selectedPartner) return [];
+        return transactions
+            .filter((t: any) => t.member === selectedPartner)
+            .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }, [transactions, selectedPartner]);
+
+    // 判斷收支
+    const getTxType = (catName: string) => {
+        const found = settings?.categories?.find((c: any) => c.name === catName);
+        if (found) return found.type;
+        if ((catName || '').includes('Income') || (catName || '').includes('Sale') || (catName || '').includes('收入')) return 'Income';
+        return 'Expense';
+    };
+
+    // 計算總計
+    const totalIncome = partnerTxs.filter((t: any) => getTxType(t.category) === 'Income').reduce((sum: number, t: any) => sum + Math.abs(t.amount || 0), 0);
+    const totalExpense = partnerTxs.filter((t: any) => getTxType(t.category) === 'Expense').reduce((sum: number, t: any) => sum + Math.abs(t.amount || 0), 0);
+    const netBalance = totalIncome - totalExpense;
+
+    // 按類別分佈 (用於顯示資金在哪裡，例如 股票 vs 銀行)
+    const positionBreakdown = useMemo(() => {
+        const breakdown: Record<string, number> = {};
+        partnerTxs.forEach((t: any) => {
+            const isIncome = getTxType(t.category) === 'Income';
+            const val = isIncome ? Math.abs(t.amount) : -Math.abs(t.amount);
+            breakdown[t.category] = (breakdown[t.category] || 0) + val;
+        });
+        return Object.entries(breakdown).sort((a, b) => b[1] - a[1]);
+    }, [partnerTxs]);
+
+    // 列印功能
+    const handlePrintRecon = () => {
+        if (!selectedPartner) return alert('請先選擇合夥人');
+        const printContent = document.getElementById('recon-print-container');
+        if (!printContent) return;
+        const clone = printContent.cloneNode(true) as HTMLElement;
+        clone.classList.remove('hidden'); // 確保列印時可見
+        const wrapper = document.createElement('div');
+        wrapper.id = 'print-clone-root';
+        wrapper.appendChild(clone);
+        document.body.appendChild(wrapper);
+        document.body.classList.add('printing-mode');
+        setTimeout(() => {
+            window.print();
+            document.body.classList.remove('printing-mode');
+            if (document.body.contains(wrapper)) document.body.removeChild(wrapper);
+        }, 500);
+    };
+
+    return (
+        <div className="space-y-6 animate-in fade-in">
+            {/* 控制列 */}
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap justify-between items-center gap-4">
+                <div className="flex items-center gap-3">
+                    <span className="font-bold text-slate-700">選擇對數合夥人:</span>
+                    <select 
+                        className="border rounded-lg px-3 py-2 text-sm bg-slate-50 font-bold text-indigo-700 outline-none" 
+                        value={selectedPartner} 
+                        onChange={e => setSelectedPartner(e.target.value)}
+                    >
+                        <option value="">-- 請選擇 (Select Partner) --</option>
+                        {(settings?.members || []).map((m: string) => (
+                            <option key={m} value={m}>{m}</option>
+                        ))}
+                    </select>
                 </div>
-                <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {INITIAL_OTHER_INVESTORS.map((inv, idx) => (
-                        <div 
-                            key={idx} 
-                            onClick={() => setSelectedInvestor(inv)}
-                            className="border rounded-xl p-4 hover:shadow-md cursor-pointer transition-all hover:border-blue-300 bg-white group"
-                        >
-                            <div className="flex justify-between items-start mb-3">
-                                <div className="p-2 bg-orange-50 text-orange-600 rounded-full group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
-                                    <ICONS.Briefcase />
-                                </div>
-                                <span className="text-xs bg-slate-100 px-2 py-1 rounded text-slate-500">詳情 &gt;</span>
-                            </div>
-                            <h4 className="font-bold text-lg text-slate-800 mb-1">{inv.name}</h4>
-                            <div className="space-y-1">
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-slate-500">本金</span>
-                                    <span className="font-mono">{formatCurrency(inv.stats.principal)}</span>
-                                </div>
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-slate-500">當前結餘</span>
-                                    <span className="font-mono font-bold text-emerald-600">{formatCurrency(inv.stats.balance)}</span>
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
+                {selectedPartner && (
+                    <div className="flex gap-2">
+                        <button onClick={() => { 
+                            setEditingTx({ id: '', date: new Date().toISOString().split('T')[0], merchant: '', amount: 0, category: settings?.categories?.[0]?.name || 'General', member: selectedPartner, note: '', year: new Date().getFullYear(), month: new Date().getMonth() + 1, attachments: [] } as any); 
+                            setModalMode('transaction'); 
+                        }} className="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-bold hover:bg-indigo-100 flex items-center gap-2"><ICONS.Plus /> 新增帳目</button>
+                        <button onClick={handlePrintRecon} className="px-4 py-2 bg-slate-800 text-white rounded-lg text-sm font-bold hover:bg-slate-900 flex items-center gap-2"><ICONS.Printer /> 導出 PDF</button>
+                    </div>
+                )}
             </div>
 
-            {/* 投資詳情與年報 Modal */}
-            <InvestorDetailModal investor={selectedInvestor} onClose={() => setSelectedInvestor(null)} />
+            {!selectedPartner ? (
+                <div className="p-12 text-center text-slate-400 bg-white border border-dashed rounded-xl">請從上方選擇合夥人以查看對數明細。</div>
+            ) : (
+                <>
+                    {/* 數據看板 */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="bg-white p-6 rounded-xl border shadow-sm">
+                            <p className="text-sm text-slate-500 font-bold mb-1">累計注資 / 收入 (+)</p>
+                            <p className="text-2xl font-bold font-mono text-emerald-600">{formatCurrency(totalIncome)}</p>
+                        </div>
+                        <div className="bg-white p-6 rounded-xl border shadow-sm">
+                            <p className="text-sm text-slate-500 font-bold mb-1">代付 / 支出 / 提款 (-)</p>
+                            <p className="text-2xl font-bold font-mono text-red-500">{formatCurrency(totalExpense)}</p>
+                        </div>
+                        <div className="bg-indigo-50 p-6 rounded-xl border border-indigo-100 shadow-sm">
+                            <p className="text-sm text-indigo-600 font-bold mb-1">當前清算總權益 (Net Balance)</p>
+                            <p className={`text-3xl font-bold font-mono ${netBalance >= 0 ? 'text-indigo-700' : 'text-red-600'}`}>{formatCurrency(netBalance)}</p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        {/* 左側：資產分佈 */}
+                        <div className="bg-white rounded-xl border shadow-sm p-4">
+                            <h3 className="font-bold border-b pb-2 mb-3">資金留存分佈 (按類別)</h3>
+                            <div className="space-y-3">
+                                {positionBreakdown.map(([cat, val]) => (
+                                    <div key={cat} className="flex justify-between items-center text-sm">
+                                        <span className="text-slate-600 bg-slate-50 px-2 py-1 rounded">{cat}</span>
+                                        <span className={`font-mono font-bold ${val >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{formatCurrency(val)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="mt-4 p-3 bg-blue-50 text-blue-700 text-xs rounded border border-blue-100">
+                                💡 <strong>提示：</strong> 您可以在系統設定新增「股票投資」、「代繳稅款」、「現金注資」等類別，方便在這裡對數。
+                            </div>
+                        </div>
+
+                        {/* 右側：流水帳 */}
+                        <div className="lg:col-span-2 bg-white rounded-xl border shadow-sm overflow-hidden">
+                            <div className="bg-slate-50 p-3 border-b font-bold flex justify-between items-center">
+                                <span>對數流水明細 (Transaction History)</span>
+                                <span className="text-xs bg-slate-200 px-2 py-1 rounded text-slate-600">{partnerTxs.length} 筆紀錄</span>
+                            </div>
+                            <div className="max-h-[400px] overflow-y-auto">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="bg-white sticky top-0 border-b">
+                                        <tr><th className="p-3">日期</th><th className="p-3">類別</th><th className="p-3">詳細說明</th><th className="p-3 text-right">金額</th></tr>
+                                    </thead>
+                                    <tbody className="divide-y">
+                                        {partnerTxs.map((t: any) => {
+                                            const isIncome = getTxType(t.category) === 'Income';
+                                            return (
+                                                <tr key={t.id} className="hover:bg-slate-50">
+                                                    <td className="p-3 text-xs text-slate-500 font-mono">{t.date}</td>
+                                                    <td className="p-3"><span className="px-2 py-1 bg-slate-100 rounded text-xs">{t.category}</span></td>
+                                                    <td className="p-3 font-medium">{t.merchant} {t.note && <span className="text-xs text-slate-400 font-normal ml-1">({t.note})</span>}</td>
+                                                    <td className={`p-3 text-right font-mono font-bold ${isIncome ? 'text-emerald-600' : 'text-red-500'}`}>{isIncome ? '+' : '-'}{formatCurrency(Math.abs(t.amount))}</td>
+                                                </tr>
+                                            );
+                                        })}
+                                        {partnerTxs.length === 0 && <tr><td colSpan={4} className="p-8 text-center text-slate-400">目前尚無紀錄</td></tr>}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </>
+            )}
+
+            {/* --- 隱藏的 PDF 列印視圖 --- */}
+            <div id="recon-print-container" className="hidden doc-print-container bg-white w-full text-black font-serif mx-auto p-8 relative">
+                <div className="border-b-2 border-slate-800 pb-4 mb-6">
+                    <h1 className="text-3xl font-bold text-slate-900 mb-1">合夥投資與資金往來對數報告</h1>
+                    <p className="text-slate-500 uppercase tracking-widest text-sm">Partnership Reconciliation Statement</p>
+                </div>
+
+                <div className="flex justify-between mb-8 text-sm">
+                    <div>
+                        <p><span className="font-bold inline-block w-24">對數合夥人:</span> <span className="text-lg font-bold">{selectedPartner}</span></p>
+                        <p><span className="font-bold inline-block w-24">報告主體:</span> Charles 帳戶代管盤點</p>
+                    </div>
+                    <div className="text-right">
+                        <p><span className="font-bold">報告日期:</span> {new Date().toLocaleDateString()}</p>
+                        <p><span className="font-bold">貨幣單位:</span> 港幣 (HKD)</p>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4 mb-8">
+                    <div className="border p-4 bg-slate-50 text-center rounded"><p className="text-xs text-slate-500 font-bold mb-2">累計注資 / 收入</p><p className="text-xl font-bold font-mono">{formatCurrency(totalIncome)}</p></div>
+                    <div className="border p-4 bg-slate-50 text-center rounded"><p className="text-xs text-slate-500 font-bold mb-2">代付 / 支出 / 投資</p><p className="text-xl font-bold font-mono">{formatCurrency(totalExpense)}</p></div>
+                    <div className="border border-slate-800 p-4 bg-slate-800 text-white text-center rounded"><p className="text-xs text-slate-300 font-bold mb-2">當前清算總權益 (Net Balance)</p><p className="text-2xl font-bold font-mono">{formatCurrency(netBalance)}</p></div>
+                </div>
+
+                <h3 className="font-bold text-lg mb-2 border-l-4 border-slate-800 pl-2">留存資產分佈 (Asset Location)</h3>
+                <table className="w-full border-collapse border border-slate-300 mb-8 text-sm">
+                    <thead className="bg-slate-100"><tr><th className="border p-2 text-left">資產類別 / 資金存放處</th><th className="border p-2 text-right">留存金額 (HKD)</th></tr></thead>
+                    <tbody>
+                        {positionBreakdown.map(([cat, val]) => (
+                            <tr key={cat}><td className="border p-2 font-bold">{cat}</td><td className={`border p-2 text-right font-mono ${val >= 0 ? '' : 'text-red-600'}`}>{formatCurrency(val)}</td></tr>
+                        ))}
+                        <tr className="bg-slate-50"><td className="border p-2 font-bold text-right">合計驗算:</td><td className="border p-2 text-right font-mono font-bold text-lg">{formatCurrency(netBalance)}</td></tr>
+                    </tbody>
+                </table>
+
+                <h3 className="font-bold text-lg mb-2 border-l-4 border-slate-800 pl-2">往來明細 (Transaction History)</h3>
+                <table className="w-full border-collapse border border-slate-300 text-sm mb-12">
+                    <thead className="bg-slate-100"><tr><th className="border p-2 text-left w-24">日期 Date</th><th className="border p-2 text-left w-32">類別 Category</th><th className="border p-2 text-left">說明 Details</th><th className="border p-2 text-right w-32">金額 Amount</th></tr></thead>
+                    <tbody>
+                        {partnerTxs.map((t: any) => {
+                            const isIncome = getTxType(t.category) === 'Income';
+                            return (
+                                <tr key={t.id}>
+                                    <td className="border p-2">{t.date}</td><td className="border p-2 text-xs">{t.category}</td><td className="border p-2">{t.merchant} {t.note && <span className="text-slate-500">({t.note})</span>}</td><td className={`border p-2 text-right font-mono ${isIncome?'':'text-red-600'}`}>{isIncome?'+':'-'}{formatCurrency(Math.abs(t.amount))}</td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+
+                <div className="avoid-break mt-12">
+                    <div className="flex justify-between signature-section pt-8">
+                        <div className="w-[40%]"><div className="border-t border-black pt-2 text-center text-sm">報告編制人簽署 / Charles</div></div>
+                        <div className="w-[40%]"><div className="border-t border-black pt-2 text-center text-sm">合夥確認人簽署 / {selectedPartner}</div></div>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 };
@@ -4007,7 +4161,12 @@ useEffect(() => {
               )}
               
               {activeTab === 'investments' && (
-                 <InvestmentDashboard />
+                  <InvestmentDashboard 
+                      transactions={transactions} 
+                      settings={settings} 
+                      setEditingTx={setEditingTx} 
+                      setModalMode={setModalMode} 
+                  />
               )}
 
               {activeTab === 'settings' && (

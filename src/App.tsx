@@ -2482,12 +2482,9 @@ const InvestorDetailModal = ({ investor, onClose }: { investor: OtherInvestor | 
     );
 };
 
-// ============================================================================
-// 👇 請從這裡開始複製，完全替換掉您那邊的 PartnerClearingHub 和 InvestmentDashboard 👇
-// ============================================================================
-
 // --- 1. 合夥往來對數中心 (Partner Clearing Hub) ---
-const PartnerClearingHub = ({ transactions, settings, setEditingTx, setModalMode }: any) => {
+// 👇 注意這裡多接收了 deleteItem 屬性
+const PartnerClearingHub = ({ transactions, settings, setEditingTx, setModalMode, deleteItem }: any) => {
     const [selectedPartner, setSelectedPartner] = useState('');
 
     const partnerTxs = useMemo(() => {
@@ -2602,22 +2599,41 @@ const PartnerClearingHub = ({ transactions, settings, setEditingTx, setModalMode
                             </div>
                             <div className="max-h-[400px] overflow-y-auto">
                                 <table className="w-full text-sm text-left">
+                                    {/* 👇 加入了 Action 標題 👇 */}
                                     <thead className="bg-white sticky top-0 border-b">
-                                        <tr><th className="p-3">日期</th><th className="p-3">類別</th><th className="p-3">詳細說明</th><th className="p-3 text-right">金額</th></tr>
+                                        <tr>
+                                            <th className="p-3">日期</th>
+                                            <th className="p-3">類別</th>
+                                            <th className="p-3">詳細說明</th>
+                                            <th className="p-3 text-right">金額</th>
+                                            <th className="p-3 text-center">操作</th>
+                                        </tr>
                                     </thead>
                                     <tbody className="divide-y">
                                         {partnerTxs.map((t: any) => {
                                             const isIncome = getTxType(t.category) === 'Income';
                                             return (
-                                                <tr key={t.id} className="hover:bg-slate-50">
+                                                <tr key={t.id} className="hover:bg-slate-50 group">
                                                     <td className="p-3 text-xs text-slate-500 font-mono">{t.date}</td>
                                                     <td className="p-3"><span className="px-2 py-1 bg-slate-100 rounded text-xs">{t.category}</span></td>
                                                     <td className="p-3 font-medium">{t.merchant} {t.note && <span className="text-xs text-slate-400 font-normal ml-1">({t.note})</span>}</td>
                                                     <td className={`p-3 text-right font-mono font-bold ${isIncome ? 'text-emerald-600' : 'text-red-500'}`}>{isIncome ? '+' : '-'}{formatCurrency(Math.abs(t.amount))}</td>
+                                                    
+                                                    {/* 👇 加入了編輯與刪除按鈕 👇 */}
+                                                    <td className="p-3 text-center">
+                                                        <div className="flex items-center justify-center gap-2 opacity-100 lg:opacity-0 group-hover:opacity-100 transition-opacity">
+                                                            <button onClick={() => { setEditingTx(t); setModalMode('transaction'); }} className="p-1.5 rounded text-blue-500 hover:bg-blue-50 transition-colors" title="編輯">
+                                                                <ICONS.Edit />
+                                                            </button>
+                                                            <button onClick={() => deleteItem('transactions', t.id)} className="p-1.5 rounded text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors" title="刪除">
+                                                                <ICONS.Trash />
+                                                            </button>
+                                                        </div>
+                                                    </td>
                                                 </tr>
                                             );
                                         })}
-                                        {partnerTxs.length === 0 && <tr><td colSpan={4} className="p-8 text-center text-slate-400">目前尚無紀錄</td></tr>}
+                                        {partnerTxs.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-slate-400">目前尚無紀錄</td></tr>}
                                     </tbody>
                                 </table>
                             </div>
@@ -2626,6 +2642,7 @@ const PartnerClearingHub = ({ transactions, settings, setEditingTx, setModalMode
                 </>
             )}
 
+            {/* --- 隱藏的 PDF 列印視圖保持不變 --- */}
             <div id="recon-print-container" className="hidden doc-print-container bg-white w-full text-black font-serif mx-auto p-8 relative">
                 <div className="border-b-2 border-slate-800 pb-4 mb-6">
                     <h1 className="text-3xl font-bold text-slate-900 mb-1">合夥投資與資金往來對數報告</h1>
@@ -2685,9 +2702,8 @@ const PartnerClearingHub = ({ transactions, settings, setEditingTx, setModalMode
         </div>
     );
 };
-
 // --- 2. 升級版：InvestmentDashboard (整合了原本的全部邏輯) ---
-const InvestmentDashboard = ({ transactions, settings, setEditingTx, setModalMode }: any) => {
+const InvestmentDashboard = ({ transactions, settings, setEditingTx, setModalMode, deleteItem }: any) => {
     const [invTab, setInvTab] = useState('portfolio'); 
 
     const loanHistory = useMemo(() => {
@@ -2957,6 +2973,7 @@ const InvestmentDashboard = ({ transactions, settings, setEditingTx, setModalMod
                     settings={settings} 
                     setEditingTx={setEditingTx} 
                     setModalMode={setModalMode} 
+                    deleteItem={deleteItem} 
                 />
             )}
         </div>

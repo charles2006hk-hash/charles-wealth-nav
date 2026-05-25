@@ -9,7 +9,7 @@ import {
   getFirestore, collection, doc, addDoc, setDoc, deleteDoc, updateDoc, 
   onSnapshot, query, orderBy, writeBatch, getDocs, where, getDoc
 } from "firebase/firestore";
-import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword, sendPasswordResetEmail } from "firebase/auth";
 
 // --- 1. Firebase 設定 ---
 const firebaseConfig = {
@@ -820,6 +820,31 @@ const OverviewDashboard = ({ transactions, properties, leases }: any) => {
 // --- 在 SettingsView 內部 ---
 
 const SettingsView = ({ settings, setSettings, updateSettings }: { settings: AppSettings, setSettings: (s: AppSettings) => void, updateSettings: (s: AppSettings) => void }) => {
+    // 👇 新增：更改密碼狀態
+    const [newPassword, setNewPassword] = useState('');
+    const [isUpdatingPass, setIsUpdatingPass] = useState(false);
+
+    const handleUpdatePassword = async () => {
+        if (!newPassword || newPassword.length < 6) return alert('密碼長度至少需要 6 個字元。');
+        if (!window.confirm('確定要更改密碼嗎？')) return;
+        
+        setIsUpdatingPass(true);
+        try {
+            const auth = getAuth();
+            if (auth.currentUser) {
+                await updatePassword(auth.currentUser, newPassword);
+                alert('✅ 密碼更新成功！下一次請使用新密碼登入。');
+                setNewPassword('');
+            }
+        } catch (error: any) {
+            if (error.code === 'auth/requires-recent-login') {
+                alert('⚠️ 安全驗證：更改密碼需要最近的登入狀態。\n\n請先「登出」並「重新登入」，然後再次執行此操作。');
+            } else {
+                alert('密碼更新失敗：' + error.message);
+            }
+        }
+        setIsUpdatingPass(false);
+    };
     
     const removeItem = (type: keyof AppSettings, item: string) => {
         // @ts-ignore
@@ -875,7 +900,7 @@ const SettingsView = ({ settings, setSettings, updateSettings }: { settings: App
         alert("已成功重置分類！");
     };
 
-    return (
+   return (
         <div className="space-y-8 animate-in fade-in pb-10">
             <div className="flex justify-between items-center">
                 <h2 className="text-2xl font-bold text-slate-800">系統設定 System Settings</h2>
@@ -887,7 +912,35 @@ const SettingsView = ({ settings, setSettings, updateSettings }: { settings: App
                     <ICONS.Data /> 初始化/重置預設分類
                 </button>
             </div>
+
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-700">
+                    <ICONS.ShieldCheck /> 帳號與安全 (Account & Security)
+                </h3>
+                <div className="flex flex-wrap gap-2 p-4 bg-slate-50 rounded-lg border border-slate-100 items-center">
+                    <div className="flex-1 min-w-[250px] max-w-sm">
+                        <label className="text-xs font-bold text-slate-400 block mb-1">設定新密碼 (New Password)</label>
+                        <input 
+                            type="password"
+                            className="border rounded px-3 py-2 text-sm w-full focus:ring-2 focus:ring-blue-500 outline-none" 
+                            placeholder="請輸入至少 6 位數的新密碼..." 
+                            value={newPassword}
+                            onChange={e => setNewPassword(e.target.value)}
+                        />
+                    </div>
+                    <div className="self-end mt-2 sm:mt-0">
+                        <button 
+                            onClick={handleUpdatePassword} 
+                            disabled={isUpdatingPass || !newPassword}
+                            className="bg-slate-800 text-white px-6 py-2 rounded-lg text-sm font-bold hover:bg-slate-900 transition-colors shadow-sm h-[38px] disabled:opacity-50"
+                        >
+                            {isUpdatingPass ? '更新中...' : '更改密碼'}
+                        </button>
+                    </div>
+                </div>
+            </div>
             
+          
             {/* 收支類別管理區塊 */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                 <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-700">
@@ -3215,7 +3268,6 @@ const LoginView = ({ onLogin }: { onLogin: (email: string, pass: string) => void
     const [rememberMe, setRememberMe] = useState(false);
     const [loading, setLoading] = useState(false);
 
-    // 載入記住的帳密
     useEffect(() => {
         const savedEmail = localStorage.getItem('cw_saved_email');
         const savedPass = localStorage.getItem('cw_saved_password');
@@ -3229,8 +3281,6 @@ const LoginView = ({ onLogin }: { onLogin: (email: string, pass: string) => void
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
-        
-        // 處理記住密碼邏輯
         if (rememberMe) {
             localStorage.setItem('cw_saved_email', email);
             localStorage.setItem('cw_saved_password', password);
@@ -3238,9 +3288,20 @@ const LoginView = ({ onLogin }: { onLogin: (email: string, pass: string) => void
             localStorage.removeItem('cw_saved_email');
             localStorage.removeItem('cw_saved_password');
         }
-
         await onLogin(email, password);
         setLoading(false);
+    };
+
+    // 👇 新增：處理忘記密碼
+    const handleResetPassword = async () => {
+        if (!email) return alert('請先在上方輸入您的帳號 (Email)，再點擊忘記密碼。');
+        try {
+            const auth = getAuth();
+            await sendPasswordResetEmail(auth, email);
+            alert('✅ 密碼重設信已發送！\n\n請檢查您的信箱（包含垃圾信件匣），並點擊信中連結重設密碼。');
+        } catch (error: any) {
+            alert('發送失敗：' + error.message);
+        }
     };
 
     return (
@@ -3257,7 +3318,11 @@ const LoginView = ({ onLogin }: { onLogin: (email: string, pass: string) => void
                         <input type="email" required className="w-full border border-slate-300 rounded-lg p-3 outline-none focus:border-blue-500" value={email} onChange={e => setEmail(e.target.value)} />
                     </div>
                     <div>
-                        <label className="block text-sm font-bold text-slate-700 mb-1">密碼 (Password)</label>
+                        <div className="flex justify-between items-end mb-1">
+                            <label className="block text-sm font-bold text-slate-700">密碼 (Password)</label>
+                            {/* 👇 新增：忘記密碼按鈕 */}
+                            <button type="button" onClick={handleResetPassword} className="text-xs text-blue-600 hover:underline">忘記密碼？</button>
+                        </div>
                         <div className="relative">
                             <input type={showPassword ? "text" : "password"} required className="w-full border border-slate-300 rounded-lg p-3 outline-none focus:border-blue-500 pr-10" value={password} onChange={e => setPassword(e.target.value)} />
                             <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3 text-slate-400 hover:text-slate-600">

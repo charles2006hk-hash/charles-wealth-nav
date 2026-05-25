@@ -3376,6 +3376,7 @@ const App: React.FC = () => {
   const [user, setUser] = useState<any>(null);
   const [currentFamilyId, setCurrentFamilyId] = useState<string | null>(null);
   const [currentFamilyName, setCurrentFamilyName] = useState<string>('載入中...');
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   // --- 新增：登入與身分監聽 ---
   useEffect(() => {

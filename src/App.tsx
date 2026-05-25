@@ -3246,6 +3246,130 @@ const LoginView = ({ onLogin }: { onLogin: (email: string, pass: string) => void
     );
 };
 
+// --- 新增：超級管理員後台 (Super Admin Dashboard) ---
+const SuperAdminDashboard = () => {
+    const [usersList, setUsersList] = useState<any[]>([]);
+    const [newEmail, setNewEmail] = useState('');
+    const [newFamilyId, setNewFamilyId] = useState('');
+    const [newFamilyName, setNewFamilyName] = useState('');
+
+    useEffect(() => {
+        // 監聽所有已開通的家庭帳號
+        const unsub = onSnapshot(collection(db, "users"), snap => {
+            setUsersList(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        });
+        return () => unsub();
+    }, []);
+
+    const handleAddFamily = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newEmail || !newFamilyId || !newFamilyName) return alert('請填寫完整資訊');
+        
+        // 檢查信箱是否已經存在
+        const existing = usersList.find(u => u.email === newEmail.toLowerCase());
+        if (existing) return alert('這個 Email 已經被註冊過了！');
+
+        try {
+            // 將新家庭的對應關係寫入 Firestore
+            await setDoc(doc(collection(db, "users")), {
+                email: newEmail.toLowerCase().trim(),
+                familyId: newFamilyId.trim(),
+                familyName: newFamilyName.trim(),
+                role: 'admin',
+                createdAt: new Date().toISOString()
+            });
+            alert(`✅ 成功開通 ${newFamilyName}！\n\n最後一步：請至 Firebase 後台 (Authentication) 幫 ${newEmail} 設定一組初始密碼，對方即可登入！`);
+            setNewEmail(''); setNewFamilyId(''); setNewFamilyName('');
+        } catch (err) {
+            console.error(err);
+            alert('開通失敗，請檢查網路。');
+        }
+    };
+
+    const handleDeleteUser = async (id: string, name: string) => {
+        if(window.confirm(`確定要移除「${name}」的登入權限嗎？\n(注意：這只會移除登入權限，該家庭的帳務資料仍會保留在資料庫中)`)) {
+            await deleteDoc(doc(db, "users", id));
+        }
+    };
+
+    return (
+        <div className="space-y-6 animate-in fade-in pb-10">
+            <div className="bg-slate-900 p-8 rounded-2xl shadow-lg text-white flex justify-between items-center relative overflow-hidden">
+                <div className="relative z-10">
+                    <h2 className="text-2xl font-bold flex items-center gap-2 mb-2">
+                        👑 超級管理員控制台 (Super Admin)
+                    </h2>
+                    <p className="text-slate-300 text-sm">在這裡為新的家庭開通獨立的理財空間 (SaaS Multi-tenancy Management)。</p>
+                </div>
+                <div className="text-6xl opacity-20 absolute right-8 -bottom-4">🏢</div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* 左側：新增家庭表單 */}
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-fit">
+                    <h3 className="font-bold text-lg mb-4 text-slate-800 border-b pb-2">➕ 開通新家庭</h3>
+                    <form onSubmit={handleAddFamily} className="space-y-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 mb-1">登入帳號 (Email)</label>
+                            <input type="email" required placeholder="例如: joyce@example.com" className="w-full border rounded-lg p-2 text-sm outline-none focus:border-blue-500" value={newEmail} onChange={e => setNewEmail(e.target.value)} />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 mb-1">家庭顯示名稱 (Family Name)</label>
+                            <input type="text" required placeholder="例如: Joyce 的家庭" className="w-full border rounded-lg p-2 text-sm outline-none focus:border-blue-500" value={newFamilyName} onChange={e => setNewFamilyName(e.target.value)} />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 mb-1">資料庫獨立 ID (Family ID)</label>
+                            <input type="text" required placeholder="例如: joyce_family (限英文與底線)" pattern="[a-zA-Z0-9_]+" className="w-full border rounded-lg p-2 text-sm outline-none focus:border-blue-500" value={newFamilyId} onChange={e => setNewFamilyId(e.target.value)} title="只能輸入英文和底線" />
+                        </div>
+                        <button type="submit" className="w-full bg-blue-600 text-white font-bold py-2.5 rounded-lg hover:bg-blue-700 transition">
+                            確認開通 Create
+                        </button>
+                    </form>
+                </div>
+
+                {/* 右側：已開通名單 */}
+                <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div className="p-4 bg-slate-50 border-b font-bold text-slate-700 flex justify-between items-center">
+                        <span>已開通名單 (Active Tenants)</span>
+                        <span className="text-xs bg-slate-200 px-2 py-1 rounded-full">{usersList.length} 個家庭</span>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left">
+                            <thead className="bg-white border-b text-slate-500">
+                                <tr>
+                                    <th className="p-3">家庭名稱 (Name)</th>
+                                    <th className="p-3">登入帳號 (Email)</th>
+                                    <th className="p-3">資料庫 ID (Family ID)</th>
+                                    <th className="p-3 text-center">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                                {usersList.map((u) => (
+                                    <tr key={u.id} className="hover:bg-slate-50">
+                                        <td className="p-3 font-bold text-slate-800">{u.familyName}</td>
+                                        <td className="p-3 text-slate-600">{u.email}</td>
+                                        <td className="p-3 font-mono text-xs text-blue-600">{u.familyId}</td>
+                                        <td className="p-3 text-center">
+                                            {u.role === 'superadmin' ? (
+                                                <span className="text-[10px] bg-slate-800 text-white px-2 py-1 rounded">不可移除</span>
+                                            ) : (
+                                                <button onClick={() => handleDeleteUser(u.id, u.familyName)} className="text-red-500 hover:text-red-700 p-1 bg-red-50 rounded">
+                                                    <ICONS.Trash />
+                                                </button>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                                {usersList.length === 0 && <tr><td colSpan={4} className="p-8 text-center text-slate-400">目前尚無其他家庭資料</td></tr>}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 // --- 9. 主應用程式 ---
 const App: React.FC = () => {
   // --- 新增：用戶與家庭狀態 ---
@@ -4344,10 +4468,12 @@ useEffect(() => {
                           {id: 'insurance', icon: 'Shield', label: '保險庫 Insurance'},
                           {id: 'education', icon: 'GraduationCap', label: '升學 Education'},
                           {id: 'investments', icon: 'Briefcase', label: '投資管理 Investments'},
-                          {id: 'settings', icon: 'Settings', label: '系統設定 Settings'}
+                          {id: 'settings', icon: 'Settings', label: '系統設定 Settings'},
+                          // 👇 這裡加上超級管理員專屬的選單 👇
+                          ...(isSuperAdmin ? [{id: 'admin', icon: 'ShieldCheck', label: '👑 系統管理 Admin'}] : [])
                       ].map(item => (
                           <button key={item.id} onClick={() => { setActiveTab(item.id); setPropertyViewId(null); setIsSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${activeTab===item.id && !propertyViewId ? 'bg-blue-600 text-white' : 'hover:bg-slate-800'} ${isDesktopSidebarCollapsed ? 'justify-center' : ''}`} title={item.label}>
-                              {item.id === 'overview' ? <ICONS.LayoutDashboard /> : item.id === 'dashboard' ? <ICONS.Home /> : item.id === 'data' ? <ICONS.Data /> : item.id === 'insurance' ? <ICONS.Shield /> : item.id === 'education' ? <ICONS.GraduationCap /> : <ICONS.Settings />} 
+                              {item.id === 'overview' ? <ICONS.LayoutDashboard /> : item.id === 'dashboard' ? <ICONS.Home /> : item.id === 'data' ? <ICONS.Data /> : item.id === 'insurance' ? <ICONS.Shield /> : item.id === 'education' ? <ICONS.GraduationCap /> : item.id === 'admin' ? <ICONS.ShieldCheck /> : <ICONS.Settings />} 
                               {!isDesktopSidebarCollapsed && <span>{item.label}</span>}
                           </button>
                       ))}
@@ -4420,6 +4546,11 @@ useEffect(() => {
 
               {activeTab === 'settings' && (
                   <SettingsView settings={settings} setSettings={setSettings} updateSettings={updateSettings} />
+              )}
+
+              {/* 👇 新增這段：渲染超級管理員後台 👇 */}
+              {activeTab === 'admin' && isSuperAdmin && (
+                  <SuperAdminDashboard />
               )}
 
               {activeTab === 'data' && (

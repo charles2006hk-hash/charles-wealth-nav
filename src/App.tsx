@@ -3404,18 +3404,18 @@ const getTxType = (catName: string) => {
       else setDoc(doc(db, "settings", `education_${currentFamilyId}`), INITIAL_EDUCATION_DB);
     });
     
-    // 5. 系統設定 (將 currentFamilyId 改為 currentFamilyId)
-    const unsubSettings = onSnapshot(doc(db, "settings", currentFamilyId), (docSnap) => {
+    // 5. 系統設定
+    const unsubSettings = onSnapshot(doc(db, "settings", currentFamilyId as string), (docSnap) => {
         if (docSnap.exists()) {
             const data = docSnap.data() as AppSettings;
             if (!data.categories || data.categories.length === 0) {
                 setSettings({ ...data, categories: DEFAULT_CATEGORIES });
-                updateDoc(doc(db, "settings", currentFamilyId), { categories: DEFAULT_CATEGORIES });
+                updateDoc(doc(db, "settings", currentFamilyId as string), { categories: DEFAULT_CATEGORIES });
             } else {
                 setSettings(data);
             }
         } else {
-            setDoc(doc(db, "settings", currentFamilyId), INITIAL_SETTINGS);
+            setDoc(doc(db, "settings", currentFamilyId as string), INITIAL_SETTINGS);
             setSettings(INITIAL_SETTINGS);
         }
     });

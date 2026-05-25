@@ -7,8 +7,9 @@ import {
 import { initializeApp } from "firebase/app";
 import { 
   getFirestore, collection, doc, addDoc, setDoc, deleteDoc, updateDoc, 
-  onSnapshot, query, orderBy, writeBatch, getDocs
+  onSnapshot, query, orderBy, writeBatch, getDocs, where
 } from "firebase/firestore";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
 
 // --- 1. Firebase 設定 ---
 const firebaseConfig = {
@@ -23,6 +24,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const auth = getAuth(app);
 
 // --- 2. 類型定義 (Types) ---
 // --- 新增：投資模塊類型定義 ---
@@ -67,7 +69,8 @@ interface Transaction {
   tags?: string[]; 
   isVerified?: boolean;
   attachments?: string[]; 
-  receiptNo?: string;     
+  receiptNo?: string;
+  familyId?: string;
 }
 
 interface Lease {
@@ -80,7 +83,8 @@ interface Lease {
   monthlyRent: number;
   deposit: number;
   status: 'Active' | 'Terminated';
-  attachments?: string[]; 
+  attachments?: string[];
+  familyId?: string;
 }
 
 interface PartnerShare {
@@ -124,6 +128,8 @@ interface Property {
   managementFee: number;
   govtRates: number;
   govtRent: number;
+
+  familyId?: string;
 }
 
 interface PropertyWithStats extends Property {
@@ -3202,8 +3208,78 @@ const PartnershipSettlement = ({ property, transactions }: any) => {
   );
 };
 
+const LoginView = ({ onLogin }: { onLogin: (email: string, pass: string) => void }) => {
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        await onLogin(email, password);
+        setLoading(false);
+    };
+
+    return (
+        <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+            <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md animate-in fade-in zoom-in">
+                <div className="text-center mb-8">
+                    <img src="/logo.png" alt="Logo" className="w-16 h-16 mx-auto mb-4 object-contain" />
+                    <h1 className="text-2xl font-bold text-slate-800">家族財富導航系統</h1>
+                    <p className="text-slate-500 text-sm mt-2">Family Wealth Navigation Hub</p>
+                </div>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-bold text-slate-700 mb-1">帳號 (Email)</label>
+                        <input type="email" required className="w-full border border-slate-300 rounded-lg p-3 outline-none focus:border-blue-500" value={email} onChange={e => setEmail(e.target.value)} />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-bold text-slate-700 mb-1">密碼 (Password)</label>
+                        <input type="password" required className="w-full border border-slate-300 rounded-lg p-3 outline-none focus:border-blue-500" value={password} onChange={e => setPassword(e.target.value)} />
+                    </div>
+                    <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 mt-4">
+                        {loading ? '登入中...' : '安全登入'}
+                    </button>
+                </form>
+            </div>
+        </div>
+    );
+};
+
 // --- 9. 主應用程式 ---
 const App: React.FC = () => {
+  // --- 新增：用戶與家庭狀態 ---
+  const [user, setUser] = useState<any>(null);
+  const [currentFamilyId, setCurrentFamilyId] = useState<string | null>(null);
+  const [currentFamilyName, setCurrentFamilyName] = useState<string>('載入中...');
+
+  // --- 新增：登入與身分監聽 ---
+  useEffect(() => {
+      const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+          if (currentUser) {
+              setUser(currentUser);
+              // 預設將這個信箱綁定為 Charles 家庭 (後續階段再做多家庭管理後台)
+              setCurrentFamilyId('charles_family');
+              setCurrentFamilyName("Charles's 家庭");
+          } else {
+              setUser(null);
+              setCurrentFamilyId(null);
+          }
+      });
+      return () => unsubscribe();
+  }, []);
+
+  const handleLogin = async (email: string, pass: string) => {
+      try {
+          await signInWithEmailAndPassword(auth, email, pass);
+      } catch (error) {
+          alert('登入失敗，請檢查帳號密碼是否正確。');
+      }
+  };
+
+  const handleLogout = () => {
+      if (window.confirm('確定要登出嗎？')) signOut(auth);
+  };
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [leases, setLeases] = useState<Lease[]>([]);
@@ -3308,50 +3384,45 @@ const getTxType = (catName: string) => {
   }, [transactions]);
 
   useEffect(() => {
-    const qTx = query(collection(db, "transactions"), orderBy("date", "desc"));
-    const unsubTx = onSnapshot(qTx, s => 
-        setTransactions(s.docs.map(d => ({...d.data(), id: d.id} as Transaction))));
+    if (!currentFamilyId) return; // 沒抓到家庭ID前不要讀資料
+
+    // 1. 流水帳：只抓當前家庭的
+    const qTx = query(collection(db, "transactions"), where("familyId", "==", currentFamilyId), orderBy("date", "desc"));
+    const unsubTx = onSnapshot(qTx, s => setTransactions(s.docs.map(d => ({...d.data(), id: d.id} as Transaction))));
     
-    const unsubProp = onSnapshot(collection(db, "properties"), s => 
+    // 2. 物業：只抓當前家庭的
+    const unsubProp = onSnapshot(query(collection(db, "properties"), where("familyId", "==", currentFamilyId)), s => 
         setProperties(s.docs.map(d => ({ ...d.data(), id: d.id } as Property))));
     
-    const unsubLease = onSnapshot(collection(db, "leases"), s => 
-        setLeases(s.docs.map(d => ({...d.data(), id: d.id} as Lease)))); // 這裡也建議改一下確保安全
+    // 3. 租約：只抓當前家庭的
+    const unsubLease = onSnapshot(query(collection(db, "leases"), where("familyId", "==", currentFamilyId)), s => 
+        setLeases(s.docs.map(d => ({...d.data(), id: d.id} as Lease)))); 
     
-    const unsubEdu = onSnapshot(doc(db, "settings", "education"), (docSnap) => {
-      if (docSnap.exists()) {
-        setEduDB(docSnap.data() as Record<string, EduConfig>);
-      } else {
-        setDoc(doc(db, "settings", "education"), INITIAL_EDUCATION_DB);
-      }
+    // 4. 教育設定
+    const unsubEdu = onSnapshot(doc(db, "settings", `education_${currentFamilyId}`), (docSnap) => {
+      if (docSnap.exists()) setEduDB(docSnap.data() as Record<string, EduConfig>);
+      else setDoc(doc(db, "settings", `education_${currentFamilyId}`), INITIAL_EDUCATION_DB);
     });
     
-    const unsubSettings = onSnapshot(doc(db, "settings", "general"), (docSnap) => {
+    // 5. 系統設定 (將 currentFamilyId 改為 currentFamilyId)
+    const unsubSettings = onSnapshot(doc(db, "settings", currentFamilyId), (docSnap) => {
         if (docSnap.exists()) {
             const data = docSnap.data() as AppSettings;
-            
-            // --- ✅ 修改開始：自動補全缺失的分類 ---
-            // 如果資料庫裡沒有 categories，就使用 DEFAULT_CATEGORIES
             if (!data.categories || data.categories.length === 0) {
-                const fixedSettings = { ...data, categories: DEFAULT_CATEGORIES };
-                setSettings(fixedSettings);
-                // 選項：自動將修復後的設定寫回資料庫 (這樣下次重整就不會空了)
-                updateDoc(doc(db, "settings", "general"), { categories: DEFAULT_CATEGORIES });
+                setSettings({ ...data, categories: DEFAULT_CATEGORIES });
+                updateDoc(doc(db, "settings", currentFamilyId), { categories: DEFAULT_CATEGORIES });
             } else {
                 setSettings(data);
             }
-            // --- ✅ 修改結束 ---
-            
         } else {
-            // 如果完全沒有設定檔，就初始化
-            setDoc(doc(db, "settings", "general"), INITIAL_SETTINGS);
+            setDoc(doc(db, "settings", currentFamilyId), INITIAL_SETTINGS);
             setSettings(INITIAL_SETTINGS);
         }
     });
 
     setDataLoaded(true);
     return () => { unsubTx(); unsubProp(); unsubLease(); unsubEdu(); unsubSettings(); };
-  }, []);
+  }, [currentFamilyId]); // 👈 依賴加入 currentFamilyId
 
     
   
@@ -3377,7 +3448,7 @@ useEffect(() => {
   
   const updateSettings = async (newSettings: AppSettings) => {
       setSettings(newSettings);
-      await setDoc(doc(db, "settings", "general"), newSettings);
+      await setDoc(doc(db, "settings", currentFamilyId), newSettings);
   };
 
   const propStats = useMemo(() => {
@@ -3511,10 +3582,7 @@ useEffect(() => {
         // [修正] 取得當前有效的分類列表
         const availableCats = (settings?.categories || DEFAULT_CATEGORIES).map((c: any) => c.name);
         
-        // [修正] 智慧防呆：
-        // 如果當前的 category 不在有效列表中（例如是舊資料 "General"），
-        // 且使用者沒有動過選單（介面上看到的是第一個選項），
-        // 則存檔時強制將其更新為列表的第一個選項（即 "Rental Income"）。
+      
         let finalCategory = editingTx.category;
         if (!availableCats.includes(finalCategory) && availableCats.length > 0) {
             finalCategory = availableCats[0];
@@ -3525,7 +3593,8 @@ useEffect(() => {
             category: finalCategory, // 使用修正後的分類
             amount: Number(editingTx.amount), 
             year: new Date(editingTx.date).getFullYear(), 
-            month: new Date(editingTx.date).getMonth() + 1 
+            month: new Date(editingTx.date).getMonth() + 1,
+            familyId: currentFamilyId,
         };
 
         if(editingTx.id) await setDoc(doc(db, "transactions", editingTx.id), txData);
@@ -3569,6 +3638,7 @@ useEffect(() => {
             purchaseCommission: Number(rawData.purchaseCommission || 0),
             salePrice: Number(rawData.salePrice || 0),
             saleDate: rawData.saleDate || '',
+            familyId: currentFamilyId,
         };
 
         if(editingProp.id) {
@@ -3590,7 +3660,8 @@ useEffect(() => {
         const leaseData = {
              ...editingLease,
              monthlyRent: Number(editingLease.monthlyRent),
-             deposit: Number(editingLease.deposit)
+             deposit: Number(editingLease.deposit),
+             familyId: currentFamilyId,
         };
         if (editingLease.id) {
              await setDoc(doc(db, "leases", editingLease.id), leaseData);
@@ -4039,6 +4110,11 @@ useEffect(() => {
       setModalMode('doc');
   };
 
+  // --- 新增：攔截未登入用戶 ---
+  if (!user) {
+      return <LoginView onLogin={handleLogin} />;
+  }
+  
   if (!dataLoaded) {
        return <div className="h-screen flex items-center justify-center text-slate-500 animate-pulse">正在連接到 Firebase 雲端資料庫...</div>;
   }

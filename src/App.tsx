@@ -3721,6 +3721,60 @@ useEffect(() => {
       }
   };
 
+  // --- 新增：一鍵升級舊資料 (貼上家庭標籤) ---
+  const handleMigrateOldData = async () => {
+      if (!currentFamilyId) return alert("請先登入");
+      if (!window.confirm(`這將會把系統中所有「無家庭標籤」的舊資料，綁定到您現在的帳號 (${currentFamilyName}) 下。確定執行嗎？`)) return;
+
+      try {
+          const batch = writeBatch(db);
+          let count = 0;
+
+          // 1. 抓出所有交易並貼標籤
+          const txSnap = await getDocs(collection(db, "transactions"));
+          txSnap.forEach(docSnap => {
+              const data = docSnap.data();
+              if (!data.familyId) {
+                  batch.update(docSnap.ref, { familyId: currentFamilyId });
+                  count++;
+              }
+          });
+
+          // 2. 抓出所有物業並貼標籤
+          const propSnap = await getDocs(collection(db, "properties"));
+          propSnap.forEach(docSnap => {
+              const data = docSnap.data();
+              if (!data.familyId) {
+                  batch.update(docSnap.ref, { familyId: currentFamilyId });
+                  count++;
+              }
+          });
+
+          // 3. 抓出所有租約並貼標籤
+          const leaseSnap = await getDocs(collection(db, "leases"));
+          leaseSnap.forEach(docSnap => {
+              const data = docSnap.data();
+              if (!data.familyId) {
+                  batch.update(docSnap.ref, { familyId: currentFamilyId });
+                  count++;
+              }
+          });
+
+          if (count === 0) {
+              alert("目前沒有缺少標籤的舊資料。");
+              return;
+          }
+
+          await batch.commit();
+          alert(`🎉 升級成功！已為 ${count} 筆舊資料貼上專屬家庭標籤。\n\n請點擊確定，系統將為您重新整理畫面。`);
+          window.location.reload(); 
+
+      } catch (error) {
+          console.error("升級失敗:", error);
+          alert("升級資料時發生錯誤，請檢查網路連線。");
+      }
+  };
+  
   const handlePrint = async () => {
       // 1. 如果是收據，先處理編號邏輯 (保持不變)
       if (docConfig.type === 'receipt' && docConfig.linkedTransactionId) {
@@ -4388,6 +4442,9 @@ useEffect(() => {
     <ICONS.Plus /> 新增 Add
 </button>
                             <button onClick={handleClearData} className="px-3 py-2 bg-white text-red-600 text-xs rounded hover:bg-red-50 flex items-center gap-2 border border-red-200 transition-colors"><ICONS.Trash /> 清空 Reset</button>
+                            <button onClick={handleMigrateOldData} className="px-3 py-2 bg-amber-50 text-amber-700 text-xs font-bold rounded hover:bg-amber-100 flex items-center gap-2 border border-amber-200 transition-colors">
+    <ICONS.ShieldCheck /> 找回舊資料
+</button>
                             <label className="flex items-center gap-2 px-3 py-2 bg-indigo-50 text-indigo-700 text-xs rounded hover:bg-indigo-100 cursor-pointer border border-indigo-200 transition-colors"><ICONS.Upload /> CSV<input type="file" className="hidden" onChange={handleCSVUpload} accept=".csv" /></label>
                             <label className="flex items-center gap-2 px-3 py-2 bg-green-50 text-green-700 text-xs rounded hover:bg-green-100 cursor-pointer border border-green-200 transition-colors"><ICONS.Upload /> JSON<input type="file" className="hidden" onChange={handleFileUpload} accept=".json" /></label>
                             <button onClick={handleExportJSON} className="px-3 py-2 bg-slate-100 text-slate-600 text-xs rounded hover:bg-slate-200 flex items-center gap-2 border border-slate-200 transition-colors"><ICONS.Download /> 導出</button>

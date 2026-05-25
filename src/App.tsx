@@ -3448,7 +3448,9 @@ useEffect(() => {
   
   const updateSettings = async (newSettings: AppSettings) => {
       setSettings(newSettings);
-      await setDoc(doc(db, "settings", currentFamilyId), newSettings);
+      if (currentFamilyId) {
+          await setDoc(doc(db, "settings", currentFamilyId), newSettings);
+      }
   };
 
   const propStats = useMemo(() => {
@@ -4061,7 +4063,8 @@ useEffect(() => {
   };
 
   const updateEduDB = async (newConfig: Record<string, EduConfig>) => {
-      setEduDB(newConfig); await setDoc(doc(db, "settings", "education"), newConfig);
+      setEduDB(newConfig); 
+      if (currentFamilyId) await setDoc(doc(db, "settings", `education_${currentFamilyId}`), newConfig);
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, target: 'transaction' | 'lease') => {
@@ -4223,78 +4226,84 @@ useEffect(() => {
   }
 `}</style>
 
-          {/* 1. 手機版頂部導航列 (Mobile Header) - [保持不變] */}
+          {/* 1. 手機版頂部導航列 (Mobile Header) */}
           {!reportMode && (
-    <div className="md:hidden bg-slate-900 text-white p-4 flex justify-between items-center shrink-0 z-30 shadow-md no-print">
-        <h1 className="font-bold text-lg flex items-center gap-2">
-            {/* ▼ 修改這裡：將 <ICONS.Home /> 換成 <img ... /> ▼ */}
-            <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain" />
-            Charles's 導航
-        </h1>
-        <button onClick={() => setIsSidebarOpen(true)} className="p-2 rounded hover:bg-slate-800">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" x2="21" y1="6" y2="6"/><line x1="3" x2="21" y1="12" y2="12"/><line x1="3" x2="21" y1="18" y2="18"/></svg>
-        </button>
-    </div>
-)}
-
-          {/* 2. 側邊欄 (Sidebar) - [修改 2] 移除 sticky，改為高度 100% */}
-          {!reportMode && (
-    <>
-        {/* ... (遮罩代碼保持不變) ... */}
-        
-        <div className={`
-            fixed md:relative z-50 bg-slate-900 text-slate-300 flex flex-col transition-all duration-300 ease-in-out shadow-xl no-print
-            h-full
-            ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} 
-            ${isDesktopSidebarCollapsed ? 'md:w-20' : 'md:w-64'} 
-            w-64
-        `}>
-            <div className={`p-6 flex justify-between items-center shrink-0 ${isDesktopSidebarCollapsed ? 'md:justify-center' : ''}`}>
-                
-                {/* ▼ 修改這裡：展開狀態 ▼ */}
-                {!isDesktopSidebarCollapsed && (
-                    <h1 className="text-xl font-bold text-white flex items-center gap-2 truncate">
-                        {/* 將 <ICONS.Home /> 換成 img */}
-                        <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain" />
-                        Charles's 導航
-                    </h1>
-                )}
-
-                {/* ▼ 修改這裡：收縮狀態 (只顯示 Logo) ▼ */}
-                {isDesktopSidebarCollapsed && (
-                    <div className="text-white">
-                        {/* 將 <ICONS.Home /> 換成 img */}
-                        <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain" />
-                    </div>
-                )}
-
-                <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-white">✕</button>
+            <div className="md:hidden bg-slate-900 text-white p-4 flex justify-between items-center shrink-0 z-30 shadow-md no-print">
+                <h1 className="font-bold text-lg flex items-center gap-2 truncate">
+                    <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain flex-shrink-0" />
+                    <span className="truncate">{currentFamilyName}</span>
+                </h1>
+                <div className="flex gap-2 items-center">
+                    <button onClick={handleLogout} className="p-2 text-xs text-slate-300 hover:text-white">登出</button>
+                    <button onClick={() => setIsSidebarOpen(true)} className="p-2 rounded hover:bg-slate-800">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" x2="21" y1="6" y2="6"/><line x1="3" x2="21" y1="12" y2="12"/><line x1="3" x2="21" y1="18" y2="18"/></svg>
+                    </button>
+                </div>
             </div>
+          )}
 
-                      {/* 選單區域 */}
-                      <nav className="flex-1 px-3 space-y-2 overflow-y-auto no-scrollbar">
-                          {[
-                              {id: 'overview', icon: 'LayoutDashboard', label: '總覽 Overview'},
-                              {id: 'dashboard', icon: 'Home', label: '物業管理 Properties'}, 
-                              {id: 'data', icon: 'Data', label: '數據中心 Data Hub'},
-                              {id: 'insurance', icon: 'Shield', label: '保險庫 Insurance'},
-                              {id: 'education', icon: 'GraduationCap', label: '升學 Education'},
-                              {id: 'investments', icon: 'Briefcase', label: '投資管理 Investments'},
-                              {id: 'settings', icon: 'Settings', label: '系統設定 Settings'}
-                          ].map(item => (
-                              <button key={item.id} onClick={() => { setActiveTab(item.id); setPropertyViewId(null); setIsSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${activeTab===item.id && !propertyViewId ? 'bg-blue-600 text-white' : 'hover:bg-slate-800'} ${isDesktopSidebarCollapsed ? 'justify-center' : ''}`} title={item.label}>
-                                  {item.id === 'overview' ? <ICONS.LayoutDashboard /> : item.id === 'dashboard' ? <ICONS.Home /> : item.id === 'data' ? <ICONS.Data /> : item.id === 'insurance' ? <ICONS.Shield /> : item.id === 'education' ? <ICONS.GraduationCap /> : <ICONS.Settings />} 
-                                  {!isDesktopSidebarCollapsed && <span>{item.label}</span>}
-                              </button>
-                          ))}
-                      </nav>
+          {/* 2. 側邊欄 (Sidebar) */}
+          {!reportMode && (
+          <>
+            <div className={`
+                fixed md:relative z-50 bg-slate-900 text-slate-300 flex flex-col transition-all duration-300 ease-in-out shadow-xl no-print
+                h-full
+                ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} 
+                ${isDesktopSidebarCollapsed ? 'md:w-20' : 'md:w-64'} 
+                w-64
+            `}>
+                <div className={`p-6 flex justify-between items-center shrink-0 ${isDesktopSidebarCollapsed ? 'md:justify-center' : ''}`}>
+                    
+                    {/* ▼ 修改這裡：展開狀態 (支援多家庭名稱動態顯示) ▼ */}
+                    {!isDesktopSidebarCollapsed && (
+                        <h1 className="text-xl font-bold text-white flex items-center gap-2 truncate">
+                            <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain flex-shrink-0" />
+                            <span className="truncate" title={currentFamilyName}>{currentFamilyName}</span>
+                        </h1>
+                    )}
 
-                      {/* 底部收縮按鈕 */}
-                      <div className="p-4 border-t border-slate-800 hidden md:flex justify-end shrink-0">
-                          <button onClick={() => setIsDesktopSidebarCollapsed(!isDesktopSidebarCollapsed)} className="p-2 text-slate-500 hover:text-white transition-colors">{isDesktopSidebarCollapsed ? '➝' : '←'}</button>
-                      </div>
+                    {/* ▼ 修改這裡：收縮狀態 (只顯示 Logo) ▼ */}
+                    {isDesktopSidebarCollapsed && (
+                        <div className="text-white">
+                            <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain" />
+                        </div>
+                    )}
+
+                    <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-white">✕</button>
+                </div>
+
+                  {/* 選單區域 */}
+                  <nav className="flex-1 px-3 space-y-2 overflow-y-auto no-scrollbar">
+                      {[
+                          {id: 'overview', icon: 'LayoutDashboard', label: '總覽 Overview'},
+                          {id: 'dashboard', icon: 'Home', label: '物業管理 Properties'}, 
+                          {id: 'data', icon: 'Data', label: '數據中心 Data Hub'},
+                          {id: 'insurance', icon: 'Shield', label: '保險庫 Insurance'},
+                          {id: 'education', icon: 'GraduationCap', label: '升學 Education'},
+                          {id: 'investments', icon: 'Briefcase', label: '投資管理 Investments'},
+                          {id: 'settings', icon: 'Settings', label: '系統設定 Settings'}
+                      ].map(item => (
+                          <button key={item.id} onClick={() => { setActiveTab(item.id); setPropertyViewId(null); setIsSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${activeTab===item.id && !propertyViewId ? 'bg-blue-600 text-white' : 'hover:bg-slate-800'} ${isDesktopSidebarCollapsed ? 'justify-center' : ''}`} title={item.label}>
+                              {item.id === 'overview' ? <ICONS.LayoutDashboard /> : item.id === 'dashboard' ? <ICONS.Home /> : item.id === 'data' ? <ICONS.Data /> : item.id === 'insurance' ? <ICONS.Shield /> : item.id === 'education' ? <ICONS.GraduationCap /> : <ICONS.Settings />} 
+                              {!isDesktopSidebarCollapsed && <span>{item.label}</span>}
+                          </button>
+                      ))}
+                  </nav>
+
+                  {/* 底部收縮與登出按鈕 */}
+                  <div className="p-4 border-t border-slate-800 hidden md:flex justify-between items-center shrink-0">
+                      {/* ▼ 新增：電腦版的登出按鈕 ▼ */}
+                      {!isDesktopSidebarCollapsed && (
+                          <button onClick={handleLogout} className="text-xs text-slate-400 hover:text-white transition-colors">
+                              登出 Logout
+                          </button>
+                      )}
+                      <button onClick={() => setIsDesktopSidebarCollapsed(!isDesktopSidebarCollapsed)} className="p-2 text-slate-500 hover:text-white transition-colors mx-auto md:mx-0">
+                          {isDesktopSidebarCollapsed ? '➝' : '←'}
+                      </button>
                   </div>
-              </>
+              </div>
+          </>
           )}
 
           {/* 3. 主要內容區域 (Main Content) */}

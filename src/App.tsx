@@ -7,7 +7,7 @@ import {
 import { initializeApp } from "firebase/app";
 import { 
   getFirestore, collection, doc, addDoc, setDoc, deleteDoc, updateDoc, 
-  onSnapshot, query, orderBy, writeBatch, getDocs, where
+  onSnapshot, query, orderBy, writeBatch, getDocs, where, getDoc
 } from "firebase/firestore";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
 
@@ -3721,10 +3721,10 @@ useEffect(() => {
       }
   };
 
-  // --- 新增：一鍵升級舊資料 (貼上家庭標籤) ---
+  // --- 新增：一鍵升級舊資料 (貼上家庭標籤 & 遷移設定) ---
   const handleMigrateOldData = async () => {
       if (!currentFamilyId) return alert("請先登入");
-      if (!window.confirm(`這將會把系統中所有「無家庭標籤」的舊資料，綁定到您現在的帳號 (${currentFamilyName}) 下。確定執行嗎？`)) return;
+      if (!window.confirm(`這將會把系統中所有「無家庭標籤」的舊資料與設定，綁定到您現在的帳號 (${currentFamilyName}) 下。確定執行嗎？`)) return;
 
       try {
           const batch = writeBatch(db);
@@ -3760,13 +3760,22 @@ useEffect(() => {
               }
           });
 
+          // 4. 👇 遷移系統設定 (將原本的 "general" 完美複製到當前家庭) 👇
+          const oldSettingsRef = doc(db, "settings", "general");
+          const oldSettingsSnap = await getDoc(oldSettingsRef);
+          if (oldSettingsSnap.exists()) {
+              batch.set(doc(db, "settings", currentFamilyId as string), oldSettingsSnap.data());
+              count++;
+          }
+
           if (count === 0) {
-              alert("目前沒有缺少標籤的舊資料。");
+              alert("目前沒有缺少標籤的舊資料或需要遷移的設定。");
               return;
           }
 
+          // 執行寫入
           await batch.commit();
-          alert(`🎉 升級成功！已為 ${count} 筆舊資料貼上專屬家庭標籤。\n\n請點擊確定，系統將為您重新整理畫面。`);
+          alert(`🎉 升級成功！已為 ${count} 筆舊資料與設定貼上專屬家庭標籤。\n\n請點擊確定，系統將為您重新整理畫面。`);
           window.location.reload(); 
 
       } catch (error) {

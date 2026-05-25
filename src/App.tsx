@@ -3383,12 +3383,24 @@ const App: React.FC = () => {
       const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
           if (currentUser) {
               setUser(currentUser);
-              // 預設將這個信箱綁定為 Charles 家庭 (後續階段再做多家庭管理後台)
-              setCurrentFamilyId('charles_family');
-              setCurrentFamilyName("Charles's 家庭");
+              const userDoc = await getDocs(query(collection(db, "users"), where("email", "==", currentUser.email)));
+              if (!userDoc.empty) {
+                  const userData = userDoc.docs[0].data();
+                  setCurrentFamilyId(userData.familyId);
+                  setCurrentFamilyName(userData.familyName || '未命名家庭');
+                  // 👇 這裡呼叫了 setIsSuperAdmin，消除 TypeScript 報錯
+                  setIsSuperAdmin(userData.role === 'superadmin'); 
+              } else {
+                  setCurrentFamilyId('charles_family');
+                  setCurrentFamilyName("Charles's 家庭 (預設)");
+                  // 👇 這裡也呼叫了，代表找不到資料的預設帳號就是超管
+                  setIsSuperAdmin(true); 
+              }
           } else {
               setUser(null);
               setCurrentFamilyId(null);
+              // 👇 登出時把權限取消
+              setIsSuperAdmin(false);
           }
       });
       return () => unsubscribe();

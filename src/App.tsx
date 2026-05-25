@@ -3211,11 +3211,34 @@ const PartnershipSettlement = ({ property, transactions }: any) => {
 const LoginView = ({ onLogin }: { onLogin: (email: string, pass: string) => void }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
+    const [rememberMe, setRememberMe] = useState(false);
     const [loading, setLoading] = useState(false);
+
+    // 載入記住的帳密
+    useEffect(() => {
+        const savedEmail = localStorage.getItem('cw_saved_email');
+        const savedPass = localStorage.getItem('cw_saved_password');
+        if (savedEmail && savedPass) {
+            setEmail(savedEmail);
+            setPassword(savedPass);
+            setRememberMe(true);
+        }
+    }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
+        
+        // 處理記住密碼邏輯
+        if (rememberMe) {
+            localStorage.setItem('cw_saved_email', email);
+            localStorage.setItem('cw_saved_password', password);
+        } else {
+            localStorage.removeItem('cw_saved_email');
+            localStorage.removeItem('cw_saved_password');
+        }
+
         await onLogin(email, password);
         setLoading(false);
     };
@@ -3228,17 +3251,26 @@ const LoginView = ({ onLogin }: { onLogin: (email: string, pass: string) => void
                     <h1 className="text-2xl font-bold text-slate-800">家族財富導航系統</h1>
                     <p className="text-slate-500 text-sm mt-2">Family Wealth Navigation Hub</p>
                 </div>
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <form onSubmit={handleSubmit} className="space-y-5">
                     <div>
                         <label className="block text-sm font-bold text-slate-700 mb-1">帳號 (Email)</label>
                         <input type="email" required className="w-full border border-slate-300 rounded-lg p-3 outline-none focus:border-blue-500" value={email} onChange={e => setEmail(e.target.value)} />
                     </div>
                     <div>
                         <label className="block text-sm font-bold text-slate-700 mb-1">密碼 (Password)</label>
-                        <input type="password" required className="w-full border border-slate-300 rounded-lg p-3 outline-none focus:border-blue-500" value={password} onChange={e => setPassword(e.target.value)} />
+                        <div className="relative">
+                            <input type={showPassword ? "text" : "password"} required className="w-full border border-slate-300 rounded-lg p-3 outline-none focus:border-blue-500 pr-10" value={password} onChange={e => setPassword(e.target.value)} />
+                            <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3 text-slate-400 hover:text-slate-600">
+                                {showPassword ? '👁️' : '🙈'}
+                            </button>
+                        </div>
                     </div>
-                    <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 mt-4">
-                        {loading ? '登入中...' : '安全登入'}
+                    <div className="flex items-center gap-2">
+                        <input type="checkbox" id="rememberMe" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500" />
+                        <label htmlFor="rememberMe" className="text-sm text-slate-600 cursor-pointer select-none">記住帳號密碼</label>
+                    </div>
+                    <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition disabled:opacity-50">
+                        {loading ? '驗證中...' : '安全登入'}
                     </button>
                 </form>
             </div>
@@ -3382,24 +3414,32 @@ const App: React.FC = () => {
   useEffect(() => {
       const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
           if (currentUser) {
-              setUser(currentUser);
               const userDoc = await getDocs(query(collection(db, "users"), where("email", "==", currentUser.email)));
+              
               if (!userDoc.empty) {
+                  // 正常用戶：從資料庫讀取權限
                   const userData = userDoc.docs[0].data();
+                  setUser(currentUser);
                   setCurrentFamilyId(userData.familyId);
                   setCurrentFamilyName(userData.familyName || '未命名家庭');
-                  // 👇 這裡呼叫了 setIsSuperAdmin，消除 TypeScript 報錯
                   setIsSuperAdmin(userData.role === 'superadmin'); 
-              } else {
+              } else if (currentUser.email === 'charles@test.com') { // 👈 ⚠️ 這裡請改成您自己的真實 Email！
+                  // 終極防護：確保創始人永遠不會被鎖在外面
+                  setUser(currentUser);
                   setCurrentFamilyId('charles_family');
-                  setCurrentFamilyName("Charles's 家庭 (預設)");
-                  // 👇 這裡也呼叫了，代表找不到資料的預設帳號就是超管
+                  setCurrentFamilyName("Charles's 家庭 (創始管理員)");
                   setIsSuperAdmin(true); 
+              } else {
+                  // 🚨 安全攔截：非授權用戶直接踢出
+                  alert('登入失敗：此帳號尚未分配到任何家庭，請聯繫管理員開通權限。');
+                  signOut(auth);
+                  setUser(null);
+                  setCurrentFamilyId(null);
+                  setIsSuperAdmin(false);
               }
           } else {
               setUser(null);
               setCurrentFamilyId(null);
-              // 👇 登出時把權限取消
               setIsSuperAdmin(false);
           }
       });
@@ -3552,8 +3592,19 @@ const getTxType = (catName: string) => {
                 setSettings(data);
             }
         } else {
-            setDoc(doc(db, "settings", currentFamilyId as string), INITIAL_SETTINGS);
-            setSettings(INITIAL_SETTINGS);
+            // 👇 判斷：如果是超級管理員，用舊的 INITIAL_SETTINGS；如果是新家庭，給乾淨的預設值
+            const defaultSettingsToUse: AppSettings = isSuperAdmin ? INITIAL_SETTINGS : {
+                banks: ['BOC', 'HSBC', 'Hang Seng', 'Standard Chartered'],
+                insuranceCompanies: [],
+                owners: ['Self', 'Joint'],
+                agents: [],
+                tenants: [],
+                categories: DEFAULT_CATEGORIES,
+                members: ['Family', '合夥人'] // 👈 給其他家庭乾淨的預設成員
+            };
+
+            setDoc(doc(db, "settings", currentFamilyId as string), defaultSettingsToUse);
+            setSettings(defaultSettingsToUse);
         }
     });
 
@@ -4472,21 +4523,25 @@ useEffect(() => {
                     <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-white">✕</button>
                 </div>
 
-                  {/* 選單區域 */}
                   <nav className="flex-1 px-3 space-y-2 overflow-y-auto no-scrollbar">
                       {[
                           {id: 'overview', icon: 'LayoutDashboard', label: '總覽 Overview'},
                           {id: 'dashboard', icon: 'Home', label: '物業管理 Properties'}, 
                           {id: 'data', icon: 'Data', label: '數據中心 Data Hub'},
-                          {id: 'insurance', icon: 'Shield', label: '保險庫 Insurance'},
-                          {id: 'education', icon: 'GraduationCap', label: '升學 Education'},
-                          {id: 'investments', icon: 'Briefcase', label: '投資管理 Investments'},
+                          // 👇 權限分流開始 👇
+                          ...(isSuperAdmin ? [
+                              {id: 'insurance', icon: 'Shield', label: '保險庫 Insurance'},
+                              {id: 'education', icon: 'GraduationCap', label: '升學 Education'},
+                              {id: 'investments', icon: 'Briefcase', label: '投資管理 Investments'}
+                          ] : [
+                              // 一般用戶只看得到「合夥對數」
+                              {id: 'clearing', icon: 'Briefcase', label: '合夥對數 Clearing Hub'}
+                          ]),
                           {id: 'settings', icon: 'Settings', label: '系統設定 Settings'},
-                          // 👇 這裡加上超級管理員專屬的選單 👇
                           ...(isSuperAdmin ? [{id: 'admin', icon: 'ShieldCheck', label: '👑 系統管理 Admin'}] : [])
                       ].map(item => (
                           <button key={item.id} onClick={() => { setActiveTab(item.id); setPropertyViewId(null); setIsSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${activeTab===item.id && !propertyViewId ? 'bg-blue-600 text-white' : 'hover:bg-slate-800'} ${isDesktopSidebarCollapsed ? 'justify-center' : ''}`} title={item.label}>
-                              {item.id === 'overview' ? <ICONS.LayoutDashboard /> : item.id === 'dashboard' ? <ICONS.Home /> : item.id === 'data' ? <ICONS.Data /> : item.id === 'insurance' ? <ICONS.Shield /> : item.id === 'education' ? <ICONS.GraduationCap /> : item.id === 'admin' ? <ICONS.ShieldCheck /> : <ICONS.Settings />} 
+                              {item.id === 'overview' ? <ICONS.LayoutDashboard /> : item.id === 'dashboard' ? <ICONS.Home /> : item.id === 'data' ? <ICONS.Data /> : item.id === 'insurance' ? <ICONS.Shield /> : item.id === 'education' ? <ICONS.GraduationCap /> : item.id === 'investments' || item.id === 'clearing' ? <ICONS.Briefcase /> : item.id === 'admin' ? <ICONS.ShieldCheck /> : <ICONS.Settings />} 
                               {!isDesktopSidebarCollapsed && <span>{item.label}</span>}
                           </button>
                       ))}
@@ -4548,12 +4603,25 @@ useEffect(() => {
                   />
               )}
               
-              {activeTab === 'investments' && (
+              {/* 超級管理員專屬：完整的投資面板 */}
+              {activeTab === 'investments' && isSuperAdmin && (
                   <InvestmentDashboard 
                       transactions={transactions} 
                       settings={settings} 
                       setEditingTx={setEditingTx} 
                       setModalMode={setModalMode} 
+                      deleteItem={deleteItem} 
+                  />
+              )}
+
+              {/* 一般用戶專屬：只能看合夥對數中心 */}
+              {activeTab === 'clearing' && !isSuperAdmin && (
+                  <PartnerClearingHub 
+                      transactions={transactions} 
+                      settings={settings} 
+                      setEditingTx={setEditingTx} 
+                      setModalMode={setModalMode} 
+                      deleteItem={deleteItem} 
                   />
               )}
 

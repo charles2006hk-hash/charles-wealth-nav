@@ -4635,8 +4635,7 @@ useEffect(() => {
           </>
           )}
 
-          {/* 3. 主要內容區域 (Main Content) */}
-          {/* [修改 3] 加入 h-full 和 overflow-y-auto，創造獨立滾動區域 */}
+
           <div className="flex-1 h-full overflow-y-auto scroll-smooth p-4 md:p-8 pb-20 md:pb-8 pb-safe relative">
               
               {activeTab === 'overview' && (

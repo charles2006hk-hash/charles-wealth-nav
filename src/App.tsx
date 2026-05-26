@@ -4639,7 +4639,7 @@ useEffect(() => {
           <div className="flex-1 h-full overflow-y-auto scroll-smooth p-4 md:p-8 pb-20 md:pb-8 pb-safe relative">
               
               {activeTab === 'overview' && (
-                  <OverviewDashboard transactions={transactions} properties={properties} leases={leases} />
+                  <OverviewDashboard transactions={transactions} properties={properties} leases={leases} isSuperAdmin={isSuperAdmin} />
               )}
 
               {activeTab === 'dashboard' && !propertyViewId && (
@@ -4653,7 +4653,7 @@ useEffect(() => {
                       onInitializeDefaults={initializeDefaults}
                   />
               )}
-
+            
               {activeTab === 'dashboard' && propertyViewId && (
                   <PropertyDetailView 
                       propId={propertyViewId} 

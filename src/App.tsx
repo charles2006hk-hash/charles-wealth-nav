@@ -567,7 +567,7 @@ const StatCard = ({ title, value, subtext, color, iconName }: any) => {
   );
 };
 
-const OverviewDashboard = ({ transactions, properties, leases }: any) => {
+const OverviewDashboard = ({ transactions, properties, leases, isSuperAdmin }: any) => {
     // 1. 計算所有數據的最早與最晚日期，用於 "All Time" 功能
     const { minDate, maxDate } = useMemo(() => {
         if (transactions.length === 0) return { minDate: new Date().toISOString().split('T')[0], maxDate: new Date().toISOString().split('T')[0] };
@@ -688,7 +688,8 @@ const OverviewDashboard = ({ transactions, properties, leases }: any) => {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            {/* 👇 根據權限動態調整網格數量 (3格 或 4格) 👇 */}
+            <div className={`grid grid-cols-1 md:grid-cols-3 ${isSuperAdmin ? 'lg:grid-cols-4' : ''} gap-6`}>
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between h-40">
                     <div className="flex justify-between items-start">
                         <div className="p-2 bg-blue-50 rounded-lg text-blue-600"><ICONS.DollarSign /></div>
@@ -723,6 +724,8 @@ const OverviewDashboard = ({ transactions, properties, leases }: any) => {
                     </div>
                 </div>
 
+                {/* 👇 只有超級管理員才能看到保險卡片 👇 */}
+                {isSuperAdmin && (
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between h-40">
                     <div className="flex justify-between items-start">
                         <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600"><ICONS.Shield /></div>
@@ -738,6 +741,7 @@ const OverviewDashboard = ({ transactions, properties, leases }: any) => {
                          </div>
                     </div>
                 </div>
+                )}
 
                  <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between h-40">
                     <div className="flex justify-between items-start">
@@ -1197,7 +1201,7 @@ const PropertyDashboard = ({
     properties, totalValuation, totalMonthlyRent, propStats, 
     stressRate, setStressRate, rentDrop, setRentDrop, 
     onSelectProperty, onAddProperty, onInitializeDefaults,
-    onDeleteProperty
+    onDeleteProperty, isSuperAdmin
 }: any) => {
     // --- 新增：篩選狀態 ---
     const [filterStatus, setFilterStatus] = useState('All'); // All, Held, Sold
@@ -1270,18 +1274,21 @@ const PropertyDashboard = ({
     };
 
     return (
-        <div className="space-y-8 animate-in fade-in">
-            {/* 頂部統計卡片 (保持不變) */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        {/* 頂部統計卡片 (加入權限控制與動態排版) */}
+            <div className={`grid grid-cols-1 md:grid-cols-2 ${isSuperAdmin ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-6`}>
                 <StatCard title="物業總估值 Total Valuation" value={formatCurrency(totalValuation)} color="blue" iconName="Home" subtext={`${properties.length} Properties`} />
                 <StatCard title="每月租金收入 Monthly Rent" value={formatCurrency(totalMonthlyRent)} color="emerald" iconName="DollarSign" />
                 <StatCard title="整體出租率 Occupancy Rate" value={`${properties.length ? (properties.filter((p:any)=>p.status==='Occupied').length / properties.length * 100).toFixed(0) : 0}%`} color="indigo" iconName="PieChart" />
                 <StatCard title="應收未收 Arrears" value={propStats.filter((p:any)=>p.isLate).length} color="red" iconName="Shield" subtext="Units Late" />
-                <StatCard title="私募與借貸 Investments" value={formatCurrency(4000000)} // 300萬借款 + 100萬PE
-                    subtext="ROI 6% / IPO Pending" 
-                    color="purple" 
-                    iconName="Briefcase" // 或 DollarSign
-                />
+                
+                {/* 👇 只有超級管理員才能看到投資卡片 👇 */}
+                {isSuperAdmin && (
+                    <StatCard title="私募與借貸 Investments" value={formatCurrency(4000000)} // 300萬借款 + 100萬PE
+                        subtext="ROI 6% / IPO Pending" 
+                        color="purple" 
+                        iconName="Briefcase" // 或 DollarSign
+                    />
+                )}
             </div>
 
             {/* --- 新增：篩選工具列 --- */}
@@ -4638,6 +4645,7 @@ useEffect(() => {
 
               {activeTab === 'dashboard' && !propertyViewId && (
                   <PropertyDashboard 
+                      isSuperAdmin={isSuperAdmin}
                       properties={properties} totalValuation={totalValuation} totalMonthlyRent={totalMonthlyRent} propStats={propStats}
                       stressRate={stressRate} setStressRate={setStressRate} rentDrop={rentDrop} setRentDrop={setRentDrop}
                       onSelectProperty={handleSelectProperty} setEditingProp={setEditingProp} setModalMode={setModalMode}

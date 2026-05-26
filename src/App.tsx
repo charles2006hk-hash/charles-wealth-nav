@@ -4636,6 +4636,7 @@ useEffect(() => {
           )}
 
 
+          {/* 3. 主要內容區域 (Main Content) */}
           <div className="flex-1 h-full overflow-y-auto scroll-smooth p-4 md:p-8 pb-20 md:pb-8 pb-safe relative">
               
               {activeTab === 'overview' && (

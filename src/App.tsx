@@ -1274,7 +1274,9 @@ const PropertyDashboard = ({
     };
 
     return (
-        {/* 頂部統計卡片 (加入權限控制與動態排版) */}
+        <div className="space-y-8 animate-in fade-in">  {/* 👈 救星來了！就是少了這最重要的一行外層包裝！ */}
+            
+            {/* 頂部統計卡片 (加入權限控制與動態排版) */}
             <div className={`grid grid-cols-1 md:grid-cols-2 ${isSuperAdmin ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-6`}>
                 <StatCard title="物業總估值 Total Valuation" value={formatCurrency(totalValuation)} color="blue" iconName="Home" subtext={`${properties.length} Properties`} />
                 <StatCard title="每月租金收入 Monthly Rent" value={formatCurrency(totalMonthlyRent)} color="emerald" iconName="DollarSign" />
@@ -4716,25 +4718,23 @@ useEffect(() => {
                         </div>
                         <div className="flex flex-wrap gap-2">
                             <button onClick={() => { 
-    // [修正] 新增時，預設分類直接抓取列表的第一個
-    const defaultCat = settings?.categories?.[0]?.name || 'General';
-    
-    setEditingTx({ 
-        id: '', 
-        date: new Date().toISOString().split('T')[0], 
-        merchant: '', 
-        amount: 0, 
-        category: defaultCat, // <--- 改這裡
-        member: 'Charles', 
-        note: '', 
-        year: new Date().getFullYear(), 
-        month: new Date().getMonth() + 1, 
-        attachments: [] 
-    } as Transaction); 
-    setModalMode('transaction'); 
-}} className="...">
-    <ICONS.Plus /> 新增 Add
-</button>
+                                const defaultCat = settings?.categories?.[0]?.name || 'General';
+                                setEditingTx({ 
+                                    id: '', 
+                                    date: new Date().toISOString().split('T')[0], 
+                                    merchant: '', 
+                                    amount: 0, 
+                                    category: defaultCat, 
+                                    member: 'Charles', 
+                                    note: '', 
+                                    year: new Date().getFullYear(), 
+                                    month: new Date().getMonth() + 1, 
+                                    attachments: [] 
+                                } as Transaction); 
+                                setModalMode('transaction'); 
+                            }} className="px-3 py-2 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 flex items-center gap-2 shadow-sm transition-colors">
+                                <ICONS.Plus /> 新增 Add
+                            </button>
                             <button onClick={handleClearData} className="px-3 py-2 bg-white text-red-600 text-xs rounded hover:bg-red-50 flex items-center gap-2 border border-red-200 transition-colors"><ICONS.Trash /> 清空 Reset</button>
                             <button onClick={handleMigrateOldData} className="px-3 py-2 bg-amber-50 text-amber-700 text-xs font-bold rounded hover:bg-amber-100 flex items-center gap-2 border border-amber-200 transition-colors">
     <ICONS.ShieldCheck /> 找回舊資料

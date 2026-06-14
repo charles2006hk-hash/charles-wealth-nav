@@ -2375,12 +2375,41 @@ const InvestorDetailModal = ({ investor, onClose, transactions, settings }: { in
         return 'Expense';
     };
 
-    // 👇 動態抓取數據中心紀錄 👇
+    // 👇 動態抓取數據中心紀錄 (加入智能生活開銷排除過濾) 👇
     const dynamicAdjustments = useMemo(() => {
         if (!transactions) return [];
-        // 透過成員名稱進行智能比對 (例如數據中心寫 "阿爺"，就能匹配 "阿爺 (Grandpa)")
         return transactions
-            .filter((t: any) => t.member === investor.name || investor.name.includes(t.member))
+            .filter((t: any) => {
+                // 1. 確認成員是否匹配
+                const isTargetMember = t.member === investor.name || investor.name.includes(t.member);
+                if (!isTargetMember) return false;
+
+                // 2. 防呆過濾：排除「物業支出」與「日常開銷」
+                // 如果這筆交易有綁定 propertyId，代表它是按揭、差餉或維修，絕對不是基金提款
+                if (t.propertyId) return false; 
+                
+                // 排除常見的生活與負債類別
+                const dailyCats = ['Transport', 'Shopping', 'Dining', 'Medical', 'Education', 'Telecom', 'Utilities', 'Credit Card', 'Mortgage'];
+                if (dailyCats.some(c => (t.category || '').includes(c))) return false;
+
+                const searchStr = `${t.merchant} ${t.note}`.toLowerCase();
+                // 排除按揭與車位等明顯不是投資的字眼
+                if (searchStr.includes('車位') || searchStr.includes('按揭')) return false;
+
+                // 3. 針對主理人 (Charles/阿毅) 的嚴格檢查
+                // 因為主理人會有很多 Other(其他) 的轉帳雜支 (例如 SUPPORT FUND)，我們必須要求有明確的「投資關鍵字」
+                if (investor.name.includes('Charles') || investor.name.includes('阿毅')) {
+                    if ((t.category || '').includes('Other') || (t.category || '').includes('General')) {
+                        const hasInvestKeyword = searchStr.includes('利息') || searchStr.includes('注資') || 
+                                                 searchStr.includes('提取') || searchStr.includes('分紅') || 
+                                                 searchStr.includes('基金') || searchStr.includes('投資') ||
+                                                 searchStr.includes('dividend') || searchStr.includes('capital');
+                        if (!hasInvestKeyword) return false; // 如果沒有上述明確字眼，當作一般雜支，不扣除基金結餘
+                    }
+                }
+
+                return true;
+            })
             .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }, [investor, transactions]);
 
@@ -2932,6 +2961,50 @@ const InvestmentDashboard = ({ transactions, settings, setEditingTx, setModalMod
 
     const [selectedInvestor, setSelectedInvestor] = useState<OtherInvestor | null>(null);
 
+    // 👇 新增：動態計算家庭基金卡片的即時結餘 👇
+    const enrichedInvestors = useMemo(() => {
+        return INITIAL_OTHER_INVESTORS.map(inv => {
+            const basePrincipal = inv.stats.principal;
+            const totalInterest = inv.records.reduce((sum, r) => sum + r.interest, 0);
+            const principalAndInterest = basePrincipal + totalInterest;
+
+            const dynamicAdjustments = transactions.filter((t: any) => {
+                const isTargetMember = t.member === inv.name || inv.name.includes(t.member);
+                if (!isTargetMember) return false;
+                if (t.propertyId) return false; 
+                const dailyCats = ['Transport', 'Shopping', 'Dining', 'Medical', 'Education', 'Telecom', 'Utilities', 'Credit Card', 'Mortgage'];
+                if (dailyCats.some(c => (t.category || '').includes(c))) return false;
+                const searchStr = `${t.merchant} ${t.note}`.toLowerCase();
+                if (searchStr.includes('車位') || searchStr.includes('按揭')) return false;
+
+                if (inv.name.includes('Charles') || inv.name.includes('阿毅')) {
+                    if ((t.category || '').includes('Other') || (t.category || '').includes('General')) {
+                        const hasInvestKeyword = searchStr.includes('利息') || searchStr.includes('注資') || 
+                                                 searchStr.includes('提取') || searchStr.includes('分紅') || 
+                                                 searchStr.includes('基金') || searchStr.includes('投資') ||
+                                                 searchStr.includes('dividend') || searchStr.includes('capital');
+                        if (!hasInvestKeyword) return false;
+                    }
+                }
+                return true;
+            });
+
+            const getTxType = (catName: string) => {
+                const found = settings?.categories?.find((c: any) => c.name === catName);
+                if (found) return found.type;
+                if ((catName || '').includes('Income') || (catName || '').includes('Sale') || (catName || '').includes('收入')) return 'Income';
+                return 'Expense';
+            };
+
+            const additionalCapital = dynamicAdjustments.filter((a: any) => getTxType(a.category) === 'Income').reduce((sum: number, a: any) => sum + Math.abs(a.amount || 0), 0);
+            const totalPayouts = dynamicAdjustments.filter((a: any) => getTxType(a.category) === 'Expense').reduce((sum: number, a: any) => sum + Math.abs(a.amount || 0), 0);
+
+            const realTimeBalance = principalAndInterest + additionalCapital - totalPayouts;
+
+            return { ...inv, realTimeBalance };
+        });
+    }, [transactions, settings]);
+
     return (
         <div className="space-y-6 animate-in fade-in pb-10">
             <div className="flex bg-slate-200/50 p-1 rounded-xl w-fit">
@@ -3221,7 +3294,8 @@ const InvestmentDashboard = ({ transactions, settings, setEditingTx, setModalMod
                             </h3>
                         </div>
                         <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {INITIAL_OTHER_INVESTORS.map((inv, idx) => (
+                            {/* ✅ 將 INITIAL_OTHER_INVESTORS 改為 enrichedInvestors ✅ */}
+                            {enrichedInvestors.map((inv, idx) => (
                                 <div 
                                     key={idx} 
                                     onClick={() => setSelectedInvestor(inv)}
@@ -3239,9 +3313,13 @@ const InvestmentDashboard = ({ transactions, settings, setEditingTx, setModalMod
                                             <span className="text-slate-500">本金</span>
                                             <span className="font-mono">{formatCurrency(inv.stats.principal)}</span>
                                         </div>
-                                        <div className="flex justify-between text-sm">
-                                            <span className="text-slate-500">當前結餘</span>
-                                            <span className="font-mono font-bold text-emerald-600">{formatCurrency(inv.stats.balance)}</span>
+                                        <div className="flex justify-between text-sm items-center">
+                                            <span className="text-slate-500">當前真實結餘</span>
+                                            {/* ✅ 這裡改讀取剛算出的 realTimeBalance，並加上呼吸燈 ✅ */}
+                                            <span className="font-mono font-bold text-emerald-600 flex items-center gap-1">
+                                                {formatCurrency(inv.realTimeBalance)}
+                                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                            </span>
                                         </div>
                                     </div>
                                 </div>

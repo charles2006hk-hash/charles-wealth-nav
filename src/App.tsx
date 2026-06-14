@@ -4093,7 +4093,26 @@ useEffect(() => {
         const cat = d.category || 'Other'; if(!byCat[cat]) byCat[cat] = 0; byCat[cat] += (d.amount || 0);
         
         if ((cat || '').includes('Insurance')) {
+            // 👇 1. 智能保險被保人歸戶引擎 👇
             let memberKey = d.member === 'Family (公用)' ? 'Charles' : d.member;
+            
+            // 把商戶、備註、成員名稱全部轉小寫串起來，進行全域掃描
+            const searchStr = `${d.merchant} ${d.note} ${d.member}`.toLowerCase();
+            
+            // 💡 邏輯：優先比對家人的名字 (因為 Charles 通常是付款人，名字容易同時出現)
+            if (searchStr.includes('carmen') || searchStr.includes('tang lan lei')) {
+                memberKey = 'Carmen';
+            } else if (searchStr.includes('joe tang') || searchStr.includes('tang kai yip')) {
+                memberKey = 'Tang Kai Yip';
+            } else if (searchStr.includes('virginia') || searchStr.includes('virgina') || searchStr.includes('lam wing chun')) {
+                memberKey = 'Virginia';
+            } else if (searchStr.includes('jason') || searchStr.includes('lam tsz shing')) {
+                memberKey = 'Jason';
+            } else if (searchStr.includes('charles') || searchStr.includes('lam ngai')) {
+                memberKey = 'Charles';
+            }
+            // 👆 新增結束 👆
+
             if(!insuranceByMember[memberKey]) insuranceByMember[memberKey] = [];
             const existing = insuranceByMember[memberKey].find(p => p.name === d.merchant);
             if(existing) {

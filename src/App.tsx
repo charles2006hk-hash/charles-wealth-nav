@@ -2812,7 +2812,7 @@ const InvestmentDashboard = ({ transactions, settings, setEditingTx, setModalMod
 
         return {
             history: history.sort((a,b) => b.year - a.year),
-            totalReceived: history.reduce((acc, h) => acc + h.amount, 0),
+            totalReceived: history.reduce((acc: number, h: any) => acc + h.amount, 0), // 👈 加上 : number 和 : any
             nextDate: nextDateStr,
             nextAmount: nextAmount
         };

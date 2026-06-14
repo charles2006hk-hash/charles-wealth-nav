@@ -3045,7 +3045,7 @@ const InvestmentDashboard = ({ transactions, settings, setEditingTx, setModalMod
                             <div className="flex gap-2">
                                 <span className="text-xs font-mono bg-orange-100 text-orange-700 px-2 py-1.5 rounded flex items-center">{bankLoans?.length || 0} 筆負債</span>
                                 <button onClick={() => { 
-                                    setEditingBankLoan({ id: '', bankName: '大新銀行 (Dah Sing Bank)', purpose: '企業/投資周轉', principal: 0, termMonths: 48, monthlyPayment: 0, penaltyRate: 0.03, interestRate: 4.5, startDate: new Date().toISOString().split('T')[0], status: 'Active', notes: '' } as BankLoan);
+                                    setEditingBankLoan({ id: '', bankName: '大新銀行 (Dah Sing Bank)', purpose: '企業/投資周轉', principal: 0, termMonths: 48, monthlyPayment: 0, penaltyRate: 0.03, interestRate: 4.5, startDate: new Date().toISOString().split('T')[0], status: 'Active', notes: '' } as BankLoan); 
                                     setModalMode('bankLoan'); 
                                 }} className="text-xs bg-slate-800 text-white px-3 py-1.5 rounded hover:bg-slate-900 font-bold flex items-center gap-1">
                                     <ICONS.Plus /> 新增貸款
@@ -3129,6 +3129,14 @@ const InvestmentDashboard = ({ transactions, settings, setEditingTx, setModalMod
                                         </div>
                                     </div>
                                 );
+                            })}
+                            
+                            {(!bankLoans || bankLoans.length === 0) && (
+                                <div className="p-8 text-center text-slate-400 col-span-full">尚無銀行貸款紀錄</div>
+                            )}
+                        </div>
+                    </div>
+                    {/* --- 👆 銀行區塊結束 👆 --- */}
                   
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                         <div className="p-4 border-b bg-slate-50">

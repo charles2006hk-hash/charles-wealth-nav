@@ -2375,37 +2375,23 @@ const InvestorDetailModal = ({ investor, onClose, transactions, settings }: { in
         return 'Expense';
     };
 
-    // 👇 動態抓取數據中心紀錄 (加入智能生活開銷排除過濾) 👇
+    // 👇 2. 極度嚴格的動態過濾器 (內層視窗表格用) 👇
     const dynamicAdjustments = useMemo(() => {
         if (!transactions) return [];
         return transactions
             .filter((t: any) => {
-                // 1. 確認成員是否匹配
                 const isTargetMember = t.member === investor.name || investor.name.includes(t.member);
                 if (!isTargetMember) return false;
 
-                // 2. 防呆過濾：排除「物業支出」與「日常開銷」
-                // 如果這筆交易有綁定 propertyId，代表它是按揭、差餉或維修，絕對不是基金提款
-                if (t.propertyId) return false; 
-                
-                // 排除常見的生活與負債類別
-                const dailyCats = ['Transport', 'Shopping', 'Dining', 'Medical', 'Education', 'Telecom', 'Utilities', 'Credit Card', 'Mortgage'];
-                if (dailyCats.some(c => (t.category || '').includes(c))) return false;
+                const searchStr = `${t.merchant} ${t.note} ${t.category}`.toLowerCase();
 
-                const searchStr = `${t.merchant} ${t.note}`.toLowerCase();
-                // 排除按揭與車位等明顯不是投資的字眼
-                if (searchStr.includes('車位') || searchStr.includes('按揭')) return false;
-
-                // 3. 針對主理人 (Charles/阿毅) 的嚴格檢查
-                // 因為主理人會有很多 Other(其他) 的轉帳雜支 (例如 SUPPORT FUND)，我們必須要求有明確的「投資關鍵字」
+                // 針對「阿毅 (Charles)」的絕對白名單封鎖
                 if (investor.name.includes('Charles') || investor.name.includes('阿毅')) {
-                    if ((t.category || '').includes('Other') || (t.category || '').includes('General')) {
-                        const hasInvestKeyword = searchStr.includes('利息') || searchStr.includes('注資') || 
-                                                 searchStr.includes('提取') || searchStr.includes('分紅') || 
-                                                 searchStr.includes('基金') || searchStr.includes('投資') ||
-                                                 searchStr.includes('dividend') || searchStr.includes('capital');
-                        if (!hasInvestKeyword) return false; // 如果沒有上述明確字眼，當作一般雜支，不扣除基金結餘
-                    }
+                    const hasInvestKeyword = searchStr.includes('利息') || searchStr.includes('注資') || searchStr.includes('提取') || searchStr.includes('分紅') || searchStr.includes('基金');
+                    if (!hasInvestKeyword) return false; 
+                } else {
+                    if (t.propertyId) return false; 
+                    if (searchStr.includes('車位') || searchStr.includes('按揭') || searchStr.includes('信用卡') || searchStr.includes('visa')) return false;
                 }
 
                 return true;
@@ -2968,24 +2954,25 @@ const InvestmentDashboard = ({ transactions, settings, setEditingTx, setModalMod
             const totalInterest = inv.records.reduce((sum, r) => sum + r.interest, 0);
             const principalAndInterest = basePrincipal + totalInterest;
 
+            // 👇 1. 極度嚴格的動態過濾器 (外層卡片用) 👇
             const dynamicAdjustments = transactions.filter((t: any) => {
+                // 1. 檢查成員是否匹配
                 const isTargetMember = t.member === inv.name || inv.name.includes(t.member);
                 if (!isTargetMember) return false;
-                if (t.propertyId) return false; 
-                const dailyCats = ['Transport', 'Shopping', 'Dining', 'Medical', 'Education', 'Telecom', 'Utilities', 'Credit Card', 'Mortgage'];
-                if (dailyCats.some(c => (t.category || '').includes(c))) return false;
-                const searchStr = `${t.merchant} ${t.note}`.toLowerCase();
-                if (searchStr.includes('車位') || searchStr.includes('按揭')) return false;
 
+                const searchStr = `${t.merchant} ${t.note} ${t.category}`.toLowerCase();
+
+                // 2. 針對「阿毅 (Charles)」的絕對白名單封鎖
                 if (inv.name.includes('Charles') || inv.name.includes('阿毅')) {
-                    if ((t.category || '').includes('Other') || (t.category || '').includes('General')) {
-                        const hasInvestKeyword = searchStr.includes('利息') || searchStr.includes('注資') || 
-                                                 searchStr.includes('提取') || searchStr.includes('分紅') || 
-                                                 searchStr.includes('基金') || searchStr.includes('投資') ||
-                                                 searchStr.includes('dividend') || searchStr.includes('capital');
-                        if (!hasInvestKeyword) return false;
-                    }
+                    // 只要沒有以下這些明確的投資字眼，所有生活開銷(VISA、車位、貸款)一律排除！
+                    const hasInvestKeyword = searchStr.includes('利息') || searchStr.includes('注資') || searchStr.includes('提取') || searchStr.includes('分紅') || searchStr.includes('基金');
+                    if (!hasInvestKeyword) return false; 
+                } else {
+                    // 針對其他人(阿爺/阿嫲)的常規防呆
+                    if (t.propertyId) return false; 
+                    if (searchStr.includes('車位') || searchStr.includes('按揭') || searchStr.includes('信用卡') || searchStr.includes('visa')) return false;
                 }
+
                 return true;
             });
 

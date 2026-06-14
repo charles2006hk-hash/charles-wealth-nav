@@ -320,20 +320,39 @@ const INITIAL_OTHER_INVESTORS: OtherInvestor[] = [
     "adjustments": [
       { "date": "", "description": "到期後利息：", "amount": 147909, "category": "Interest Paid" }
     ],
-    "stats": { "principal": 142600, "balance": 290509 }
+    "stats": { "principal": 600000, "balance": 290509 }
   },
   {
       "name": "阿毅 (Charles)",
       "records": [
+        // --- 歷史滾存部位 (上方表格：累計至 95.7萬) ---
+        { "startDate": "2014/5/1", "endDate": "2015/3/1", "principal": 325000, "months": "10", "rate": 0.1, "interest": 27444 },
+        { "startDate": "2014/8/1", "endDate": "2015/3/1", "principal": 575000, "months": "7", "rate": 0.1, "interest": 33861 },
+        { "startDate": "2015/3/1", "endDate": "2015/8/1", "principal": 900000, "months": "5", "rate": 0.08, "interest": 30600 },
+        { "startDate": "2015/11/1", "endDate": "2016/3/1", "principal": 500000, "months": "4", "rate": 0.1, "interest": 16806 },
+        { "startDate": "2016/4/1", "endDate": "2016/12/1", "principal": 500000, "months": "8", "rate": 0.08, "interest": 27111 },
+        { "startDate": "2017/1/1", "endDate": "2017/12/31", "principal": 500000, "months": "12", "rate": 0.08, "interest": 40444 },
+        { "startDate": "2017/1/1", "endDate": "2017/12/31", "principal": 305000, "months": "12", "rate": 0.08, "interest": 24671 },
+        { "startDate": "2017/1/1", "endDate": "2017/12/31", "principal": 152400, "months": "12", "rate": 0.08, "interest": 12327 },
+        { "startDate": "2018/1/1", "endDate": "2018/12/31", "principal": 957400, "months": "12", "rate": 0.08, "interest": 77443 },
+        { "startDate": "2019/1/1", "endDate": "2019/12/31", "principal": 957400, "months": "12", "rate": 0.08, "interest": 77443 },
+        { "startDate": "2020/1/1", "endDate": "2020/12/31", "principal": 957400, "months": "12", "rate": 0.06, "interest": 58242 },
+        { "startDate": "2021/1/1", "endDate": "2021/12/31", "principal": 957400, "months": "12", "rate": 0.06, "interest": 58082 },
+        { "startDate": "2022/1/1", "endDate": "2022/12/31", "principal": 957400, "months": "12", "rate": 0.06, "interest": 58082 },
+        { "startDate": "2023/1/1", "endDate": "2023/12/31", "principal": 957400, "months": "12", "rate": 0.06, "interest": 58082 },
+        { "startDate": "2024/1/1", "endDate": "2024/12/31", "principal": 957400, "months": "12", "rate": 0.06, "interest": 58242 },
+        { "startDate": "2025/1/1", "endDate": "2025/12/31", "principal": 957400, "months": "12", "rate": 0.06, "interest": 58082 },
+        { "startDate": "2026/1/1", "endDate": "2026/12/31", "principal": 957400, "months": "12", "rate": 0.06, "interest": 58082 },
+        
+        // --- 近年新增部位 (下方表格：100萬) ---
         { "startDate": "2022/4/1", "endDate": "2023/3/31", "principal": 1000000.0, "months": "12", "rate": 0.06, "interest": 60000.0 },
         { "startDate": "2023/4/1", "endDate": "2024/3/30", "principal": 1000000.0, "months": "12", "rate": 0.06, "interest": 60000.0 },
         { "startDate": "2024/4/1", "endDate": "2025/3/31", "principal": 1000000.0, "months": "12", "rate": 0.06, "interest": 60000.0 },
-        { "startDate": "2025/4/1", "endDate": "2026/3/31", "principal": 1000000.0, "months": "12", "rate": 0.06, "interest": 60000.0 }
+        { "startDate": "2025/4/1", "endDate": "2026/3/31", "principal": 1000000.0, "months": "12", "rate": 0.06, "interest": 60000.0 },
+        { "startDate": "2026/4/1", "endDate": "2027/3/31", "principal": 1000000.0, "months": "12", "rate": 0.06, "interest": 60000.0 }
       ],
-      "adjustments": [
-        { "date": "", "description": "到期後利息：", "amount": 300000.0, "category": "Interest Paid" }
-      ],
-      "stats": { "principal": 1000000.0, "balance": 1300000.0 }
+      "adjustments": [],
+      "stats": { "principal": 1957400.0, "balance": 0 }
   }
 ];
 

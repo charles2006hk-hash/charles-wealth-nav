@@ -380,19 +380,7 @@ const DEFAULT_CATEGORIES: CategoryConfig[] = [
   { name: 'Other (其他)', type: 'Expense' }
 ];
 
-const INITIAL_LOANS: PrivateLoan[] = [
-    {
-        id: 'l1',
-        name: '建設借款 (Construction Loan)',
-        principal: 3000000,
-        rate: 6.0,
-        term: 'Semi-annual',
-        nextDeductionDate: '2024-01-01', // 下一次結算
-        lastDeductionDate: '2023-07-01',
-        status: 'Active',
-        notes: '先扣原則，每半年(1/1, 7/1)結算。'
-    }
-];
+
 
 const INITIAL_PE_PROJECTS: PEProject[] = [
     {
@@ -2833,7 +2821,7 @@ const InvestmentDashboard = ({ transactions, settings, setEditingTx, setModalMod
     const totalInterestReceived = loanHistory.totalReceived;
     const peProjects = INITIAL_PE_PROJECTS;
 
-    const totalLoanPrincipal = loans.reduce((acc, l) => acc + l.principal, 0);
+    const totalLoanPrincipal = loans.reduce((acc: number, l: any) => acc + (l.principal || 0), 0);
     const totalPEInvested = peProjects.reduce((acc, p) => acc + p.investmentAmount, 0);
     const totalPEValuation = peProjects.reduce((acc, p) => acc + p.valuation, 0); 
     const totalAssets = totalLoanPrincipal + totalPEValuation;
@@ -2953,7 +2941,7 @@ const InvestmentDashboard = ({ transactions, settings, setEditingTx, setModalMod
                                     </button>
                                 </div>
                             </div>
-                            {loans.map(loan => (
+                            {loans.map((loan: any) => (
                                 <div key={loan.id} className="p-6">
                                     <div className="flex flex-wrap justify-between items-start mb-4">
                                         <div>

@@ -43,6 +43,21 @@ interface PrivateLoan {
   notes: string;
 }
 
+// --- 銀行分期貸款 (負債與槓桿) ---
+interface BankLoan {
+  id: string;
+  familyId?: string;
+  bankName: string;         // e.g., "大新銀行 (Dah Sing Bank)"
+  purpose: string;          // 貸款用途 e.g., "物業首期槓桿"
+  principal: number;        // 貸款總額
+  termMonths: number;       // 總期數 e.g., 36, 48, 60
+  monthlyPayment: number;   // 每月定額還款
+  penaltyRate: number;      // 提早還款罰息率 e.g., 0.03 (3%)
+  startDate: string;        // 首次還款日
+  status: 'Active' | 'Settled';
+  notes: string;
+}
+
 interface PEProject {
   id: string;
   fundName: string; // e.g., "蟻米基金"
@@ -3537,6 +3552,8 @@ const App: React.FC = () => {
   const [leases, setLeases] = useState<Lease[]>([]);
   const [loans, setLoans] = useState<PrivateLoan[]>([]); // 👈 新增：存放雲端下載的貸款清單
   const [editingLoan, setEditingLoan] = useState<PrivateLoan | null>(null);
+  const [bankLoans, setBankLoans] = useState<BankLoan[]>([]);
+  const [editingBankLoan, setEditingBankLoan] = useState<BankLoan | null>(null);
   const [eduDB, setEduDB] = useState<Record<string, EduConfig>>(INITIAL_EDUCATION_DB);
   const [settings, setSettings] = useState<AppSettings>(INITIAL_SETTINGS);
   
@@ -3544,7 +3561,7 @@ const App: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState('overview');
   const [propertyViewId, setPropertyViewId] = useState<string | null>(null);
-  const [modalMode, setModalMode] = useState<'none' | 'transaction' | 'property' | 'doc' | 'lease' | 'loan'>('none'); // 👈 加上 'loan'
+  const [modalMode, setModalMode] = useState<'none' | 'transaction' | 'property' | 'doc' | 'lease' | 'loan' | 'bankLoan'>('none');
   const [editingLease, setEditingLease] = useState<Lease | null>(null);
 
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
@@ -3655,6 +3672,12 @@ const getTxType = (catName: string) => {
     // 👇 6. 新增：私人貸款：只抓當前家庭的 👇
     const unsubLoan = onSnapshot(query(collection(db, "loans"), where("familyId", "==", currentFamilyId)), s => 
         setLoans(s.docs.map(d => ({...d.data(), id: d.id} as PrivateLoan))));
+
+    // 👇 7. 新增：銀行貸款：只抓當前家庭的 👇
+    const unsubBankLoan = onSnapshot(query(collection(db, "bankLoans"), where("familyId", "==", currentFamilyId)), s => 
+        setBankLoans(s.docs.map(d => ({...d.data(), id: d.id} as BankLoan))));
+    
+    setDataLoaded(true);
     
     // 4. 教育設定
     const unsubEdu = onSnapshot(doc(db, "settings", `education_${currentFamilyId}`), (docSnap) => {
@@ -3690,7 +3713,7 @@ const getTxType = (catName: string) => {
     });
 
     setDataLoaded(true);
-    return () => { unsubTx(); unsubProp(); unsubLease(); unsubEdu(); unsubSettings(); unsubLoan(); };
+   return () => { unsubTx(); unsubProp(); unsubLease(); unsubEdu(); unsubSettings(); unsubLoan(); unsubBankLoan(); };
   }, [currentFamilyId]); // 👈 依賴加入 currentFamilyId
 
     
@@ -3961,6 +3984,27 @@ useEffect(() => {
         setModalMode('none');
       } catch(e) { alert("儲存貸款失敗: " + e); }
   }
+
+  // --- 儲存銀行貸款 ---
+  const handleSaveBankLoan = async () => {
+      if (!editingBankLoan) return;
+      try {
+        const loanData = {
+             ...editingBankLoan,
+             principal: Number(editingBankLoan.principal),
+             termMonths: Number(editingBankLoan.termMonths),
+             monthlyPayment: Number(editingBankLoan.monthlyPayment),
+             penaltyRate: Number(editingBankLoan.penaltyRate),
+             familyId: currentFamilyId
+        };
+        if (editingBankLoan.id) {
+             await setDoc(doc(db, "bankLoans", editingBankLoan.id), loanData);
+        } else {
+             await addDoc(collection(db, "bankLoans"), loanData);
+        }
+        setModalMode('none');
+      } catch(e) { alert("儲存銀行貸款失敗: " + e); }
+  };
   
   const handleSelectProperty = async (id: string) => {
       // 1. 打開詳情頁

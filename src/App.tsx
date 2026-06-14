@@ -4079,6 +4079,45 @@ useEffect(() => {
       } catch(e) { alert("儲存貸款失敗: " + e); }
   }
 
+  // --- 銀行貸款：智能雙向計算引擎 ---
+  const autoCalculateBankLoan = (target: 'PMT' | 'Rate') => {
+      if (!editingBankLoan) return;
+      const P = Number(editingBankLoan.principal) || 0;
+      const n = Number(editingBankLoan.termMonths) || 0;
+
+      if (target === 'PMT') {
+          // 情況 A：已知利率，計算供款
+          const rAnnual = Number(editingBankLoan.interestRate) || 0;
+          if (P > 0 && n > 0 && rAnnual > 0) {
+              const r = rAnnual / 100 / 12; // 月息
+              const pmt = P * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+              setEditingBankLoan({...editingBankLoan, monthlyPayment: Math.round(pmt)});
+          } else {
+              alert('💡 請先輸入「總貸款額」、「總期數」與「年利率」！');
+          }
+      } else if (target === 'Rate') {
+          // 情況 B：已知供款，反推利率 (使用二分逼近法)
+          const pmt = Number(editingBankLoan.monthlyPayment) || 0;
+          if (P > 0 && n > 0 && pmt > 0) {
+              if (pmt * n <= P) return alert('💡 每月供款太低了，甚至還不夠還本金！');
+              
+              let low = 0.0;
+              let high = 1.0; // 假設極限月息 100%
+              let mid = 0;
+              for (let i = 0; i < 50; i++) { // 迭代 50 次精度已極高
+                  mid = (low + high) / 2;
+                  const guessPmt = P * (mid * Math.pow(1 + mid, n)) / (Math.pow(1 + mid, n) - 1);
+                  if (guessPmt > pmt) high = mid;
+                  else low = mid;
+              }
+              const annualRate = (mid * 12 * 100).toFixed(3); // 轉回實際年利率
+              setEditingBankLoan({...editingBankLoan, interestRate: Number(annualRate)});
+          } else {
+              alert('💡 請先輸入「總貸款額」、「總期數」與「每月還款」！');
+          }
+      }
+  };
+  
   // --- 儲存銀行貸款 ---
   const handleSaveBankLoan = async () => {
       if (!editingBankLoan) return;
@@ -5394,17 +5433,21 @@ useEffect(() => {
                           </div>
 
                           <div className="grid grid-cols-3 gap-4">
-                              <div>
+                              <div className="relative">
                                   <label className="text-xs font-bold text-slate-500 mb-1 block">每月還款 PMT</label>
-                                  <input type="number" className="border w-full p-2 rounded text-sm font-mono text-red-600 font-bold" value={editingBankLoan?.monthlyPayment || ''} onChange={e => setEditingBankLoan({...editingBankLoan, monthlyPayment: Number(e.target.value)} as any)} />
+                                  <input type="number" className="border w-full p-2 rounded text-sm font-mono text-red-600 font-bold pr-8 outline-none focus:border-red-400 focus:ring-1 focus:ring-red-400" value={editingBankLoan?.monthlyPayment || ''} onChange={e => setEditingBankLoan({...editingBankLoan, monthlyPayment: Number(e.target.value)} as any)} />
+                                  {/* 自動計算 PMT 的魔術棒 */}
+                                  <button type="button" onClick={() => autoCalculateBankLoan('PMT')} className="absolute right-2 top-7 text-lg hover:scale-125 transition-transform" title="由利率自動計算供款">✨</button>
                               </div>
-                              <div>
+                              <div className="relative">
                                   <label className="text-xs font-bold text-slate-500 mb-1 block">年利率 Rate (%)</label>
-                                  <input type="number" step="0.01" className="border w-full p-2 rounded text-sm font-mono text-blue-600 font-bold" value={editingBankLoan?.interestRate || ''} onChange={e => setEditingBankLoan({...editingBankLoan, interestRate: Number(e.target.value)} as any)} />
+                                  <input type="number" step="0.01" className="border w-full p-2 rounded text-sm font-mono text-blue-600 font-bold pr-8 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400" value={editingBankLoan?.interestRate || ''} onChange={e => setEditingBankLoan({...editingBankLoan, interestRate: Number(e.target.value)} as any)} />
+                                  {/* 反推利率的魔術棒 */}
+                                  <button type="button" onClick={() => autoCalculateBankLoan('Rate')} className="absolute right-2 top-7 text-lg hover:scale-125 transition-transform" title="由供款反推利率">✨</button>
                               </div>
                               <div>
                                   <label className="text-xs font-bold text-slate-500 mb-1 block">罰息率 Penalty</label>
-                                  <input type="number" step="0.01" placeholder="0.03 = 3%" className="border w-full p-2 rounded text-sm font-mono" value={editingBankLoan?.penaltyRate || ''} onChange={e => setEditingBankLoan({...editingBankLoan, penaltyRate: Number(e.target.value)} as any)} />
+                                  <input type="number" step="0.01" placeholder="0.03 = 3%" className="border w-full p-2 rounded text-sm font-mono outline-none focus:border-slate-400" value={editingBankLoan?.penaltyRate || ''} onChange={e => setEditingBankLoan({...editingBankLoan, penaltyRate: Number(e.target.value)} as any)} />
                               </div>
                           </div>
 

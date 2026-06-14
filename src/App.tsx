@@ -2376,6 +2376,7 @@ const InvestorDetailModal = ({ investor, onClose, transactions, settings }: { in
     };
 
     // 👇 2. 極度嚴格的動態過濾器 (內層視窗表格用) 👇
+    // 👇 2. 終極排雷過濾器 (內層視窗表格用) 👇
     const dynamicAdjustments = useMemo(() => {
         if (!transactions) return [];
         return transactions
@@ -2385,9 +2386,14 @@ const InvestorDetailModal = ({ investor, onClose, transactions, settings }: { in
 
                 const searchStr = `${t.merchant} ${t.note} ${t.category}`.toLowerCase();
 
-                // 針對「阿毅 (Charles)」的絕對白名單封鎖
+                // 針對「阿毅 (Charles)」的專屬排雷過濾
                 if (investor.name.includes('Charles') || investor.name.includes('阿毅')) {
-                    const hasInvestKeyword = searchStr.includes('利息') || searchStr.includes('注資') || searchStr.includes('提取') || searchStr.includes('分紅') || searchStr.includes('基金');
+                    // 🚨 終極防呆：排除所有銀行自動匯入的「存款利息」雜訊
+                    if (searchStr.includes('credit') || searchStr.includes('存款') || searchStr.includes('bank interest')) return false;
+                    if ((t.category || '').includes('Bank Interest')) return false;
+
+                    // ✅ 絕對白名單：只有這些您手動輸入的專屬關鍵字才放行
+                    const hasInvestKeyword = searchStr.includes('利息收取') || searchStr.includes('注資') || searchStr.includes('提取') || searchStr.includes('分紅') || searchStr.includes('家庭基金');
                     if (!hasInvestKeyword) return false; 
                 } else {
                     if (t.propertyId) return false; 
@@ -2398,7 +2404,6 @@ const InvestorDetailModal = ({ investor, onClose, transactions, settings }: { in
             })
             .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }, [investor, transactions]);
-
     // 篩選用於報表的紀錄
     const filteredRecords = records.filter(r => {
         const y = new Date(r.startDate).getFullYear();
@@ -2954,7 +2959,7 @@ const InvestmentDashboard = ({ transactions, settings, setEditingTx, setModalMod
             const totalInterest = inv.records.reduce((sum, r) => sum + r.interest, 0);
             const principalAndInterest = basePrincipal + totalInterest;
 
-            // 👇 1. 極度嚴格的動態過濾器 (外層卡片用) 👇
+            // 👇 1. 終極排雷過濾器 (外層卡片用) 👇
             const dynamicAdjustments = transactions.filter((t: any) => {
                 // 1. 檢查成員是否匹配
                 const isTargetMember = t.member === inv.name || inv.name.includes(t.member);
@@ -2962,10 +2967,14 @@ const InvestmentDashboard = ({ transactions, settings, setEditingTx, setModalMod
 
                 const searchStr = `${t.merchant} ${t.note} ${t.category}`.toLowerCase();
 
-                // 2. 針對「阿毅 (Charles)」的絕對白名單封鎖
+                // 2. 針對「阿毅 (Charles)」的專屬排雷過濾
                 if (inv.name.includes('Charles') || inv.name.includes('阿毅')) {
-                    // 只要沒有以下這些明確的投資字眼，所有生活開銷(VISA、車位、貸款)一律排除！
-                    const hasInvestKeyword = searchStr.includes('利息') || searchStr.includes('注資') || searchStr.includes('提取') || searchStr.includes('分紅') || searchStr.includes('基金');
+                    // 🚨 終極防呆：排除所有銀行自動匯入的「存款利息」雜訊
+                    if (searchStr.includes('credit') || searchStr.includes('存款') || searchStr.includes('bank interest')) return false;
+                    if ((t.category || '').includes('Bank Interest')) return false;
+
+                    // ✅ 絕對白名單：只有這些您手動輸入的專屬關鍵字才放行
+                    const hasInvestKeyword = searchStr.includes('利息收取') || searchStr.includes('注資') || searchStr.includes('提取') || searchStr.includes('分紅') || searchStr.includes('家庭基金');
                     if (!hasInvestKeyword) return false; 
                 } else {
                     // 針對其他人(阿爺/阿嫲)的常規防呆

@@ -32,6 +32,7 @@ const auth = getAuth(app);
 
 interface PrivateLoan {
   id: string;
+  familyId?: string;
   name: string; // e.g., "建設借款"
   principal: number; // 本金 e.g., 3000000
   rate: number; // 年化利率 e.g., 6%
@@ -2794,7 +2795,7 @@ const PartnerClearingHub = ({ transactions, settings, setEditingTx, setModalMode
     );
 };
 // --- 2. 升級版：InvestmentDashboard (整合了原本的全部邏輯) ---
-const InvestmentDashboard = ({ transactions, settings, setEditingTx, setModalMode, deleteItem }: any) => {
+const InvestmentDashboard = ({ transactions, settings, setEditingTx, setModalMode, deleteItem, loans, setEditingLoan }: any) => {
     const [invTab, setInvTab] = useState('portfolio'); 
 
     const loanHistory = useMemo(() => {
@@ -2830,7 +2831,6 @@ const InvestmentDashboard = ({ transactions, settings, setEditingTx, setModalMod
     }, []);
 
     const totalInterestReceived = loanHistory.totalReceived;
-    const loans = INITIAL_LOANS;
     const peProjects = INITIAL_PE_PROJECTS;
 
     const totalLoanPrincipal = loans.reduce((acc, l) => acc + l.principal, 0);
@@ -2943,13 +2943,26 @@ const InvestmentDashboard = ({ transactions, settings, setEditingTx, setModalMod
                         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                             <div className="p-4 border-b bg-slate-50 flex justify-between items-center">
                                 <h3 className="font-bold text-slate-800 flex items-center gap-2"><ICONS.DollarSign /> 私人借貸履約監控</h3>
-                                <span className="text-xs font-mono bg-green-100 text-green-700 px-2 py-1 rounded">Active</span>
+                                <div className="flex gap-2">
+                                    <span className="text-xs font-mono bg-green-100 text-green-700 px-2 py-1.5 rounded flex items-center">{loans.length} Active</span>
+                                    <button onClick={() => { 
+                                        setEditingLoan({ id: '', name: '', principal: 0, rate: 0.06, term: 'Semi-annual', nextDeductionDate: '', lastDeductionDate: '', status: 'Active', notes: '' } as PrivateLoan); 
+                                        setModalMode('loan'); 
+                                    }} className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 font-bold flex items-center gap-1">
+                                        <ICONS.Plus /> 新增貸款
+                                    </button>
+                                </div>
                             </div>
                             {loans.map(loan => (
                                 <div key={loan.id} className="p-6">
                                     <div className="flex flex-wrap justify-between items-start mb-4">
                                         <div>
-                                            <h4 className="font-bold text-lg">{loan.name}</h4>
+                                            <h4 className="font-bold text-lg flex items-center gap-2">
+                                                {loan.name}
+                                                <button onClick={() => { setEditingLoan(loan); setModalMode('loan'); }} className="text-slate-400 hover:text-blue-600">
+                                                    <ICONS.Edit2 />
+                                                </button>
+                                            </h4>
                                             <div className="flex items-center gap-2 mt-1">
                                                 <span className="text-xs bg-slate-100 px-2 py-1 rounded text-slate-600">年化 {loan.rate}%</span>
                                                 <span className="text-xs bg-slate-100 px-2 py-1 rounded text-slate-600">每半年結算</span>
@@ -3534,6 +3547,8 @@ const App: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [leases, setLeases] = useState<Lease[]>([]);
+  const [loans, setLoans] = useState<PrivateLoan[]>([]); // 👈 新增：存放雲端下載的貸款清單
+  const [editingLoan, setEditingLoan] = useState<PrivateLoan | null>(null);
   const [eduDB, setEduDB] = useState<Record<string, EduConfig>>(INITIAL_EDUCATION_DB);
   const [settings, setSettings] = useState<AppSettings>(INITIAL_SETTINGS);
   
@@ -3541,7 +3556,7 @@ const App: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState('overview');
   const [propertyViewId, setPropertyViewId] = useState<string | null>(null);
-  const [modalMode, setModalMode] = useState<'none' | 'transaction' | 'property' | 'doc' | 'lease'>('none');
+  const [modalMode, setModalMode] = useState<'none' | 'transaction' | 'property' | 'doc' | 'lease' | 'loan'>('none'); // 👈 加上 'loan'
   const [editingLease, setEditingLease] = useState<Lease | null>(null);
 
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
@@ -3648,6 +3663,10 @@ const getTxType = (catName: string) => {
     // 3. 租約：只抓當前家庭的
     const unsubLease = onSnapshot(query(collection(db, "leases"), where("familyId", "==", currentFamilyId)), s => 
         setLeases(s.docs.map(d => ({...d.data(), id: d.id} as Lease)))); 
+
+    // 👇 6. 新增：私人貸款：只抓當前家庭的 👇
+    const unsubLoan = onSnapshot(query(collection(db, "loans"), where("familyId", "==", currentFamilyId)), s => 
+        setLoans(s.docs.map(d => ({...d.data(), id: d.id} as PrivateLoan))));
     
     // 4. 教育設定
     const unsubEdu = onSnapshot(doc(db, "settings", `education_${currentFamilyId}`), (docSnap) => {
@@ -3683,7 +3702,7 @@ const getTxType = (catName: string) => {
     });
 
     setDataLoaded(true);
-    return () => { unsubTx(); unsubProp(); unsubLease(); unsubEdu(); unsubSettings(); };
+    return () => { unsubTx(); unsubProp(); unsubLease(); unsubEdu(); unsubSettings(); unsubLoan(); };
   }, [currentFamilyId]); // 👈 依賴加入 currentFamilyId
 
     
@@ -3934,6 +3953,25 @@ useEffect(() => {
         }
         setModalMode('none');
       } catch(e) { alert(e); }
+  }
+
+  // 👇 新增：儲存私人貸款 👇
+  const handleSaveLoan = async () => {
+      if (!editingLoan) return;
+      try {
+        const loanData = {
+             ...editingLoan,
+             principal: Number(editingLoan.principal),
+             rate: Number(editingLoan.rate),
+             familyId: currentFamilyId // 確保有家庭標籤
+        };
+        if (editingLoan.id) {
+             await setDoc(doc(db, "loans", editingLoan.id), loanData);
+        } else {
+             await addDoc(collection(db, "loans"), loanData);
+        }
+        setModalMode('none');
+      } catch(e) { alert("儲存貸款失敗: " + e); }
   }
   
   const handleSelectProperty = async (id: string) => {
@@ -4686,6 +4724,8 @@ useEffect(() => {
                       setEditingTx={setEditingTx} 
                       setModalMode={setModalMode} 
                       deleteItem={deleteItem} 
+                      loans={loans} // 👈 傳入雲端貸款清單
+                      setEditingLoan={setEditingLoan}
                   />
               )}
 
@@ -5121,24 +5161,47 @@ useEffect(() => {
               </div>
           )}
 
-          {modalMode === 'lease' && (
+          {/* --- 貸款編輯視窗 (Loan Modal) --- */}
+          {modalMode === 'loan' && (
               <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
-                  {/* [修改] 寬度響應式 w-[90%] md:w-[500px] */}
                   <div className="bg-white rounded-xl shadow-2xl p-6 w-[90%] md:w-[500px] animate-in fade-in zoom-in duration-200">
-                      <h3 className="font-bold text-xl mb-6">Manage Lease</h3>
-                      {/* ... Lease Modal 內容 ... */}
+                      <h3 className="font-bold text-xl mb-6">{editingLoan?.id ? '編輯私人貸款' : '新增私人貸款'}</h3>
                       <div className="space-y-4">
-                          <input className="border w-full p-2 rounded" placeholder="Tenant Name" list="tenant-list" value={editingLease?.tenantName || ''} onChange={e => setEditingLease({...editingLease, tenantName: e.target.value} as any)} />
-                          <datalist id="tenant-list">{settings.tenants.map(t => <option key={t} value={t} />)}</datalist>
-                          <input className="border w-full p-2 rounded" placeholder="Tenant ID" value={editingLease?.tenantID || ''} onChange={e => setEditingLease({...editingLease, tenantID: e.target.value} as any)} />
-                          <div className="grid grid-cols-2 gap-4"><div><label className="text-xs">Start Date</label><input type="date" className="border w-full p-2 rounded" value={editingLease?.startDate || ''} onChange={e => setEditingLease({...editingLease, startDate: e.target.value} as any)} /></div><div><label className="text-xs">End Date</label><input type="date" className="border w-full p-2 rounded" value={editingLease?.endDate || ''} onChange={e => setEditingLease({...editingLease, endDate: e.target.value} as any)} /></div></div>
-                          <div className="grid grid-cols-2 gap-4"><div><label className="text-xs">Monthly Rent</label><input type="number" className="border w-full p-2 rounded" value={editingLease?.monthlyRent || ''} onChange={e => setEditingLease({...editingLease, monthlyRent: Number(e.target.value)} as any)} /></div><div><label className="text-xs">Deposit</label><input type="number" className="border w-full p-2 rounded" value={editingLease?.deposit || ''} onChange={e => setEditingLease({...editingLease, deposit: Number(e.target.value)} as any)} /></div></div>
-                          <select className="border w-full p-2 rounded" value={editingLease?.status} onChange={e => setEditingLease({...editingLease, status: e.target.value} as any)}><option value="Active">Active</option><option value="Terminated">Terminated</option></select>
-                          <div className="border-t pt-3 mt-3"><label className="block text-sm font-bold text-slate-700 mb-2">租約文件圖片 (最多10張)</label><div className="flex flex-wrap gap-2 mb-2">{editingLease?.attachments?.map((img, idx) => (<div key={idx} className="relative w-16 h-16"><img src={img} className="w-full h-full object-cover rounded border" alt="upload" /><button onClick={()=>handleRemoveImage(idx, 'lease')} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs"><ICONS.X /></button></div>))}<label className="w-16 h-16 flex items-center justify-center border-2 border-dashed border-gray-300 rounded cursor-pointer hover:bg-gray-50 text-gray-400"><ICONS.Plus /><input type="file" className="hidden" accept="image/*" multiple onChange={(e)=>handleImageUpload(e, 'lease')} /></label></div></div>
+                          <div>
+                              <label className="text-xs font-bold text-slate-500 mb-1 block">項目名稱 Name</label>
+                              <input className="border w-full p-2 rounded text-sm" placeholder="例如: 建設借款" value={editingLoan?.name || ''} onChange={e => setEditingLoan({...editingLoan, name: e.target.value} as any)} />
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                  <label className="text-xs font-bold text-slate-500 mb-1 block">本金 Principal</label>
+                                  <input type="number" className="border w-full p-2 rounded text-sm font-mono" value={editingLoan?.principal || ''} onChange={e => setEditingLoan({...editingLoan, principal: Number(e.target.value)} as any)} />
+                              </div>
+                              <div>
+                                  <label className="text-xs font-bold text-slate-500 mb-1 block">年利率 Rate (小數，如 0.06)</label>
+                                  <input type="number" step="0.01" className="border w-full p-2 rounded text-sm font-mono" value={editingLoan?.rate || ''} onChange={e => setEditingLoan({...editingLoan, rate: Number(e.target.value)} as any)} />
+                              </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                  <label className="text-xs font-bold text-slate-500 mb-1 block">上次結算日 Last Date</label>
+                                  <input type="date" className="border w-full p-2 rounded text-sm" value={editingLoan?.lastDeductionDate || ''} onChange={e => setEditingLoan({...editingLoan, lastDeductionDate: e.target.value} as any)} />
+                              </div>
+                              <div>
+                                  <label className="text-xs font-bold text-slate-500 mb-1 block">下次結算日 Next Date</label>
+                                  <input type="date" className="border w-full p-2 rounded text-sm" value={editingLoan?.nextDeductionDate || ''} onChange={e => setEditingLoan({...editingLoan, nextDeductionDate: e.target.value} as any)} />
+                              </div>
+                          </div>
+                          <div>
+                              <label className="text-xs font-bold text-slate-500 mb-1 block">備註 Notes</label>
+                              <textarea className="border w-full p-2 rounded text-sm" rows={2} value={editingLoan?.notes || ''} onChange={e => setEditingLoan({...editingLoan, notes: e.target.value} as any)} />
+                          </div>
                       </div>
                       <div className="flex gap-2 mt-6">
-                          <button onClick={handleSaveLease} className="flex-1 bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Save Lease</button>
-                          <button onClick={() => setModalMode('none')} className="flex-1 bg-gray-200 p-2 rounded hover:bg-gray-300">Cancel</button>
+                          <button onClick={handleSaveLoan} className="flex-1 bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700">儲存 Save</button>
+                          {editingLoan?.id && (
+                              <button onClick={() => { deleteItem('loans', editingLoan.id); setModalMode('none'); }} className="bg-red-50 text-red-600 px-4 rounded font-bold hover:bg-red-100"><ICONS.Trash /></button>
+                          )}
+                          <button onClick={() => setModalMode('none')} className="flex-1 bg-gray-200 p-2 rounded font-bold hover:bg-gray-300">取消 Cancel</button>
                       </div>
                   </div>
               </div>

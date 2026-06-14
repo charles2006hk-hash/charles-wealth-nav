@@ -2798,7 +2798,7 @@ const PartnerClearingHub = ({ transactions, settings, setEditingTx, setModalMode
     );
 };
 // --- 2. 升級版：InvestmentDashboard (整合了原本的全部邏輯) ---
-const InvestmentDashboard = ({ transactions, settings, setEditingTx, setModalMode, deleteItem, loans, setEditingLoan }: any) => {
+const InvestmentDashboard = ({ transactions, settings, setEditingTx, setModalMode, deleteItem, loans, setEditingLoan, bankLoans, setEditingBankLoan }: any) => {
     const [invTab, setInvTab] = useState('portfolio'); 
 
     const loanHistory = useMemo(() => {
@@ -3035,6 +3035,92 @@ const InvestmentDashboard = ({ transactions, settings, setEditingTx, setModalMod
                         </div>
                     </div>
 
+                    {/* --- 👇 新增：銀行槓桿與分期貸款區塊 👇 --- */}
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-6">
+                        <div className="p-4 border-b bg-slate-50 flex justify-between items-center">
+                            <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                                <ICONS.Home /> 銀行槓桿與分期貸款 (Bank Loans & Leverage)
+                            </h3>
+                            <div className="flex gap-2">
+                                <span className="text-xs font-mono bg-orange-100 text-orange-700 px-2 py-1.5 rounded flex items-center">{bankLoans?.length || 0} 筆負債</span>
+                                <button onClick={() => { 
+                                    setEditingBankLoan({ id: '', bankName: '大新銀行 (Dah Sing Bank)', purpose: '企業/投資周轉', principal: 0, termMonths: 48, monthlyPayment: 0, penaltyRate: 0.03, startDate: new Date().toISOString().split('T')[0], status: 'Active', notes: '' } as BankLoan); 
+                                    setModalMode('bankLoan'); 
+                                }} className="text-xs bg-slate-800 text-white px-3 py-1.5 rounded hover:bg-slate-900 font-bold flex items-center gap-1">
+                                    <ICONS.Plus /> 新增貸款
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x">
+                            {bankLoans?.map((bLoan: any) => {
+                                // 動態進度計算
+                                const start = new Date(bLoan.startDate);
+                                const now = new Date();
+                                let monthsPassed = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth());
+                                if (monthsPassed < 0) monthsPassed = 0;
+                                if (monthsPassed > bLoan.termMonths) monthsPassed = bLoan.termMonths;
+                                
+                                const remainingMonths = bLoan.termMonths - monthsPassed;
+                                const progress = (monthsPassed / bLoan.termMonths) * 100;
+                                
+                                const estimatedRemainingPrincipal = bLoan.principal * (remainingMonths / bLoan.termMonths);
+                                const penaltyAmount = estimatedRemainingPrincipal * bLoan.penaltyRate;
+
+                                return (
+                                    <div key={bLoan.id} className="p-6">
+                                        <div className="flex justify-between items-start mb-4">
+                                            <div>
+                                                <h4 className="font-bold text-lg flex items-center gap-2">
+                                                    {bLoan.bankName}
+                                                    <button onClick={() => { setEditingBankLoan(bLoan); setModalMode('bankLoan'); }} className="text-slate-400 hover:text-blue-600">
+                                                        <ICONS.Edit2 />
+                                                    </button>
+                                                </h4>
+                                                <p className="text-xs text-slate-500 mt-1">{bLoan.purpose}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <div className="text-xl font-mono font-bold text-slate-800">{formatCurrency(bLoan.principal)}</div>
+                                                <div className="text-xs text-slate-500">初始本金</div>
+                                            </div>
+                                        </div>
+
+                                        <div className="mb-4">
+                                            <div className="flex justify-between text-xs font-bold text-slate-600 mb-1">
+                                                <span>已供 {monthsPassed} 期</span>
+                                                <span>剩餘 {remainingMonths} 期 (共 {bLoan.termMonths} 期)</span>
+                                            </div>
+                                            <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                                                <div className="bg-orange-400 h-full rounded-full" style={{ width: `${progress}%` }}></div>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-3 bg-orange-50 p-4 rounded-xl border border-orange-100 text-sm">
+                                            <div>
+                                                <p className="text-[10px] text-slate-500 font-bold uppercase mb-1">每月供款 (PMT)</p>
+                                                <p className="font-mono font-bold text-red-600">-{formatCurrency(bLoan.monthlyPayment)}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] text-slate-500 font-bold uppercase mb-1">預估剩餘本金</p>
+                                                <p className="font-mono font-bold text-slate-700">{formatCurrency(estimatedRemainingPrincipal)}</p>
+                                            </div>
+                                            <div className="col-span-2 pt-2 border-t border-orange-200 mt-1">
+                                                <p className="text-[10px] text-slate-500 font-bold uppercase flex justify-between items-center">
+                                                    <span>提早清還估算 (含罰息 {(bLoan.penaltyRate*100).toFixed(1)}%)</span>
+                                                    <span className="font-mono font-bold text-orange-700">{formatCurrency(estimatedRemainingPrincipal + penaltyAmount)}</span>
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                            {(!bankLoans || bankLoans.length === 0) && (
+                                <div className="p-8 text-center text-slate-400 col-span-full">尚無銀行貸款紀錄</div>
+                            )}
+                        </div>
+                    </div>
+                    {/* --- 👆 新增結束 👆 --- */}
+                  
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                         <div className="p-4 border-b bg-slate-50">
                             <h3 className="font-bold text-slate-800 flex items-center gap-2">
@@ -4758,6 +4844,8 @@ useEffect(() => {
                       deleteItem={deleteItem} 
                       loans={loans} // 👈 傳入雲端貸款清單
                       setEditingLoan={setEditingLoan}
+                      bankLoans={bankLoans}               // 👈 新增這行
+                      setEditingBankLoan={setEditingBankLoan}
                   />
               )}
 
@@ -5261,6 +5349,68 @@ useEffect(() => {
               </div>
           )}
 
+          {/* --- 3. 銀行貸款編輯視窗 (Bank Loan Modal) --- */}
+          {modalMode === 'bankLoan' && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
+                  <div className="bg-white rounded-xl shadow-2xl p-6 w-[90%] md:w-[500px] animate-in fade-in zoom-in duration-200">
+                      <h3 className="font-bold text-xl mb-6 flex items-center gap-2"><ICONS.Home /> {editingBankLoan?.id ? '編輯銀行貸款' : '新增銀行貸款'}</h3>
+                      <div className="space-y-4">
+                          <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                  <label className="text-xs font-bold text-slate-500 mb-1 block">銀行名稱 Bank</label>
+                                  <input className="border w-full p-2 rounded text-sm" value={editingBankLoan?.bankName || ''} onChange={e => setEditingBankLoan({...editingBankLoan, bankName: e.target.value} as any)} />
+                              </div>
+                              <div>
+                                  <label className="text-xs font-bold text-slate-500 mb-1 block">用途 Purpose</label>
+                                  <input className="border w-full p-2 rounded text-sm" value={editingBankLoan?.purpose || ''} onChange={e => setEditingBankLoan({...editingBankLoan, purpose: e.target.value} as any)} />
+                              </div>
+                          </div>
+                          
+                          <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                  <label className="text-xs font-bold text-slate-500 mb-1 block">總貸款額 Principal</label>
+                                  <input type="number" className="border w-full p-2 rounded text-sm font-mono" value={editingBankLoan?.principal || ''} onChange={e => setEditingBankLoan({...editingBankLoan, principal: Number(e.target.value)} as any)} />
+                              </div>
+                              <div>
+                                  <label className="text-xs font-bold text-slate-500 mb-1 block">總期數 (月) Term</label>
+                                  <select className="border w-full p-2 rounded text-sm font-mono" value={editingBankLoan?.termMonths || 36} onChange={e => setEditingBankLoan({...editingBankLoan, termMonths: Number(e.target.value)} as any)}>
+                                      <option value={12}>12 期</option>
+                                      <option value={24}>24 期</option>
+                                      <option value={36}>36 期</option>
+                                      <option value={48}>48 期</option>
+                                      <option value={60}>60 期</option>
+                                      <option value={72}>72 期</option>
+                                  </select>
+                              </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                  <label className="text-xs font-bold text-slate-500 mb-1 block">每月定額還款 Monthly PMT</label>
+                                  <input type="number" className="border w-full p-2 rounded text-sm font-mono text-red-600 font-bold" value={editingBankLoan?.monthlyPayment || ''} onChange={e => setEditingBankLoan({...editingBankLoan, monthlyPayment: Number(e.target.value)} as any)} />
+                              </div>
+                              <div>
+                                  <label className="text-xs font-bold text-slate-500 mb-1 block">提早還款罰息 (%) Penalty</label>
+                                  <input type="number" step="0.01" placeholder="e.g. 0.03 = 3%" className="border w-full p-2 rounded text-sm font-mono" value={editingBankLoan?.penaltyRate || ''} onChange={e => setEditingBankLoan({...editingBankLoan, penaltyRate: Number(e.target.value)} as any)} />
+                              </div>
+                          </div>
+
+                          <div>
+                              <label className="text-xs font-bold text-slate-500 mb-1 block">首期還款日 Start Date</label>
+                              <input type="date" className="border w-full p-2 rounded text-sm" value={editingBankLoan?.startDate || ''} onChange={e => setEditingBankLoan({...editingBankLoan, startDate: e.target.value} as any)} />
+                          </div>
+                      </div>
+                      <div className="flex gap-2 mt-6">
+                          <button onClick={handleSaveBankLoan} className="flex-1 bg-slate-800 text-white p-2 rounded font-bold hover:bg-slate-900">儲存 Save</button>
+                          {editingBankLoan?.id && (
+                              <button onClick={() => { deleteItem('bankLoans', editingBankLoan.id); setModalMode('none'); }} className="bg-red-50 text-red-600 px-4 rounded font-bold hover:bg-red-100"><ICONS.Trash /></button>
+                          )}
+                          <button onClick={() => setModalMode('none')} className="flex-1 bg-gray-200 p-2 rounded font-bold hover:bg-gray-300">取消 Cancel</button>
+                      </div>
+                  </div>
+              </div>
+          )}
+        
           <BulkClassifyModal 
               isOpen={isBulkModalOpen} 
               onClose={() => setIsBulkModalOpen(false)} 

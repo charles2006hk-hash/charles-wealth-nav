@@ -2361,11 +2361,20 @@ interface DocModalProps {
     settings: AppSettings; // <--- 5. 新增這裡
 }
 
-const InvestorDetailModal = ({ investor, onClose }: { investor: OtherInvestor | null, onClose: () => void }) => {
+const InvestorDetailModal = ({ investor, onClose, transactions }: { investor: OtherInvestor | null, onClose: () => void, transactions: any[] }) => {
     if (!investor) return null;
     const [startYear, setStartYear] = useState(new Date().getFullYear() - 1);
     const [endYear, setEndYear] = useState(new Date().getFullYear());
     const [records, setRecords] = useState(investor.records);
+
+    // 👇 新增：動態抓取數據中心裡，屬於這位投資人的所有真實紀錄 👇
+    const dynamicAdjustments = useMemo(() => {
+        if (!transactions) return [];
+        // 透過成員名稱進行智能比對 (例如數據中心寫 "阿爺"，就能匹配 "阿爺 (Grandpa)")
+        return transactions
+            .filter((t: any) => t.member === investor.name || investor.name.includes(t.member))
+            .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }, [investor, transactions]);
 
     // 篩選用於報表的紀錄
     const filteredRecords = records.filter(r => {
@@ -2456,14 +2465,31 @@ const InvestorDetailModal = ({ investor, onClose }: { investor: OtherInvestor | 
                              <div className="max-h-[200px] overflow-y-auto border rounded">
                                 <table className="w-full text-xs text-left">
                                     <thead className="bg-slate-50 sticky top-0"><tr><th className="p-2">日期</th><th className="p-2">詳情</th><th className="p-2 text-right">金額</th></tr></thead>
+                                    {/* ✅ 替換這整個 tbody 區塊 ✅ */}
                                     <tbody className="divide-y">
-                                        {investor.adjustments.map((a, i) => (
-                                            <tr key={i} className="hover:bg-slate-50">
-                                                <td className="p-2 text-slate-500">{a.date}</td>
-                                                <td className="p-2">{a.description}</td>
-                                                <td className={`p-2 text-right font-bold ${a.amount > 0 ? 'text-green-600' : 'text-red-500'}`}>{formatCurrency(a.amount)}</td>
+                                        {dynamicAdjustments.map((a: any) => (
+                                            <tr key={a.id} className="hover:bg-slate-50">
+                                                <td className="p-2 text-slate-500 font-mono text-xs">{a.date}</td>
+                                                <td className="p-2">
+                                                    <span className="font-medium text-slate-700">{a.merchant}</span>
+                                                    {a.note && <span className="text-slate-400 text-xs ml-1">({a.note})</span>}
+                                                    <span className="ml-2 text-[9px] bg-slate-100 text-slate-500 px-1 rounded">{a.category}</span>
+                                                </td>
+                                                <td className={`p-2 text-right font-bold font-mono ${a.amount > 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                                    {a.amount > 0 ? '+' : ''}{formatCurrency(a.amount)}
+                                                </td>
                                             </tr>
                                         ))}
+                                        
+                                        {/* 防呆提示：如果數據中心還沒有資料，顯示提示 */}
+                                        {dynamicAdjustments.length === 0 && (
+                                            <tr>
+                                                <td colSpan={3} className="p-6 text-center text-slate-400 text-xs italic">
+                                                    尚未在數據中心找到紀錄。<br/>
+                                                    請至「數據中心」新增流水帳，並將成員設為「{investor.name}」。
+                                                </td>
+                                            </tr>
+                                        )}
                                     </tbody>
                                 </table>
                             </div>
@@ -3173,7 +3199,11 @@ const InvestmentDashboard = ({ transactions, settings, setEditingTx, setModalMod
                         </div>
                     </div>
 
-                    <InvestorDetailModal investor={selectedInvestor} onClose={() => setSelectedInvestor(null)} />
+                    <InvestorDetailModal 
+                        investor={selectedInvestor} 
+                        onClose={() => setSelectedInvestor(null)} 
+                        transactions={transactions} // 👈 加上這行，把數據中心的資料灌進去
+                    />
                 </>
             )}
 

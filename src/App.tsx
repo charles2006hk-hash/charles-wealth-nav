@@ -5149,7 +5149,29 @@ useEffect(() => {
               </div>
           )}
 
-          {/* --- 貸款編輯視窗 (Loan Modal) --- */}
+          {/* --- 1. 租約編輯視窗 (Lease Modal) --- */}
+          {modalMode === 'lease' && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
+                  <div className="bg-white rounded-xl shadow-2xl p-6 w-[90%] md:w-[500px] animate-in fade-in zoom-in duration-200">
+                      <h3 className="font-bold text-xl mb-6">Manage Lease</h3>
+                      <div className="space-y-4">
+                          <input className="border w-full p-2 rounded" placeholder="Tenant Name" list="tenant-list" value={editingLease?.tenantName || ''} onChange={e => setEditingLease({...editingLease, tenantName: e.target.value} as any)} />
+                          <datalist id="tenant-list">{(settings?.tenants || []).map((t: string) => <option key={t} value={t} />)}</datalist>
+                          <input className="border w-full p-2 rounded" placeholder="Tenant ID" value={editingLease?.tenantID || ''} onChange={e => setEditingLease({...editingLease, tenantID: e.target.value} as any)} />
+                          <div className="grid grid-cols-2 gap-4"><div><label className="text-xs">Start Date</label><input type="date" className="border w-full p-2 rounded" value={editingLease?.startDate || ''} onChange={e => setEditingLease({...editingLease, startDate: e.target.value} as any)} /></div><div><label className="text-xs">End Date</label><input type="date" className="border w-full p-2 rounded" value={editingLease?.endDate || ''} onChange={e => setEditingLease({...editingLease, endDate: e.target.value} as any)} /></div></div>
+                          <div className="grid grid-cols-2 gap-4"><div><label className="text-xs">Monthly Rent</label><input type="number" className="border w-full p-2 rounded" value={editingLease?.monthlyRent || ''} onChange={e => setEditingLease({...editingLease, monthlyRent: Number(e.target.value)} as any)} /></div><div><label className="text-xs">Deposit</label><input type="number" className="border w-full p-2 rounded" value={editingLease?.deposit || ''} onChange={e => setEditingLease({...editingLease, deposit: Number(e.target.value)} as any)} /></div></div>
+                          <select className="border w-full p-2 rounded" value={editingLease?.status} onChange={e => setEditingLease({...editingLease, status: e.target.value} as any)}><option value="Active">Active</option><option value="Terminated">Terminated</option></select>
+                          <div className="border-t pt-3 mt-3"><label className="block text-sm font-bold text-slate-700 mb-2">租約文件圖片 (最多10張)</label><div className="flex flex-wrap gap-2 mb-2">{editingLease?.attachments?.map((img, idx) => (<div key={idx} className="relative w-16 h-16"><img src={img} className="w-full h-full object-cover rounded border" alt="upload" /><button onClick={()=>handleRemoveImage(idx, 'lease')} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs"><ICONS.X /></button></div>))}<label className="w-16 h-16 flex items-center justify-center border-2 border-dashed border-gray-300 rounded cursor-pointer hover:bg-gray-50 text-gray-400"><ICONS.Plus /><input type="file" className="hidden" accept="image/*" multiple onChange={(e)=>handleImageUpload(e, 'lease')} /></label></div></div>
+                      </div>
+                      <div className="flex gap-2 mt-6">
+                          <button onClick={handleSaveLease} className="flex-1 bg-blue-600 text-white p-2 rounded hover:bg-blue-700 font-bold">Save Lease</button>
+                          <button onClick={() => setModalMode('none')} className="flex-1 bg-gray-200 p-2 rounded hover:bg-gray-300 font-bold">Cancel</button>
+                      </div>
+                  </div>
+              </div>
+          )}
+
+          {/* --- 2. 貸款編輯視窗 (Loan Modal) --- */}
           {modalMode === 'loan' && (
               <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
                   <div className="bg-white rounded-xl shadow-2xl p-6 w-[90%] md:w-[500px] animate-in fade-in zoom-in duration-200">

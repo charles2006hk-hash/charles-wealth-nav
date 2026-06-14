@@ -3065,6 +3065,10 @@ const InvestmentDashboard = ({ transactions, settings, setEditingTx, setModalMod
                                 const remainingMonths = bLoan.termMonths - monthsPassed;
                                 const progress = (monthsPassed / bLoan.termMonths) * 100;
                                 
+                                // 銀行真實顯示邏輯：尚餘供款 = 每月供款 × 剩餘期數 (本+息總和)
+                                const bankRemainingBalance = bLoan.monthlyPayment * remainingMonths;
+                                
+                                // 提早清還的純本金估算 (採用直線比例作參考)
                                 const estimatedRemainingPrincipal = bLoan.principal * (remainingMonths / bLoan.termMonths);
                                 const penaltyAmount = estimatedRemainingPrincipal * bLoan.penaltyRate;
 
@@ -3078,7 +3082,10 @@ const InvestmentDashboard = ({ transactions, settings, setEditingTx, setModalMod
                                                         <ICONS.Edit2 />
                                                     </button>
                                                 </h4>
-                                                <p className="text-xs text-slate-500 mt-1">{bLoan.purpose}</p>
+                                                <div className="flex items-center gap-2 mt-1">
+                                                    <p className="text-xs text-slate-500">{bLoan.purpose}</p>
+                                                    <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded font-bold">年息 {bLoan.interestRate || 0}%</span>
+                                                </div>
                                             </div>
                                             <div className="text-right">
                                                 <div className="text-xl font-mono font-bold text-slate-800">{formatCurrency(bLoan.principal)}</div>
@@ -3086,7 +3093,7 @@ const InvestmentDashboard = ({ transactions, settings, setEditingTx, setModalMod
                                             </div>
                                         </div>
 
-                                      {/* 👇 新增：如果有備註，顯示在這裡 👇 */}
+                                        {/* 如果有備註，顯示在這裡 */}
                                         {bLoan.notes && (
                                             <div className="mb-4 text-xs text-slate-500 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
                                                 <span className="font-bold text-slate-600">備註 Note: </span>{bLoan.notes}
@@ -3109,25 +3116,19 @@ const InvestmentDashboard = ({ transactions, settings, setEditingTx, setModalMod
                                                 <p className="font-mono font-bold text-red-600">-{formatCurrency(bLoan.monthlyPayment)}</p>
                                             </div>
                                             <div>
-                                                <p className="text-[10px] text-slate-500 font-bold uppercase mb-1">預估剩餘本金</p>
-                                                <p className="font-mono font-bold text-slate-700">{formatCurrency(estimatedRemainingPrincipal)}</p>
+                                                {/* 改為與大新銀行同步的數字 */}
+                                                <p className="text-[10px] text-slate-500 font-bold uppercase mb-1">銀行尚餘貸款 (含息)</p>
+                                                <p className="font-mono font-bold text-slate-800">{formatCurrency(bankRemainingBalance)}</p>
                                             </div>
                                             <div className="col-span-2 pt-2 border-t border-orange-200 mt-1">
                                                 <p className="text-[10px] text-slate-500 font-bold uppercase flex justify-between items-center">
-                                                    <span>提早清還估算 (含罰息 {(bLoan.penaltyRate*100).toFixed(1)}%)</span>
+                                                    <span title="以直線法估算純本金，另加罰息">提早清還參考 (估算本金 + {(bLoan.penaltyRate*100).toFixed(1)}%罰息)</span>
                                                     <span className="font-mono font-bold text-orange-700">{formatCurrency(estimatedRemainingPrincipal + penaltyAmount)}</span>
                                                 </p>
                                             </div>
                                         </div>
                                     </div>
                                 );
-                            })}
-                            {(!bankLoans || bankLoans.length === 0) && (
-                                <div className="p-8 text-center text-slate-400 col-span-full">尚無銀行貸款紀錄</div>
-                            )}
-                        </div>
-                    </div>
-                    {/* --- 👆 新增結束 👆 --- */}
                   
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                         <div className="p-4 border-b bg-slate-50">

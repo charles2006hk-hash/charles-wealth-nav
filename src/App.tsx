@@ -2383,6 +2383,11 @@ const InvestorDetailModal = ({ investor, onClose, transactions }: { investor: Ot
     });
 
     const periodInterest = filteredRecords.reduce((sum, r) => sum + r.interest, 0);
+
+    const totalInterestAllTime = records.reduce((sum, r) => sum + r.interest, 0);
+    const principalAndInterest = investor.stats.principal + totalInterestAllTime;
+    const totalAdjustments = dynamicAdjustments.reduce((sum: number, a: any) => sum + (a.amount || 0), 0);
+    const realTimeBalance = principalAndInterest + totalAdjustments;
     
     // 自動生成下一年紀錄
     const handleAddNextYear = () => {
@@ -2431,6 +2436,28 @@ const InvestorDetailModal = ({ investor, onClose, transactions }: { investor: Ot
                 <div className="flex-1 overflow-y-auto p-6 flex flex-col md:flex-row gap-6">
                     {/* 左側：編輯與列表 */}
                     <div className="flex-1 space-y-6">
+                      {/* 👇 新增：完美的四宮格財務總覽卡片 👇 */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                            <div>
+                                <p className="text-[10px] text-slate-500 font-bold uppercase">初始本金</p>
+                                <p className="font-mono font-bold text-slate-800 text-lg">{formatCurrency(investor.stats.principal)}</p>
+                            </div>
+                            <div>
+                                <p className="text-[10px] text-slate-500 font-bold uppercase">歷年總利息</p>
+                                <p className="font-mono font-bold text-emerald-600 text-lg">+{formatCurrency(totalInterestAllTime)}</p>
+                            </div>
+                            <div className="bg-blue-50 -my-4 -ml-2 py-4 pl-3 border-l border-blue-100">
+                                <p className="text-[10px] text-blue-600 font-bold uppercase">本利和 (P+I)</p>
+                                <p className="font-mono font-bold text-blue-800 text-lg">{formatCurrency(principalAndInterest)}</p>
+                            </div>
+                            <div className="bg-indigo-50 -my-4 -mr-4 py-4 px-3 border-l border-indigo-100 rounded-r-xl">
+                                <p className="text-[10px] text-indigo-600 font-bold uppercase flex items-center gap-1">
+                                    當前真實結餘 <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
+                                </p>
+                                <p className="font-mono font-bold text-indigo-800 text-lg">{formatCurrency(realTimeBalance)}</p>
+                            </div>
+                        </div>
+                        {/* 👆 新增結束 👆 */}
                         <div className="bg-white border rounded-lg p-4 shadow-sm">
                             <h4 className="font-bold text-slate-700 mb-3 flex justify-between items-center">
                                 <span>投資紀錄 (Investment Records)</span>
@@ -2557,14 +2584,21 @@ const InvestorDetailModal = ({ investor, onClose, transactions }: { investor: Ot
                                      </tfoot>
                                  </table>
 
+                                 {/* 👇 升級列印報表的結尾數字 👇 */}
                                  <div className="mt-8 border-t-2 border-black pt-2">
                                      <div className="flex justify-between items-end">
                                          <div>
                                              <p className="font-bold text-sm">Account Summary (All Time)</p>
-                                             <p>Total Principal: {formatCurrency(investor.stats.principal)}</p>
+                                             <div className="text-xs mt-1 space-y-0.5">
+                                                 <p>Initial Principal (本金): {formatCurrency(investor.stats.principal)}</p>
+                                                 <p>Total Interest (累計利息): {formatCurrency(totalInterestAllTime)}</p>
+                                                 <p className="font-bold">Principal + Interest (本利和): {formatCurrency(principalAndInterest)}</p>
+                                                 <p className="text-red-700 mt-1">Total Payouts/Adj (已提取): {formatCurrency(totalAdjustments)}</p>
+                                             </div>
                                          </div>
                                          <div className="text-right">
-                                             <p className="text-lg font-bold">Net Balance: {formatCurrency(investor.stats.balance)}</p>
+                                             <p className="text-lg font-bold">Real-time Net Balance</p>
+                                             <p className="text-2xl font-bold font-mono">{formatCurrency(realTimeBalance)}</p>
                                          </div>
                                      </div>
                                  </div>

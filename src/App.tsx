@@ -2361,13 +2361,21 @@ interface DocModalProps {
     settings: AppSettings; // <--- 5. 新增這裡
 }
 
-const InvestorDetailModal = ({ investor, onClose, transactions }: { investor: OtherInvestor | null, onClose: () => void, transactions: any[] }) => {
+const InvestorDetailModal = ({ investor, onClose, transactions, settings }: { investor: OtherInvestor | null, onClose: () => void, transactions: any[], settings: any }) => {
     if (!investor) return null;
     const [startYear, setStartYear] = useState(new Date().getFullYear() - 1);
     const [endYear, setEndYear] = useState(new Date().getFullYear());
     const [records, setRecords] = useState(investor.records);
 
-    // 👇 新增：動態抓取數據中心裡，屬於這位投資人的所有真實紀錄 👇
+    // 👇 1. 新增：收支判斷引擎 👇
+    const getTxType = (catName: string) => {
+        const found = settings?.categories?.find((c: any) => c.name === catName);
+        if (found) return found.type;
+        if ((catName || '').includes('Income') || (catName || '').includes('Sale') || (catName || '').includes('收入')) return 'Income';
+        return 'Expense';
+    };
+
+    // 👇 動態抓取數據中心紀錄 👇
     const dynamicAdjustments = useMemo(() => {
         if (!transactions) return [];
         // 透過成員名稱進行智能比對 (例如數據中心寫 "阿爺"，就能匹配 "阿爺 (Grandpa)")
@@ -2388,14 +2396,14 @@ const InvestorDetailModal = ({ investor, onClose, transactions }: { investor: Ot
     const totalInterestAllTime = records.reduce((sum, r) => sum + r.interest, 0);
     const principalAndInterest = investor.stats.principal + totalInterestAllTime;
     
-    // 分開計算：大於 0 是額外注資，小於 0 是提取/派息
-    const additionalCapital = dynamicAdjustments.filter((a: any) => a.amount > 0).reduce((sum: number, a: any) => sum + a.amount, 0);
-    const totalPayouts = dynamicAdjustments.filter((a: any) => a.amount < 0).reduce((sum: number, a: any) => sum + Math.abs(a.amount), 0);
+    // 👇 2. 正確的計算邏輯：透過「類別」判斷是注資還是提取 👇
+    const additionalCapital = dynamicAdjustments.filter((a: any) => getTxType(a.category) === 'Income').reduce((sum: number, a: any) => sum + Math.abs(a.amount || 0), 0);
+    const totalPayouts = dynamicAdjustments.filter((a: any) => getTxType(a.category) === 'Expense').reduce((sum: number, a: any) => sum + Math.abs(a.amount || 0), 0);
     
     // 真實結餘 = 本利和 + 額外注資 - 已提取
     const realTimeBalance = principalAndInterest + additionalCapital - totalPayouts;
     // 👆 計算邏輯結束 👆
-    
+
     // 自動生成下一年紀錄
     const handleAddNextYear = () => {
         if (records.length === 0) return;
@@ -2444,28 +2452,27 @@ const InvestorDetailModal = ({ investor, onClose, transactions }: { investor: Ot
                     {/* 左側：編輯與列表 */}
                     <div className="flex-1">
                         
-                        {/* 👇 2. 修復排版：獨立的四宮格卡片 👇 */}
+                        {/* 👇 3. 修復排版：移除 truncate，自適應字體大小 👇 */}
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
                             <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
                                 <p className="text-[10px] text-slate-500 font-bold uppercase mb-1">初始本金</p>
-                                <p className="font-mono font-bold text-slate-800 text-[15px] truncate">{formatCurrency(investor.stats.principal)}</p>
+                                <p className="font-mono font-bold text-slate-800 text-sm md:text-[15px]">{formatCurrency(investor.stats.principal)}</p>
                             </div>
                             <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
                                 <p className="text-[10px] text-slate-500 font-bold uppercase mb-1">歷年總利息</p>
-                                <p className="font-mono font-bold text-emerald-600 text-[15px] truncate">+{formatCurrency(totalInterestAllTime)}</p>
+                                <p className="font-mono font-bold text-emerald-600 text-sm md:text-[15px]">+{formatCurrency(totalInterestAllTime)}</p>
                             </div>
                             <div className="bg-blue-50 p-3 rounded-xl border border-blue-100 shadow-sm flex flex-col justify-center">
                                 <p className="text-[10px] text-blue-600 font-bold uppercase mb-1">本利和 (P+I)</p>
-                                <p className="font-mono font-bold text-blue-800 text-[15px] truncate">{formatCurrency(principalAndInterest)}</p>
+                                <p className="font-mono font-bold text-blue-800 text-sm md:text-[15px]">{formatCurrency(principalAndInterest)}</p>
                             </div>
                             <div className="bg-indigo-50 p-3 rounded-xl border border-indigo-100 shadow-sm flex flex-col justify-center relative overflow-hidden">
                                 <p className="text-[10px] text-indigo-600 font-bold uppercase flex items-center gap-1 mb-1">
                                     當前真實結餘 <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
                                 </p>
-                                <p className="font-mono font-bold text-indigo-800 text-[15px] truncate">{formatCurrency(realTimeBalance)}</p>
+                                <p className="font-mono font-bold text-indigo-800 text-sm md:text-[15px]">{formatCurrency(realTimeBalance)}</p>
                             </div>
                         </div>
-                        {/* 👆 新增結束 👆 */}
                         <div className="bg-white border rounded-lg p-4 shadow-sm">
                             <h4 className="font-bold text-slate-700 mb-3 flex justify-between items-center">
                                 <span>投資紀錄 (Investment Records)</span>
@@ -2510,8 +2517,8 @@ const InvestorDetailModal = ({ investor, onClose, transactions }: { investor: Ot
                                                     {a.note && <span className="text-slate-400 text-xs ml-1">({a.note})</span>}
                                                     <span className="ml-2 text-[9px] bg-slate-100 text-slate-500 px-1 rounded">{a.category}</span>
                                                 </td>
-                                                <td className={`p-2 text-right font-bold font-mono ${a.amount > 0 ? 'text-green-600' : 'text-red-500'}`}>
-                                                    {a.amount > 0 ? '+' : ''}{formatCurrency(a.amount)}
+                                                <td className={`p-2 text-right font-bold font-mono text-xs ${getTxType(a.category) === 'Income' ? 'text-green-600' : 'text-red-500'}`}>
+                                                    {getTxType(a.category) === 'Income' ? `+${formatCurrency(Math.abs(a.amount))} (注資)` : `-${formatCurrency(Math.abs(a.amount))} (提取)`}
                                                 </td>
                                             </tr>
                                         ))}
@@ -3246,6 +3253,7 @@ const InvestmentDashboard = ({ transactions, settings, setEditingTx, setModalMod
                         investor={selectedInvestor} 
                         onClose={() => setSelectedInvestor(null)} 
                         transactions={transactions} // 👈 加上這行，把數據中心的資料灌進去
+                        settings={settings}
                     />
                 </>
             )}

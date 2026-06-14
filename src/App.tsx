@@ -302,7 +302,7 @@ const INITIAL_OTHER_INVESTORS: OtherInvestor[] = [
     "stats": { "principal": 400000, "balance": 548533 }
   },
   {
-    "name": "Katie",
+    "name": "阿雅 (Katie)",
     "records": [
       { "startDate": "2015/11/1", "endDate": "2016/3/1", "principal": 600000, "months": "4", "rate": 0.1, "interest": 20167 },
       { "startDate": "2016/4/1", "endDate": "2016/12/1", "principal": 600000, "months": "8", "rate": 0.08, "interest": 32533 },
@@ -323,7 +323,7 @@ const INITIAL_OTHER_INVESTORS: OtherInvestor[] = [
     "stats": { "principal": 142600, "balance": 290509 }
   },
   {
-      "name": "Charles",
+      "name": "阿毅 (Charles)",
       "records": [
         { "startDate": "2022/4/1", "endDate": "2023/3/31", "principal": 1000000.0, "months": "12", "rate": 0.06, "interest": 60000.0 },
         { "startDate": "2023/4/1", "endDate": "2024/3/30", "principal": 1000000.0, "months": "12", "rate": 0.06, "interest": 60000.0 },

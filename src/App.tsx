@@ -5418,12 +5418,21 @@ useEffect(() => {
                               </div>
                           </div>
 
-                          {/* 👇 新增：備註欄位 👇 */}
                           <div>
                               <label className="text-xs font-bold text-slate-500 mb-1 block">備註 Notes</label>
                               <textarea rows={2} placeholder="例如: 綁定 Mortgage Link、經手人資訊..." className="border w-full p-2 rounded text-sm" value={editingBankLoan?.notes || ''} onChange={e => setEditingBankLoan({...editingBankLoan, notes: e.target.value} as any)} />
                           </div>
                       </div>
+                      
+                      {/* 👇 按鈕區塊，確保有正確閉合 👇 */}
+                      <div className="flex gap-2 mt-6">
+                          <button onClick={handleSaveBankLoan} className="flex-1 bg-slate-800 text-white p-2 rounded font-bold hover:bg-slate-900">儲存 Save</button>
+                          {editingBankLoan?.id && (
+                              <button onClick={() => { deleteItem('bankLoans', editingBankLoan.id); setModalMode('none'); }} className="bg-red-50 text-red-600 px-4 rounded font-bold hover:bg-red-100"><ICONS.Trash /></button>
+                          )}
+                          <button onClick={() => setModalMode('none')} className="flex-1 bg-gray-200 p-2 rounded font-bold hover:bg-gray-300">取消 Cancel</button>
+                      </div>
+                  </div>
               </div>
           )}
         

@@ -43,20 +43,22 @@ interface PrivateLoan {
   notes: string;
 }
 
-// 👇 升級：固定支出提醒 (加入詳細資料) 👇
+// 👇 升級：固定支出提醒 (支援季/年與詳細資料) 👇
 interface ScheduledExpense {
   id: string;
   familyId?: string;
-  title: string;        // e.g., "渣打 Visa 卡數"
-  amount: number;       // e.g., 5000
-  dueDay: number;       // 每月幾號 (1-31)
-  category: string;     // e.g., "Credit Card"
-  member: string;       // e.g., "Charles"
+  title: string;        
+  amount: number;       
+  dueDay: number;       
+  frequency?: 'Monthly' | 'Quarterly' | 'Annually'; // 新增：週期
+  dueMonth?: number;    // 新增：指定的月份 (用於年繳/季繳)
+  category: string;     
+  member: string;       
   note: string;
-  merchant?: string;    // 商戶名稱
-  accountInfo?: string; // 帳戶號碼/資料
-  paymentMethod?: 'Autopay' | 'Manual'; // 自動轉帳或手動繳費
-  contact?: string;     // 網址、App名稱或電話
+  merchant?: string;    
+  accountInfo?: string; 
+  paymentMethod?: 'Autopay' | 'Manual'; 
+  contact?: string;     
 }
 
 // --- 銀行分期貸款 (負債與槓桿) ---
@@ -3786,16 +3788,31 @@ const SuperAdminDashboard = () => {
 };
 
 // --- 🌟 旗艦版：每月固定開銷與提醒 (Reminders) ---
-const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transactions, setModalMode, setEditingReminder, handlePayReminder, deleteItem }: any) => {
+const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transactions, setModalMode, setEditingReminder, deleteItem, currentFamilyId }: any) => {
     
-    const currentYear = new Date().getFullYear();
-    const currentMonth = new Date().getMonth() + 1;
+    // ⏳ 時光機狀態 (預設為本月)
+    const [viewYear, setViewYear] = useState(new Date().getFullYear());
+    const [viewMonth, setViewMonth] = useState(new Date().getMonth() + 1);
+    
+    // 🏦 水位計算機狀態
+    const [reserveBalance, setReserveBalance] = useState<number | ''>('');
 
-    // 智能整合並判斷「本月是否已繳」
+    // 💰 繳費櫃台狀態
+    const [payConfig, setPayConfig] = useState<any>(null);
+
+    // 智能整合並判斷「當前檢視月份」是否已繳
     const allReminders = useMemo(() => {
         const list: any[] = [];
         
-        scheduledExpenses.forEach((item: any) => list.push({ ...item, type: 'Manual' }));
+        // 1. 處理手動提醒 (判斷頻率)
+        scheduledExpenses.forEach((item: any) => {
+            const freq = item.frequency || 'Monthly';
+            if (freq === 'Annually' && item.dueMonth !== viewMonth) return; // 年繳：只在該月顯示
+            if (freq === 'Quarterly' && (viewMonth % 3 !== (item.dueMonth || 1) % 3)) return; // 季繳：每3個月顯示
+            list.push({ ...item, type: 'Manual' });
+        });
+
+        // 2. 處理自動貸款/按揭 (預設每月)
         bankLoans.forEach((loan: any) => {
             if (loan.status === 'Active') {
                 list.push({ id: `auto_loan_${loan.id}`, title: `${loan.bankName} (${loan.purpose})`, amount: loan.monthlyPayment, dueDay: new Date(loan.startDate).getDate(), category: 'Mortgage Payment (按揭供款)', member: 'Family', merchant: loan.bankName, paymentMethod: 'Autopay', note: '系統自動抓取分期貸款', type: 'Auto' });
@@ -3807,11 +3824,11 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
             }
         });
 
-        // 偵測數據中心，判斷本月是否已繳費
+        // 3. 偵測數據中心，判斷「該月」是否已繳費
         return list.map(item => {
             const isPaid = transactions.some((t: any) => 
-                t.year === currentYear && 
-                t.month === currentMonth && 
+                t.year === viewYear && 
+                t.month === viewMonth && 
                 (
                     (t.merchant || '').toLowerCase().includes((item.merchant || item.title).toLowerCase()) || 
                     (item.merchant && (t.merchant || '').toLowerCase().includes(item.merchant.toLowerCase()))
@@ -3819,54 +3836,125 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
             );
             return { ...item, isPaid };
         }).sort((a, b) => a.dueDay - b.dueDay);
-    }, [scheduledExpenses, bankLoans, properties, transactions, currentYear, currentMonth]);
+    }, [scheduledExpenses, bankLoans, properties, transactions, viewYear, viewMonth]);
 
+    // 數據統計
     const totalMonthly = allReminders.reduce((sum, item) => sum + item.amount, 0);
     const totalPaid = allReminders.filter(i => i.isPaid).reduce((sum, item) => sum + item.amount, 0);
     const totalUnpaid = totalMonthly - totalPaid;
     const progressPercent = totalMonthly > 0 ? (totalPaid / totalMonthly) * 100 : 0;
+    
+    // 計算 Autopay 總額與水位
+    const totalAutopay = allReminders.filter(r => r.paymentMethod === 'Autopay').reduce((sum, r) => sum + r.amount, 0);
+    const monthsLeft = (reserveBalance !== '' && totalAutopay > 0) ? (Number(reserveBalance) / totalAutopay).toFixed(1) : 0;
 
-    const handlePrintReminders = () => {
-         const printContent = document.getElementById('reminders-report-print');
-         if (!printContent) return;
-         const clone = printContent.cloneNode(true) as HTMLElement;
-         clone.classList.remove('hidden');
-         const wrapper = document.createElement('div');
-         wrapper.id = 'print-clone-root';
-         wrapper.appendChild(clone);
-         document.body.appendChild(wrapper);
-         document.body.classList.add('printing-mode');
-         setTimeout(() => { window.print(); document.body.classList.remove('printing-mode'); if (document.body.contains(wrapper)) document.body.removeChild(wrapper); }, 500); 
+    // 執行一鍵繳費 (支援自訂日期與手續費)
+    const executePayment = async () => {
+        if (!payConfig) return;
+        try {
+            const batch = writeBatch(db);
+            const propId = payConfig.id.startsWith('auto_prop_') ? payConfig.id.replace('auto_prop_', '') : '';
+            
+            // 1. 寫入主金額
+            const txRef = doc(collection(db, "transactions"));
+            batch.set(txRef, {
+                date: payConfig.payDate, amount: Number(payConfig.actualAmount),
+                merchant: payConfig.merchant || payConfig.title, category: payConfig.category,
+                member: payConfig.member, note: `[繳費] ${payConfig.accountInfo || ''} ${payConfig.note || ''}`.trim(),
+                year: new Date(payConfig.payDate).getFullYear(), month: new Date(payConfig.payDate).getMonth() + 1,
+                familyId: currentFamilyId, propertyId: propId
+            });
+
+            // 2. 寫入手續費 (如果有)
+            if (Number(payConfig.handlingFee) > 0) {
+                const feeRef = doc(collection(db, "transactions"));
+                batch.set(feeRef, {
+                    date: payConfig.payDate, amount: Number(payConfig.handlingFee),
+                    merchant: payConfig.merchant || payConfig.title, category: 'Other (其他)', // 或自訂手續費類別
+                    member: payConfig.member, note: `[手續費] ${payConfig.title}`,
+                    year: new Date(payConfig.payDate).getFullYear(), month: new Date(payConfig.payDate).getMonth() + 1,
+                    familyId: currentFamilyId, propertyId: propId
+                });
+            }
+
+            await batch.commit();
+            alert('✅ 繳費成功，已同步記錄至數據中心！');
+            setPayConfig(null);
+        } catch (e) { alert('繳費失敗: ' + e); }
     };
 
     return (
-        <div className="space-y-6 animate-in fade-in pb-10">
+        <div className="space-y-6 animate-in fade-in pb-10 relative">
+            {/* --- 繳費專屬確認視窗 (Modal) --- */}
+            {payConfig && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center modal-overlay">
+                    <div className="bg-white rounded-xl shadow-2xl p-6 w-[90%] md:w-[400px] animate-in fade-in zoom-in duration-200">
+                        <h3 className="font-bold text-lg mb-4 text-blue-800 border-b pb-2">💳 繳費確認櫃台</h3>
+                        <p className="text-sm font-bold text-slate-700 mb-4">{payConfig.title}</p>
+                        <div className="space-y-4">
+                            <div><label className="text-xs font-bold text-slate-500 mb-1 block">實際扣款日期 (預設為該月到期日)</label><input type="date" className="border w-full p-2 rounded text-sm font-mono" value={payConfig.payDate} onChange={e=>setPayConfig({...payConfig, payDate: e.target.value})} /></div>
+                            <div><label className="text-xs font-bold text-slate-500 mb-1 block">實繳金額 (本金/保費)</label><input type="number" className="border w-full p-2 rounded text-sm font-mono text-red-600 font-bold" value={payConfig.actualAmount} onChange={e=>setPayConfig({...payConfig, actualAmount: Number(e.target.value)})} /></div>
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 mb-1 block flex items-center gap-1">額外手續費 (Handling Fee) <span className="text-[10px] text-slate-400 font-normal">將分拆為獨立紀錄</span></label>
+                                <input type="number" className="border w-full p-2 rounded text-sm font-mono text-orange-600 font-bold" placeholder="0" value={payConfig.handlingFee || ''} onChange={e=>setPayConfig({...payConfig, handlingFee: Number(e.target.value)})} />
+                            </div>
+                        </div>
+                        <div className="flex gap-2 mt-6">
+                            <button onClick={executePayment} className="flex-1 bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700 shadow">確認入帳</button>
+                            <button onClick={()=>setPayConfig(null)} className="flex-1 bg-gray-200 p-2 rounded font-bold hover:bg-gray-300">取消</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* 標題與時光機 */}
             <div className="flex flex-wrap justify-between items-center bg-white p-6 rounded-xl shadow-sm border border-slate-200 gap-4">
-                <div>
-                    <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">📅 本月固定開銷與提醒</h2>
-                    <p className="text-slate-500 text-sm mt-1">{currentYear} 年 {currentMonth} 月繳費進度追蹤</p>
+                <div className="flex items-center gap-4">
+                    <div className="flex bg-slate-100 rounded-lg p-1 items-center">
+                        <button onClick={()=>{ if(viewMonth===1){setViewMonth(12); setViewYear(y=>y-1);} else setViewMonth(m=>m-1); }} className="p-2 hover:bg-white rounded shadow-sm text-slate-600">◀</button>
+                        <span className="px-4 font-bold text-slate-800 text-lg">{viewYear} 年 {viewMonth} 月</span>
+                        <button onClick={()=>{ if(viewMonth===12){setViewMonth(1); setViewYear(y=>y+1);} else setViewMonth(m=>m+1); }} className="p-2 hover:bg-white rounded shadow-sm text-slate-600">▶</button>
+                    </div>
+                    {(viewYear !== new Date().getFullYear() || viewMonth !== new Date().getMonth() + 1) && (
+                        <button onClick={()=>{setViewYear(new Date().getFullYear()); setViewMonth(new Date().getMonth()+1);}} className="text-xs text-blue-600 underline">返回本月</button>
+                    )}
                 </div>
                 <div className="flex gap-2">
-                    <button onClick={() => { setEditingReminder({ id: '', title: '', amount: 0, dueDay: 1, category: 'Credit Card', member: 'Charles', note: '', paymentMethod: 'Manual' }); setModalMode('reminder'); }} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 shadow-sm flex items-center gap-2">
-                        <ICONS.Plus /> 新增提醒 (卡數/保險)
-                    </button>
-                    <button onClick={handlePrintReminders} className="px-4 py-2 bg-slate-800 text-white rounded-lg text-sm font-bold hover:bg-slate-900 shadow-sm flex items-center gap-2"><ICONS.Printer /> 導出 PDF</button>
+                    <button onClick={() => { setEditingReminder({ id: '', title: '', amount: 0, dueDay: 1, frequency: 'Monthly', dueMonth: 1, category: 'Credit Card', member: 'Charles', note: '', paymentMethod: 'Manual' }); setModalMode('reminder'); }} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 shadow-sm flex items-center gap-2"><ICONS.Plus /> 新增提醒</button>
                 </div>
             </div>
 
-            {/* 進度條與三大數據 */}
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                <div className="flex justify-between text-sm font-bold text-slate-600 mb-2">
-                    <span>總進度 {progressPercent.toFixed(0)}%</span>
-                    <span>已繳 {formatCurrency(totalPaid)} / 共 {formatCurrency(totalMonthly)}</span>
+            {/* 進度條與水位計算機 */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                    <div className="flex justify-between text-sm font-bold text-slate-600 mb-2">
+                        <span>本月繳費進度 {progressPercent.toFixed(0)}%</span>
+                        <span>已繳 {formatCurrency(totalPaid)} / 共 {formatCurrency(totalMonthly)}</span>
+                    </div>
+                    <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden mb-6">
+                        <div className="bg-emerald-500 h-full transition-all duration-1000" style={{ width: `${progressPercent}%` }}></div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4">
+                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-center"><p className="text-[10px] text-slate-500 font-bold mb-1">預估總額</p><p className="text-xl font-bold font-mono">{formatCurrency(totalMonthly)}</p></div>
+                        <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-100 text-center"><p className="text-[10px] text-emerald-600 font-bold mb-1">已繳清 (Paid)</p><p className="text-xl font-bold font-mono text-emerald-700">{formatCurrency(totalPaid)}</p></div>
+                        <div className="bg-red-50 p-3 rounded-xl border border-red-100 text-center"><p className="text-[10px] text-red-600 font-bold mb-1">尚欠款 (Unpaid)</p><p className="text-xl font-bold font-mono text-red-700">{formatCurrency(totalUnpaid)}</p></div>
+                    </div>
                 </div>
-                <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden mb-6">
-                    <div className="bg-emerald-500 h-full transition-all duration-1000" style={{ width: `${progressPercent}%` }}></div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center"><p className="text-xs text-slate-500 font-bold mb-1">本月預估總額</p><p className="text-2xl font-bold font-mono">{formatCurrency(totalMonthly)}</p></div>
-                    <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 text-center"><p className="text-xs text-emerald-600 font-bold mb-1">已繳清 (Paid)</p><p className="text-2xl font-bold font-mono text-emerald-700">{formatCurrency(totalPaid)}</p></div>
-                    <div className="bg-red-50 p-4 rounded-xl border border-red-100 text-center"><p className="text-xs text-red-600 font-bold mb-1">尚欠款 (Unpaid)</p><p className="text-2xl font-bold font-mono text-red-700">{formatCurrency(totalUnpaid)}</p></div>
+
+                {/* 🏦 水位計算機 */}
+                <div className="bg-indigo-50 p-6 rounded-xl shadow-sm border border-indigo-100 flex flex-col justify-between">
+                    <div>
+                        <h3 className="font-bold text-indigo-900 flex items-center gap-2 mb-2"><ICONS.Home /> 扣款專戶水位監控</h3>
+                        <p className="text-[10px] text-indigo-600 mb-3">輸入銀行戶口目前餘額，預測還能撐幾個月的自動扣款。</p>
+                        <div className="relative mb-2">
+                            <span className="absolute left-3 top-2 text-indigo-400 font-bold">$</span>
+                            <input type="number" placeholder="輸入戶口餘額..." className="w-full pl-7 pr-3 py-2 rounded border border-indigo-200 font-mono font-bold text-indigo-900 outline-none focus:ring-2 focus:ring-indigo-400" value={reserveBalance} onChange={e=>setReserveBalance(e.target.value ? Number(e.target.value) : '')} />
+                        </div>
+                    </div>
+                    <div className="bg-white p-3 rounded border border-indigo-100 text-sm">
+                        <div className="flex justify-between mb-1"><span className="text-slate-500 text-xs">本月 Autopay 總需求:</span><span className="font-mono font-bold text-red-500">-{formatCurrency(totalAutopay)}</span></div>
+                        <div className="flex justify-between items-center border-t pt-1 mt-1"><span className="text-indigo-800 font-bold">預估可支撐期數:</span><span className="font-mono font-bold text-lg text-indigo-600">{monthsLeft} 個月</span></div>
+                    </div>
                 </div>
             </div>
 
@@ -3880,76 +3968,43 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
                                 <div className="flex-1">
                                     <div className="flex items-center gap-2 mb-1">
                                         <span className={`font-bold text-lg ${item.isPaid ? 'text-emerald-800 line-through' : 'text-slate-800'}`}>每月 {item.dueDay} 日</span>
-                                        {item.paymentMethod === 'Autopay' ? <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-indigo-100 text-indigo-700">自動轉帳 Autopay</span> : <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-amber-100 text-amber-700">人手繳費 Manual</span>}
-                                        {item.type === 'Auto' && <span className="text-[10px] px-2 py-0.5 rounded bg-slate-100 text-slate-500 border">系統連動</span>}
+                                        {item.paymentMethod === 'Autopay' ? <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-indigo-100 text-indigo-700">自動轉帳</span> : <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-amber-100 text-amber-700">手動繳費</span>}
+                                        {item.frequency !== 'Monthly' && <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-purple-100 text-purple-700">{item.frequency === 'Annually' ? '年繳' : '季繳'}</span>}
                                     </div>
                                     <h4 className="font-bold text-slate-700 flex items-center gap-2">
                                         {item.title}
                                         {item.type === 'Manual' && (
                                             <div className="flex gap-1 ml-2">
-                                                <button onClick={() => { setEditingReminder(item); setModalMode('reminder'); }} className="text-slate-400 hover:text-blue-600"><ICONS.Edit2 /></button>
+                                                <button onClick={() => { setEditingReminder(item); setModalMode('reminder'); }} className="text-slate-400 hover:text-blue-600" title="編輯提醒"><ICONS.Edit2 /></button>
                                                 <button onClick={() => deleteItem('scheduledExpenses', item.id)} className="text-slate-400 hover:text-red-500"><ICONS.Trash /></button>
                                             </div>
                                         )}
+                                        {item.type === 'Auto' && <span className="text-xs text-slate-400 font-normal italic ml-2">(自動連動項目，請至來源修改)</span>}
                                     </h4>
-                                    <div className="text-xs text-slate-500 mt-2 space-y-0.5">
-                                        <p>👤 負責人: {item.member} | 🏷 類別: {item.category}</p>
+                                    <div className="text-xs text-slate-500 mt-2 grid grid-cols-1 md:grid-cols-2 gap-1">
+                                        <p>👤 負責人: {item.member}</p>
+                                        <p>🏷 類別: {item.category}</p>
                                         {item.merchant && <p>🏪 商戶: {item.merchant}</p>}
                                         {item.accountInfo && <p>💳 帳戶: <span className="font-mono">{item.accountInfo}</span></p>}
-                                        {item.contact && <p>🔗 繳費連結/聯絡: {item.contact}</p>}
-                                        {item.note && <p>📝 備註: {item.note}</p>}
+                                        {item.contact && <p className="col-span-full">🔗 聯絡: {item.contact}</p>}
+                                        {item.note && <p className="col-span-full">📝 備註: {item.note}</p>}
                                     </div>
                                 </div>
-                                <div className="text-right flex flex-col items-end gap-2 min-w-[120px]">
+                                <div className="text-right flex flex-col items-end gap-2 min-w-[140px]">
                                     <p className={`font-mono font-bold text-xl ${item.isPaid ? 'text-emerald-600' : 'text-red-600'}`}>${formatCurrency(item.amount)}</p>
                                     {item.isPaid ? (
-                                        <span className="text-xs font-bold text-emerald-600 flex items-center gap-1"><ICONS.ShieldCheck /> 本月已結清</span>
+                                        <span className="text-xs font-bold text-emerald-600 flex items-center gap-1"><ICONS.ShieldCheck /> 本月已入帳</span>
                                     ) : (
-                                        <button onClick={() => handlePayReminder(item)} className="bg-blue-600 text-white text-xs px-4 py-2 rounded-lg font-bold shadow hover:bg-blue-700 transition-colors flex items-center gap-1 w-full justify-center">
-                                            一鍵繳費入帳
+                                        <button onClick={() => setPayConfig({ ...item, payDate: `${viewYear}-${String(viewMonth).padStart(2,'0')}-${String(item.dueDay).padStart(2,'0')}`, actualAmount: item.amount, handlingFee: 0 })} className="bg-blue-600 text-white text-xs px-4 py-2.5 rounded-lg font-bold shadow hover:bg-blue-700 transition-colors flex items-center gap-1 w-full justify-center">
+                                            繳費並記錄
                                         </button>
                                     )}
                                 </div>
                             </div>
                         </div>
                     ))}
-                    {allReminders.length === 0 && <p className="text-slate-400 pl-6">目前尚無任何每月提醒事項。</p>}
+                    {allReminders.length === 0 && <p className="text-slate-400 pl-6 border-dashed border-2 border-slate-200 p-8 rounded-xl text-center">該月份尚無任何提醒事項。</p>}
                 </div>
-            </div>
-
-            {/* 隱藏的 PDF 列印格式 */}
-            <div id="reminders-report-print" className="hidden doc-print-container bg-white w-full text-black font-serif mx-auto p-8 relative">
-                <div className="text-center border-b-2 border-black pb-4 mb-6">
-                    <h1 className="text-2xl font-bold">MONTHLY FIXED EXPENSES REPORT</h1>
-                    <p className="text-sm tracking-widest mt-1">家族每月固定開銷清單 ({currentYear} 年 {currentMonth} 月)</p>
-                </div>
-                <div className="flex justify-between mb-4 text-sm">
-                    <p><span className="font-bold">報告日期:</span> {new Date().toLocaleDateString()}</p>
-                    <p><span className="font-bold">預估總流出:</span> {formatCurrency(totalMonthly)}</p>
-                </div>
-                <table className="w-full border-collapse border border-black text-sm">
-                    <thead className="bg-gray-100">
-                        <tr>
-                            <th className="border border-black p-2 text-center w-12">Day</th>
-                            <th className="border border-black p-2 text-left">Item / Account Details</th>
-                            <th className="border border-black p-2 text-center">Status</th>
-                            <th className="border border-black p-2 text-right w-24">Amount</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {allReminders.map((item:any) => (
-                            <tr key={item.id}>
-                                <td className="border border-black p-2 text-center font-bold">{item.dueDay}</td>
-                                <td className="border border-black p-2">
-                                    <span className="font-bold">{item.title}</span> {item.paymentMethod==='Autopay' ? '(Auto)' : '(Man)'}<br/>
-                                    <span className="text-[10px] text-gray-600">{item.merchant} | A/C: {item.accountInfo}</span>
-                                </td>
-                                <td className={`border border-black p-2 text-center font-bold ${item.isPaid ? 'text-green-600' : 'text-red-600'}`}>{item.isPaid ? 'PAID' : 'UNPAID'}</td>
-                                <td className="border border-black p-2 text-right font-mono font-bold">-{formatCurrency(item.amount)}</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
             </div>
         </div>
     );
@@ -5359,8 +5414,8 @@ useEffect(() => {
                       transactions={transactions}
                       setModalMode={setModalMode} 
                       setEditingReminder={setEditingReminder}
-                      handlePayReminder={handlePayReminder}
                       deleteItem={deleteItem}
+                      currentFamilyId={currentFamilyId} // 👈 必須加上這行
                   />
               )}
             
@@ -5926,48 +5981,80 @@ useEffect(() => {
               </div>
           )}
 
-        {/* --- 4. 自訂提醒編輯視窗 (Reminder Modal) --- */}
+       {/* --- 4. 自訂提醒編輯視窗 (Reminder Modal) --- */}
           {modalMode === 'reminder' && (
               <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
                   <div className="bg-white rounded-xl shadow-2xl p-6 w-[90%] md:w-[600px] animate-in fade-in zoom-in duration-200">
-                      <h3 className="font-bold text-xl mb-6 flex items-center gap-2"><ICONS.FileText /> {editingReminder?.id ? '編輯提醒事項' : '新增提醒事項'}</h3>
+                      <h3 className="font-bold text-xl mb-6 flex items-center gap-2"><ICONS.FileText/> {editingReminder?.id ? '編輯提醒事項' : '新增提醒事項'}</h3>
                       <div className="space-y-4">
                           <div className="grid grid-cols-2 gap-4">
                               <div><label className="text-xs font-bold text-slate-500 mb-1 block">自訂標題 Title</label><input className="border w-full p-2 rounded text-sm" placeholder="例如: 渣打 Visa 卡數" value={editingReminder?.title || ''} onChange={e => setEditingReminder({...editingReminder, title: e.target.value} as any)} /></div>
                               <div><label className="text-xs font-bold text-slate-500 mb-1 block">商戶機構 Merchant</label><input className="border w-full p-2 rounded text-sm" placeholder="例如: Standard Chartered" value={editingReminder?.merchant || ''} onChange={e => setEditingReminder({...editingReminder, merchant: e.target.value} as any)} /></div>
                           </div>
                           
+                          {/* 👇 這是最新的頻率與日期設定區 👇 */}
+                          <div className="grid grid-cols-3 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                              <div>
+                                  <label className="text-xs font-bold text-slate-500 mb-1 block">繳費頻率</label>
+                                  <select className="border w-full p-2 rounded text-sm font-bold text-indigo-700" value={editingReminder?.frequency || 'Monthly'} onChange={e => setEditingReminder({...editingReminder, frequency: e.target.value} as any)}>
+                                      <option value="Monthly">每月 (Monthly)</option>
+                                      <option value="Quarterly">每季 (Quarterly)</option>
+                                      <option value="Annually">每年 (Annually)</option>
+                                  </select>
+                              </div>
+                              <div>
+                                  <label className="text-xs font-bold text-slate-500 mb-1 block">
+                                      {editingReminder?.frequency === 'Annually' ? '指定月份' : editingReminder?.frequency === 'Quarterly' ? '起始月份' : '繳款日 (Due Day)'}
+                                  </label>
+                                  {editingReminder?.frequency !== 'Monthly' ? (
+                                      <select className="border w-full p-2 rounded text-sm font-mono" value={editingReminder?.dueMonth || 1} onChange={e => setEditingReminder({...editingReminder, dueMonth: Number(e.target.value)} as any)}>
+                                          {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => <option key={m} value={m}>{m} 月</option>)}
+                                      </select>
+                                  ) : (
+                                      <input type="number" min="1" max="31" placeholder="日 (1-31)" className="border w-full p-2 rounded text-sm font-mono" value={editingReminder?.dueDay || 1} onChange={e => setEditingReminder({...editingReminder, dueDay: Number(e.target.value)} as any)} />
+                                  )}
+                              </div>
+                              {editingReminder?.frequency !== 'Monthly' && (
+                                  <div>
+                                      <label className="text-xs font-bold text-slate-500 mb-1 block">幾號繳 (Due Day)</label>
+                                      <input type="number" min="1" max="31" className="border w-full p-2 rounded text-sm font-mono" value={editingReminder?.dueDay || 1} onChange={e => setEditingReminder({...editingReminder, dueDay: Number(e.target.value)} as any)} />
+                                  </div>
+                              )}
+                          </div>
+                          {/* 👆 頻率區塊結束 👆 */}
+
                           <div className="grid grid-cols-3 gap-4">
                               <div><label className="text-xs font-bold text-slate-500 mb-1 block">金額 Amount</label><input type="number" className="border w-full p-2 rounded text-sm font-mono text-red-600 font-bold" value={editingReminder?.amount || ''} onChange={e => setEditingReminder({...editingReminder, amount: Number(e.target.value)} as any)} /></div>
-                              <div><label className="text-xs font-bold text-slate-500 mb-1 block">每月幾號 Due Day</label><input type="number" min="1" max="31" className="border w-full p-2 rounded text-sm font-mono" value={editingReminder?.dueDay || 1} onChange={e => setEditingReminder({...editingReminder, dueDay: Number(e.target.value)} as any)} /></div>
                               <div><label className="text-xs font-bold text-slate-500 mb-1 block">繳費方式 Method</label><select className="border w-full p-2 rounded text-sm" value={editingReminder?.paymentMethod || 'Manual'} onChange={e => setEditingReminder({...editingReminder, paymentMethod: e.target.value} as any)}><option value="Manual">人手繳費 (Manual)</option><option value="Autopay">自動轉帳 (Autopay)</option></select></div>
+                              <div><label className="text-xs font-bold text-slate-500 mb-1 block">負責成員 Member</label><select className="border w-full p-2 rounded text-sm" value={editingReminder?.member} onChange={e=>setEditingReminder({...editingReminder, member: e.target.value} as any)}>{(settings?.members || []).map((m: string) => <option key={m} value={m}>{m}</option>)}</select></div>
                           </div>
 
                           <div className="grid grid-cols-2 gap-4">
                               <div>
-                                  <label className="text-xs font-bold text-slate-500 mb-1 block">類別 Category</label>
+                                  <label className="text-xs font-bold text-slate-500 mb-1 block">入帳類別 Category</label>
                                   <select className="border w-full p-2 rounded text-sm" value={editingReminder?.category} onChange={e=>setEditingReminder({...editingReminder, category: e.target.value} as any)}>
-                                      {(settings.categories || []).map((c:any) => <option key={c.name} value={c.name}>{c.name}</option>)}
+                                      {(settings?.categories || []).map((c:any) => <option key={c.name} value={c.name}>{c.name}</option>)}
                                   </select>
                               </div>
-                              <div>
-                                  <label className="text-xs font-bold text-slate-500 mb-1 block">負責成員 Member</label>
-                                  <select className="border w-full p-2 rounded text-sm" value={editingReminder?.member} onChange={e=>setEditingReminder({...editingReminder, member: e.target.value} as any)}>
-                                      {(settings?.members || []).map((m: string) => <option key={m} value={m}>{m}</option>)}
-                                  </select>
-                              </div>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-4">
                               <div><label className="text-xs font-bold text-slate-500 mb-1 block">帳戶資料 Account Info</label><input className="border w-full p-2 rounded text-sm font-mono" placeholder="卡號 / 帳號 / 保單號" value={editingReminder?.accountInfo || ''} onChange={e => setEditingReminder({...editingReminder, accountInfo: e.target.value} as any)} /></div>
-                              <div><label className="text-xs font-bold text-slate-500 mb-1 block">繳費連結/聯絡 Contact</label><input className="border w-full p-2 rounded text-sm" placeholder="網站網址 / App名稱" value={editingReminder?.contact || ''} onChange={e => setEditingReminder({...editingReminder, contact: e.target.value} as any)} /></div>
                           </div>
 
+                          <div><label className="text-xs font-bold text-slate-500 mb-1 block">繳費連結/聯絡 Contact</label><input className="border w-full p-2 rounded text-sm" placeholder="網站網址 / App名稱" value={editingReminder?.contact || ''} onChange={e => setEditingReminder({...editingReminder, contact: e.target.value} as any)} /></div>
                           <div><label className="text-xs font-bold text-slate-500 mb-1 block">備註 Notes</label><textarea rows={2} className="border w-full p-2 rounded text-sm" value={editingReminder?.note || ''} onChange={e => setEditingReminder({...editingReminder, note: e.target.value} as any)} /></div>
                       </div>
                       
                       <div className="flex gap-2 mt-6">
-                          <button onClick={handleSaveReminder} className="flex-1 bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700">儲存 Save</button>
+                          <button onClick={async () => {
+                              try {
+                                  const rData = { ...editingReminder, amount: Number(editingReminder?.amount), dueDay: Number(editingReminder?.dueDay), dueMonth: Number(editingReminder?.dueMonth || 1), familyId: currentFamilyId };
+                                  if (rData.id) {
+                                      await updateDoc(doc(db, "scheduledExpenses", rData.id), rData);
+                                  } else {
+                                      await addDoc(collection(db, "scheduledExpenses"), rData);
+                                  }
+                                  setModalMode('none');
+                              } catch(e) { alert("儲存失敗: "+e); }
+                          }} className="flex-1 bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700 shadow">儲存 Save</button>
                           <button onClick={() => setModalMode('none')} className="flex-1 bg-gray-200 p-2 rounded font-bold hover:bg-gray-300">取消 Cancel</button>
                       </div>
                   </div>

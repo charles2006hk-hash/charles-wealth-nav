@@ -3818,8 +3818,20 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
         });
 
         properties.forEach((prop: any) => {
-            if (prop.mortgageAmount > 0) {
-                list.push({ id: `auto_prop_${prop.id}`, title: `${prop.name} 按揭供款`, amount: prop.mortgageAmount, dueDay: 15, category: 'Mortgage Payment (按揭供款)', member: prop.owner || 'Family', merchant: prop.bank, paymentMethod: 'Autopay', note: `物業按揭`, type: 'Auto' });
+            // 💡 新增防呆：只有在「非賣出」狀態下，才自動生成按揭供款提醒
+            if (prop.mortgageAmount > 0 && prop.status !== 'Sold') {
+                list.push({ 
+                    id: `auto_prop_${prop.id}`, 
+                    title: `${prop.name} 按揭供款`, 
+                    amount: prop.mortgageAmount, 
+                    dueDay: 15, 
+                    category: 'Mortgage Payment (按揭供款)', 
+                    member: prop.owner || 'Family', 
+                    merchant: prop.bank, 
+                    paymentMethod: 'Autopay', 
+                    note: `物業按揭`, 
+                    type: 'Auto' 
+                });
             }
         });
 

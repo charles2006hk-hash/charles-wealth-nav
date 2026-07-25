@@ -3787,10 +3787,10 @@ const SuperAdminDashboard = () => {
     );
 };
 
-// --- 🌟 旗艦版：每月固定開銷與提醒 (Reminders) ---
-const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transactions, setModalMode, setEditingReminder, deleteItem, currentFamilyId }: any) => {
+// --- 🌟 終極版：每月固定開銷與提醒 (Reminders) ---
+const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transactions, setModalMode, setEditingReminder, setEditingBankLoan, setEditingProp, deleteItem, currentFamilyId }: any) => {
     
-    // ⏳ 時光機狀態 (預設為本月)
+    // ⏳ 時光機狀態
     const [viewYear, setViewYear] = useState(new Date().getFullYear());
     const [viewMonth, setViewMonth] = useState(new Date().getMonth() + 1);
     
@@ -3800,31 +3800,29 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
     // 💰 繳費櫃台狀態
     const [payConfig, setPayConfig] = useState<any>(null);
 
-    // 智能整合並判斷「當前檢視月份」是否已繳
+    // 智能整合
     const allReminders = useMemo(() => {
         const list: any[] = [];
         
-        // 1. 處理手動提醒 (判斷頻率)
         scheduledExpenses.forEach((item: any) => {
             const freq = item.frequency || 'Monthly';
-            if (freq === 'Annually' && item.dueMonth !== viewMonth) return; // 年繳：只在該月顯示
-            if (freq === 'Quarterly' && (viewMonth % 3 !== (item.dueMonth || 1) % 3)) return; // 季繳：每3個月顯示
+            if (freq === 'Annually' && item.dueMonth !== viewMonth) return; 
+            if (freq === 'Quarterly' && (viewMonth % 3 !== (item.dueMonth || 1) % 3)) return; 
             list.push({ ...item, type: 'Manual' });
         });
 
-        // 2. 處理自動貸款/按揭 (預設每月)
         bankLoans.forEach((loan: any) => {
             if (loan.status === 'Active') {
                 list.push({ id: `auto_loan_${loan.id}`, title: `${loan.bankName} (${loan.purpose})`, amount: loan.monthlyPayment, dueDay: new Date(loan.startDate).getDate(), category: 'Mortgage Payment (按揭供款)', member: 'Family', merchant: loan.bankName, paymentMethod: 'Autopay', note: '系統自動抓取分期貸款', type: 'Auto' });
             }
         });
+
         properties.forEach((prop: any) => {
             if (prop.mortgageAmount > 0) {
                 list.push({ id: `auto_prop_${prop.id}`, title: `${prop.name} 按揭供款`, amount: prop.mortgageAmount, dueDay: 15, category: 'Mortgage Payment (按揭供款)', member: prop.owner || 'Family', merchant: prop.bank, paymentMethod: 'Autopay', note: `物業按揭`, type: 'Auto' });
             }
         });
 
-        // 3. 偵測數據中心，判斷「該月」是否已繳費
         return list.map(item => {
             const isPaid = transactions.some((t: any) => 
                 t.year === viewYear && 
@@ -3838,24 +3836,20 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
         }).sort((a, b) => a.dueDay - b.dueDay);
     }, [scheduledExpenses, bankLoans, properties, transactions, viewYear, viewMonth]);
 
-    // 數據統計
     const totalMonthly = allReminders.reduce((sum, item) => sum + item.amount, 0);
     const totalPaid = allReminders.filter(i => i.isPaid).reduce((sum, item) => sum + item.amount, 0);
     const totalUnpaid = totalMonthly - totalPaid;
     const progressPercent = totalMonthly > 0 ? (totalPaid / totalMonthly) * 100 : 0;
     
-    // 計算 Autopay 總額與水位
     const totalAutopay = allReminders.filter(r => r.paymentMethod === 'Autopay').reduce((sum, r) => sum + r.amount, 0);
     const monthsLeft = (reserveBalance !== '' && totalAutopay > 0) ? (Number(reserveBalance) / totalAutopay).toFixed(1) : 0;
 
-    // 執行一鍵繳費 (支援自訂日期與手續費)
     const executePayment = async () => {
         if (!payConfig) return;
         try {
             const batch = writeBatch(db);
             const propId = payConfig.id.startsWith('auto_prop_') ? payConfig.id.replace('auto_prop_', '') : '';
             
-            // 1. 寫入主金額
             const txRef = doc(collection(db, "transactions"));
             batch.set(txRef, {
                 date: payConfig.payDate, amount: Number(payConfig.actualAmount),
@@ -3865,12 +3859,11 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
                 familyId: currentFamilyId, propertyId: propId
             });
 
-            // 2. 寫入手續費 (如果有)
             if (Number(payConfig.handlingFee) > 0) {
                 const feeRef = doc(collection(db, "transactions"));
                 batch.set(feeRef, {
                     date: payConfig.payDate, amount: Number(payConfig.handlingFee),
-                    merchant: payConfig.merchant || payConfig.title, category: 'Other (其他)', // 或自訂手續費類別
+                    merchant: payConfig.merchant || payConfig.title, category: 'Other (其他)', 
                     member: payConfig.member, note: `[手續費] ${payConfig.title}`,
                     year: new Date(payConfig.payDate).getFullYear(), month: new Date(payConfig.payDate).getMonth() + 1,
                     familyId: currentFamilyId, propertyId: propId
@@ -3883,21 +3876,39 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
         } catch (e) { alert('繳費失敗: ' + e); }
     };
 
+    // 🖨️ PDF 導出邏輯
+    const handlePrintReminders = () => {
+         const printContent = document.getElementById('reminders-report-print');
+         if (!printContent) {
+             alert('系統找不到報表元素，請重新載入網頁。');
+             return;
+         }
+         const clone = printContent.cloneNode(true) as HTMLElement;
+         clone.classList.remove('hidden');
+         const wrapper = document.createElement('div');
+         wrapper.id = 'print-clone-root';
+         wrapper.appendChild(clone);
+         document.body.appendChild(wrapper);
+         document.body.classList.add('printing-mode');
+         setTimeout(() => {
+             window.print();
+             document.body.classList.remove('printing-mode');
+             if (document.body.contains(wrapper)) document.body.removeChild(wrapper);
+         }, 500); 
+    };
+
     return (
         <div className="space-y-6 animate-in fade-in pb-10 relative">
-            {/* --- 繳費專屬確認視窗 (Modal) --- */}
+            {/* 繳費專屬確認視窗 */}
             {payConfig && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center modal-overlay">
                     <div className="bg-white rounded-xl shadow-2xl p-6 w-[90%] md:w-[400px] animate-in fade-in zoom-in duration-200">
                         <h3 className="font-bold text-lg mb-4 text-blue-800 border-b pb-2">💳 繳費確認櫃台</h3>
                         <p className="text-sm font-bold text-slate-700 mb-4">{payConfig.title}</p>
                         <div className="space-y-4">
-                            <div><label className="text-xs font-bold text-slate-500 mb-1 block">實際扣款日期 (預設為該月到期日)</label><input type="date" className="border w-full p-2 rounded text-sm font-mono" value={payConfig.payDate} onChange={e=>setPayConfig({...payConfig, payDate: e.target.value})} /></div>
+                            <div><label className="text-xs font-bold text-slate-500 mb-1 block">實際扣款日期</label><input type="date" className="border w-full p-2 rounded text-sm font-mono" value={payConfig.payDate} onChange={e=>setPayConfig({...payConfig, payDate: e.target.value})} /></div>
                             <div><label className="text-xs font-bold text-slate-500 mb-1 block">實繳金額 (本金/保費)</label><input type="number" className="border w-full p-2 rounded text-sm font-mono text-red-600 font-bold" value={payConfig.actualAmount} onChange={e=>setPayConfig({...payConfig, actualAmount: Number(e.target.value)})} /></div>
-                            <div>
-                                <label className="text-xs font-bold text-slate-500 mb-1 block flex items-center gap-1">額外手續費 (Handling Fee) <span className="text-[10px] text-slate-400 font-normal">將分拆為獨立紀錄</span></label>
-                                <input type="number" className="border w-full p-2 rounded text-sm font-mono text-orange-600 font-bold" placeholder="0" value={payConfig.handlingFee || ''} onChange={e=>setPayConfig({...payConfig, handlingFee: Number(e.target.value)})} />
-                            </div>
+                            <div><label className="text-xs font-bold text-slate-500 mb-1 block flex items-center gap-1">額外手續費 (Handling Fee) <span className="text-[10px] text-slate-400 font-normal">將分拆獨立入帳</span></label><input type="number" className="border w-full p-2 rounded text-sm font-mono text-orange-600 font-bold" placeholder="0" value={payConfig.handlingFee || ''} onChange={e=>setPayConfig({...payConfig, handlingFee: Number(e.target.value)})} /></div>
                         </div>
                         <div className="flex gap-2 mt-6">
                             <button onClick={executePayment} className="flex-1 bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700 shadow">確認入帳</button>
@@ -3921,6 +3932,8 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
                 </div>
                 <div className="flex gap-2">
                     <button onClick={() => { setEditingReminder({ id: '', title: '', amount: 0, dueDay: 1, frequency: 'Monthly', dueMonth: 1, category: 'Credit Card', member: 'Charles', note: '', paymentMethod: 'Manual' }); setModalMode('reminder'); }} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 shadow-sm flex items-center gap-2"><ICONS.Plus /> 新增提醒</button>
+                    {/* ✅ PDF 導出按鈕確認在這裡 ✅ */}
+                    <button onClick={handlePrintReminders} className="px-4 py-2 bg-slate-800 text-white rounded-lg text-sm font-bold hover:bg-slate-900 shadow-sm flex items-center gap-2"><ICONS.Printer /> 導出 PDF</button>
                 </div>
             </div>
 
@@ -3931,9 +3944,7 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
                         <span>本月繳費進度 {progressPercent.toFixed(0)}%</span>
                         <span>已繳 {formatCurrency(totalPaid)} / 共 {formatCurrency(totalMonthly)}</span>
                     </div>
-                    <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden mb-6">
-                        <div className="bg-emerald-500 h-full transition-all duration-1000" style={{ width: `${progressPercent}%` }}></div>
-                    </div>
+                    <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden mb-6"><div className="bg-emerald-500 h-full transition-all duration-1000" style={{ width: `${progressPercent}%` }}></div></div>
                     <div className="grid grid-cols-3 gap-4">
                         <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-center"><p className="text-[10px] text-slate-500 font-bold mb-1">預估總額</p><p className="text-xl font-bold font-mono">{formatCurrency(totalMonthly)}</p></div>
                         <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-100 text-center"><p className="text-[10px] text-emerald-600 font-bold mb-1">已繳清 (Paid)</p><p className="text-xl font-bold font-mono text-emerald-700">{formatCurrency(totalPaid)}</p></div>
@@ -3941,18 +3952,17 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
                     </div>
                 </div>
 
-                {/* 🏦 水位計算機 */}
                 <div className="bg-indigo-50 p-6 rounded-xl shadow-sm border border-indigo-100 flex flex-col justify-between">
                     <div>
                         <h3 className="font-bold text-indigo-900 flex items-center gap-2 mb-2"><ICONS.Home /> 扣款專戶水位監控</h3>
-                        <p className="text-[10px] text-indigo-600 mb-3">輸入銀行戶口目前餘額，預測還能撐幾個月的自動扣款。</p>
+                        <p className="text-[10px] text-indigo-600 mb-3">輸入戶口餘額，預測能撐幾個月的自動扣款。</p>
                         <div className="relative mb-2">
                             <span className="absolute left-3 top-2 text-indigo-400 font-bold">$</span>
-                            <input type="number" placeholder="輸入戶口餘額..." className="w-full pl-7 pr-3 py-2 rounded border border-indigo-200 font-mono font-bold text-indigo-900 outline-none focus:ring-2 focus:ring-indigo-400" value={reserveBalance} onChange={e=>setReserveBalance(e.target.value ? Number(e.target.value) : '')} />
+                            <input type="number" placeholder="輸入餘額..." className="w-full pl-7 pr-3 py-2 rounded border border-indigo-200 font-mono font-bold text-indigo-900 outline-none focus:ring-2 focus:ring-indigo-400" value={reserveBalance} onChange={e=>setReserveBalance(e.target.value ? Number(e.target.value) : '')} />
                         </div>
                     </div>
                     <div className="bg-white p-3 rounded border border-indigo-100 text-sm">
-                        <div className="flex justify-between mb-1"><span className="text-slate-500 text-xs">本月 Autopay 總需求:</span><span className="font-mono font-bold text-red-500">-{formatCurrency(totalAutopay)}</span></div>
+                        <div className="flex justify-between mb-1"><span className="text-slate-500 text-xs">本月 Autopay 總額:</span><span className="font-mono font-bold text-red-500">-{formatCurrency(totalAutopay)}</span></div>
                         <div className="flex justify-between items-center border-t pt-1 mt-1"><span className="text-indigo-800 font-bold">預估可支撐期數:</span><span className="font-mono font-bold text-lg text-indigo-600">{monthsLeft} 個月</span></div>
                     </div>
                 </div>
@@ -3969,25 +3979,43 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
                                     <div className="flex items-center gap-2 mb-1">
                                         <span className={`font-bold text-lg ${item.isPaid ? 'text-emerald-800 line-through' : 'text-slate-800'}`}>每月 {item.dueDay} 日</span>
                                         {item.paymentMethod === 'Autopay' ? <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-indigo-100 text-indigo-700">自動轉帳</span> : <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-amber-100 text-amber-700">手動繳費</span>}
-                                        {item.frequency !== 'Monthly' && <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-purple-100 text-purple-700">{item.frequency === 'Annually' ? '年繳' : '季繳'}</span>}
+                                        {item.frequency && item.frequency !== 'Monthly' && <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-purple-100 text-purple-700">{item.frequency === 'Annually' ? '年繳' : '季繳'}</span>}
                                     </div>
                                     <h4 className="font-bold text-slate-700 flex items-center gap-2">
                                         {item.title}
-                                        {item.type === 'Manual' && (
-                                            <div className="flex gap-1 ml-2">
-                                                <button onClick={() => { setEditingReminder(item); setModalMode('reminder'); }} className="text-slate-400 hover:text-blue-600" title="編輯提醒"><ICONS.Edit2 /></button>
-                                                <button onClick={() => deleteItem('scheduledExpenses', item.id)} className="text-slate-400 hover:text-red-500"><ICONS.Trash /></button>
-                                            </div>
-                                        )}
-                                        {item.type === 'Auto' && <span className="text-xs text-slate-400 font-normal italic ml-2">(自動連動項目，請至來源修改)</span>}
+                                        
+                                        {/* 👇 智能編輯與刪除按鈕 👇 */}
+                                        <div className="flex gap-1 ml-2">
+                                            <button onClick={() => {
+                                                if (item.type === 'Manual') {
+                                                    setEditingReminder(item); setModalMode('reminder');
+                                                } else if (item.id.startsWith('auto_loan_')) {
+                                                    const l = bankLoans.find((x:any) => x.id === item.id.replace('auto_loan_', ''));
+                                                    if(l) { setEditingBankLoan(l); setModalMode('bankLoan'); }
+                                                } else if (item.id.startsWith('auto_prop_')) {
+                                                    const p = properties.find((x:any) => x.id === item.id.replace('auto_prop_', ''));
+                                                    if(p) { setEditingProp(p); setModalMode('property'); }
+                                                }
+                                            }} className="text-slate-400 hover:text-blue-600" title="編輯此項目"><ICONS.Edit2 /></button>
+
+                                            <button onClick={() => {
+                                                if (item.type === 'Manual') {
+                                                    deleteItem('scheduledExpenses', item.id);
+                                                } else if (item.id.startsWith('auto_loan_')) {
+                                                    if(window.confirm('此為自動連動的「銀行貸款」。\n確定要刪除整筆貸款嗎？')) {
+                                                        deleteItem('bankLoans', item.id.replace('auto_loan_', ''));
+                                                    }
+                                                } else if (item.id.startsWith('auto_prop_')) {
+                                                    alert('此為物業按揭供款。\n若要取消提醒，請點擊「編輯」圖示，並將該物業的「每月供款」設為 0 即可。');
+                                                }
+                                            }} className="text-slate-400 hover:text-red-500" title="刪除此項目"><ICONS.Trash /></button>
+                                        </div>
+                                        {item.type === 'Auto' && <span className="text-[10px] text-slate-400 font-normal italic ml-2">(系統連動)</span>}
                                     </h4>
                                     <div className="text-xs text-slate-500 mt-2 grid grid-cols-1 md:grid-cols-2 gap-1">
-                                        <p>👤 負責人: {item.member}</p>
-                                        <p>🏷 類別: {item.category}</p>
-                                        {item.merchant && <p>🏪 商戶: {item.merchant}</p>}
-                                        {item.accountInfo && <p>💳 帳戶: <span className="font-mono">{item.accountInfo}</span></p>}
-                                        {item.contact && <p className="col-span-full">🔗 聯絡: {item.contact}</p>}
-                                        {item.note && <p className="col-span-full">📝 備註: {item.note}</p>}
+                                        <p>👤 負責人: {item.member}</p><p>🏷 類別: {item.category}</p>
+                                        {item.merchant && <p>🏪 商戶: {item.merchant}</p>}{item.accountInfo && <p>💳 帳戶: <span className="font-mono">{item.accountInfo}</span></p>}
+                                        {item.contact && <p className="col-span-full">🔗 聯絡: {item.contact}</p>}{item.note && <p className="col-span-full">📝 備註: {item.note}</p>}
                                     </div>
                                 </div>
                                 <div className="text-right flex flex-col items-end gap-2 min-w-[140px]">
@@ -4006,6 +4034,42 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
                     {allReminders.length === 0 && <p className="text-slate-400 pl-6 border-dashed border-2 border-slate-200 p-8 rounded-xl text-center">該月份尚無任何提醒事項。</p>}
                 </div>
             </div>
+
+            {/* ✅ 隱藏的 PDF 列印格式：這次絕對把它穩穩包在裡面 ✅ */}
+            <div id="reminders-report-print" className="hidden doc-print-container bg-white w-full text-black font-serif mx-auto p-8 relative">
+                <div className="text-center border-b-2 border-black pb-4 mb-6">
+                    <h1 className="text-2xl font-bold">MONTHLY FIXED EXPENSES REPORT</h1>
+                    <p className="text-sm tracking-widest mt-1">家族每月固定開銷清單 ({viewYear} 年 {viewMonth} 月)</p>
+                </div>
+                <div className="flex justify-between mb-4 text-sm">
+                    <p><span className="font-bold">報告日期:</span> {new Date().toLocaleDateString()}</p>
+                    <p><span className="font-bold">該月總流出:</span> {formatCurrency(totalMonthly)}</p>
+                </div>
+                <table className="w-full border-collapse border border-black text-sm">
+                    <thead className="bg-gray-100">
+                        <tr>
+                            <th className="border border-black p-2 text-center w-12">Day</th>
+                            <th className="border border-black p-2 text-left">Item / Account Details</th>
+                            <th className="border border-black p-2 text-center">Status</th>
+                            <th className="border border-black p-2 text-right w-24">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {allReminders.map((item:any) => (
+                            <tr key={item.id}>
+                                <td className="border border-black p-2 text-center font-bold">{item.dueDay}</td>
+                                <td className="border border-black p-2">
+                                    <span className="font-bold">{item.title}</span> {item.paymentMethod==='Autopay' ? '(Auto)' : '(Man)'}<br/>
+                                    <span className="text-[10px] text-gray-600">{item.merchant} | A/C: {item.accountInfo}</span>
+                                </td>
+                                <td className={`border border-black p-2 text-center font-bold ${item.isPaid ? 'text-green-600' : 'text-red-600'}`}>{item.isPaid ? 'PAID' : 'UNPAID'}</td>
+                                <td className="border border-black p-2 text-right font-mono font-bold">-{formatCurrency(item.amount)}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+            {/* 隱藏 PDF 結束 */}
         </div>
     );
 };
@@ -5376,8 +5440,10 @@ useEffect(() => {
                       transactions={transactions}
                       setModalMode={setModalMode} 
                       setEditingReminder={setEditingReminder}
+                      setEditingBankLoan={setEditingBankLoan} // 👈 加上這行
+                      setEditingProp={setEditingProp}         // 👈 加上這行
                       deleteItem={deleteItem}
-                      currentFamilyId={currentFamilyId} // 👈 必須加上這行
+                      currentFamilyId={currentFamilyId}
                   />
               )}
             

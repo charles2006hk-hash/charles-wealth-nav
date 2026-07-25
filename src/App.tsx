@@ -43,7 +43,7 @@ interface PrivateLoan {
   notes: string;
 }
 
-// 👇 新增：固定支出提醒 👇
+// 👇 升級：固定支出提醒 (加入詳細資料) 👇
 interface ScheduledExpense {
   id: string;
   familyId?: string;
@@ -53,6 +53,10 @@ interface ScheduledExpense {
   category: string;     // e.g., "Credit Card"
   member: string;       // e.g., "Charles"
   note: string;
+  merchant?: string;    // 商戶名稱
+  accountInfo?: string; // 帳戶號碼/資料
+  paymentMethod?: 'Autopay' | 'Manual'; // 自動轉帳或手動繳費
+  contact?: string;     // 網址、App名稱或電話
 }
 
 // --- 銀行分期貸款 (負債與槓桿) ---
@@ -3781,39 +3785,46 @@ const SuperAdminDashboard = () => {
     );
 };
 
-// --- 🌟 全新模塊：每月固定開銷與提醒 (Reminders) ---
-const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties }: any) => {
+// --- 🌟 旗艦版：每月固定開銷與提醒 (Reminders) ---
+const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transactions, setModalMode, setEditingReminder, handlePayReminder, deleteItem }: any) => {
     
-    // 智能整合：手動輸入 + 系統自動生成的固定開銷
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth() + 1;
+
+    // 智能整合並判斷「本月是否已繳」
     const allReminders = useMemo(() => {
         const list: any[] = [];
         
-        // 1. 手動輸入的卡數、保險等
-        scheduledExpenses.forEach((item: any) => {
-            list.push({ ...item, type: 'Manual', icon: 'FileText' });
-        });
-
-        // 2. 自動抓取：大新銀行等分期貸款
+        scheduledExpenses.forEach((item: any) => list.push({ ...item, type: 'Manual' }));
         bankLoans.forEach((loan: any) => {
             if (loan.status === 'Active') {
-                const day = new Date(loan.startDate).getDate();
-                list.push({ id: `auto_loan_${loan.id}`, title: `${loan.bankName} (${loan.purpose})`, amount: loan.monthlyPayment, dueDay: day, category: 'Bank Loan', member: 'Family', note: '系統自動抓取', type: 'Auto', icon: 'Home' });
+                list.push({ id: `auto_loan_${loan.id}`, title: `${loan.bankName} (${loan.purpose})`, amount: loan.monthlyPayment, dueDay: new Date(loan.startDate).getDate(), category: 'Mortgage Payment (按揭供款)', member: 'Family', merchant: loan.bankName, paymentMethod: 'Autopay', note: '系統自動抓取分期貸款', type: 'Auto' });
             }
         });
-
-        // 3. 自動抓取：物業按揭供款
         properties.forEach((prop: any) => {
             if (prop.mortgageAmount > 0) {
-                list.push({ id: `auto_prop_${prop.id}`, title: `${prop.name} 按揭供款`, amount: prop.mortgageAmount, dueDay: 15, // 假設按揭預設15號
-                category: 'Mortgage', member: prop.owner || 'Family', note: `銀行: ${prop.bank}`, type: 'Auto', icon: 'Home' });
+                list.push({ id: `auto_prop_${prop.id}`, title: `${prop.name} 按揭供款`, amount: prop.mortgageAmount, dueDay: 15, category: 'Mortgage Payment (按揭供款)', member: prop.owner || 'Family', merchant: prop.bank, paymentMethod: 'Autopay', note: `物業按揭`, type: 'Auto' });
             }
         });
 
-        // 依照日期排序 (1號 -> 31號)
-        return list.sort((a, b) => a.dueDay - b.dueDay);
-    }, [scheduledExpenses, bankLoans, properties]);
+        // 偵測數據中心，判斷本月是否已繳費
+        return list.map(item => {
+            const isPaid = transactions.some((t: any) => 
+                t.year === currentYear && 
+                t.month === currentMonth && 
+                (
+                    (t.merchant || '').toLowerCase().includes((item.merchant || item.title).toLowerCase()) || 
+                    (item.merchant && (t.merchant || '').toLowerCase().includes(item.merchant.toLowerCase()))
+                )
+            );
+            return { ...item, isPaid };
+        }).sort((a, b) => a.dueDay - b.dueDay);
+    }, [scheduledExpenses, bankLoans, properties, transactions, currentYear, currentMonth]);
 
-    const totalMonthlyFixed = allReminders.reduce((sum, item) => sum + item.amount, 0);
+    const totalMonthly = allReminders.reduce((sum, item) => sum + item.amount, 0);
+    const totalPaid = allReminders.filter(i => i.isPaid).reduce((sum, item) => sum + item.amount, 0);
+    const totalUnpaid = totalMonthly - totalPaid;
+    const progressPercent = totalMonthly > 0 ? (totalPaid / totalMonthly) * 100 : 0;
 
     const handlePrintReminders = () => {
          const printContent = document.getElementById('reminders-report-print');
@@ -3825,55 +3836,79 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties }: any) =
          wrapper.appendChild(clone);
          document.body.appendChild(wrapper);
          document.body.classList.add('printing-mode');
-         setTimeout(() => {
-             window.print();
-             document.body.classList.remove('printing-mode');
-             if (document.body.contains(wrapper)) document.body.removeChild(wrapper);
-         }, 500); 
+         setTimeout(() => { window.print(); document.body.classList.remove('printing-mode'); if (document.body.contains(wrapper)) document.body.removeChild(wrapper); }, 500); 
     };
 
     return (
         <div className="space-y-6 animate-in fade-in pb-10">
             <div className="flex flex-wrap justify-between items-center bg-white p-6 rounded-xl shadow-sm border border-slate-200 gap-4">
                 <div>
-                    <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">📅 每月固定開銷與提醒 (Monthly Obligations)</h2>
-                    <p className="text-slate-500 text-sm mt-1">系統已為您自動整合所有按揭、貸款與手動設定的帳單。</p>
+                    <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">📅 本月固定開銷與提醒</h2>
+                    <p className="text-slate-500 text-sm mt-1">{currentYear} 年 {currentMonth} 月繳費進度追蹤</p>
                 </div>
                 <div className="flex gap-2">
-                    <button className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 shadow-sm flex items-center gap-2">
-                        <ICONS.Plus /> 新增自訂提醒
+                    <button onClick={() => { setEditingReminder({ id: '', title: '', amount: 0, dueDay: 1, category: 'Credit Card', member: 'Charles', note: '', paymentMethod: 'Manual' }); setModalMode('reminder'); }} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 shadow-sm flex items-center gap-2">
+                        <ICONS.Plus /> 新增提醒 (卡數/保險)
                     </button>
-                    <button onClick={handlePrintReminders} className="px-4 py-2 bg-slate-800 text-white rounded-lg text-sm font-bold hover:bg-slate-900 shadow-sm flex items-center gap-2">
-                        <ICONS.Printer /> 導出 PDF 報表
-                    </button>
+                    <button onClick={handlePrintReminders} className="px-4 py-2 bg-slate-800 text-white rounded-lg text-sm font-bold hover:bg-slate-900 shadow-sm flex items-center gap-2"><ICONS.Printer /> 導出 PDF</button>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-red-50 p-6 rounded-xl border border-red-100 shadow-sm">
-                    <p className="text-sm text-red-600 font-bold mb-1">每月預估總流出 (Total Fixed Outflow)</p>
-                    <p className="text-3xl font-bold font-mono text-red-700">-{formatCurrency(totalMonthlyFixed)}</p>
+            {/* 進度條與三大數據 */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <div className="flex justify-between text-sm font-bold text-slate-600 mb-2">
+                    <span>總進度 {progressPercent.toFixed(0)}%</span>
+                    <span>已繳 {formatCurrency(totalPaid)} / 共 {formatCurrency(totalMonthly)}</span>
+                </div>
+                <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden mb-6">
+                    <div className="bg-emerald-500 h-full transition-all duration-1000" style={{ width: `${progressPercent}%` }}></div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center"><p className="text-xs text-slate-500 font-bold mb-1">本月預估總額</p><p className="text-2xl font-bold font-mono">{formatCurrency(totalMonthly)}</p></div>
+                    <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 text-center"><p className="text-xs text-emerald-600 font-bold mb-1">已繳清 (Paid)</p><p className="text-2xl font-bold font-mono text-emerald-700">{formatCurrency(totalPaid)}</p></div>
+                    <div className="bg-red-50 p-4 rounded-xl border border-red-100 text-center"><p className="text-xs text-red-600 font-bold mb-1">尚欠款 (Unpaid)</p><p className="text-2xl font-bold font-mono text-red-700">{formatCurrency(totalUnpaid)}</p></div>
                 </div>
             </div>
 
+            {/* 詳細時間軸列表 */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden p-6">
                 <div className="relative border-l-2 border-slate-200 ml-4 space-y-6">
-                    {allReminders.map((item) => (
-                        <div key={item.id} className="relative pl-6">
-                            <div className={`absolute -left-[9px] top-2 w-4 h-4 rounded-full border-4 border-white shadow-sm ${item.type === 'Auto' ? 'bg-indigo-500' : 'bg-orange-500'}`}></div>
-                            <div className={`p-4 rounded-lg border ${item.type === 'Auto' ? 'bg-indigo-50/50 border-indigo-100' : 'bg-white border-slate-200 shadow-sm'} flex flex-wrap justify-between items-center gap-4`}>
-                                <div>
+                    {allReminders.map((item: any) => (
+                        <div key={item.id} className={`relative pl-6 transition-opacity ${item.isPaid ? 'opacity-60' : 'opacity-100'}`}>
+                            <div className={`absolute -left-[9px] top-2 w-4 h-4 rounded-full border-4 border-white shadow-sm ${item.isPaid ? 'bg-emerald-500' : 'bg-orange-500 animate-pulse'}`}></div>
+                            <div className={`p-4 rounded-lg border ${item.isPaid ? 'bg-emerald-50/30 border-emerald-100' : 'bg-white border-slate-200 shadow-sm'} flex flex-col md:flex-row justify-between items-start md:items-center gap-4`}>
+                                <div className="flex-1">
                                     <div className="flex items-center gap-2 mb-1">
-                                        <span className="font-bold text-lg text-slate-800">每月 {item.dueDay} 日</span>
-                                        <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${item.type === 'Auto' ? 'bg-indigo-100 text-indigo-700' : 'bg-orange-100 text-orange-700'}`}>
-                                            {item.type === 'Auto' ? '系統連動' : '手動提醒'}
-                                        </span>
+                                        <span className={`font-bold text-lg ${item.isPaid ? 'text-emerald-800 line-through' : 'text-slate-800'}`}>每月 {item.dueDay} 日</span>
+                                        {item.paymentMethod === 'Autopay' ? <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-indigo-100 text-indigo-700">自動轉帳 Autopay</span> : <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-amber-100 text-amber-700">人手繳費 Manual</span>}
+                                        {item.type === 'Auto' && <span className="text-[10px] px-2 py-0.5 rounded bg-slate-100 text-slate-500 border">系統連動</span>}
                                     </div>
-                                    <h4 className="font-bold text-slate-700">{item.title}</h4>
-                                    <p className="text-xs text-slate-500">{item.category} | 負責人: {item.member} | {item.note}</p>
+                                    <h4 className="font-bold text-slate-700 flex items-center gap-2">
+                                        {item.title}
+                                        {item.type === 'Manual' && (
+                                            <div className="flex gap-1 ml-2">
+                                                <button onClick={() => { setEditingReminder(item); setModalMode('reminder'); }} className="text-slate-400 hover:text-blue-600"><ICONS.Edit2 /></button>
+                                                <button onClick={() => deleteItem('scheduledExpenses', item.id)} className="text-slate-400 hover:text-red-500"><ICONS.Trash /></button>
+                                            </div>
+                                        )}
+                                    </h4>
+                                    <div className="text-xs text-slate-500 mt-2 space-y-0.5">
+                                        <p>👤 負責人: {item.member} | 🏷 類別: {item.category}</p>
+                                        {item.merchant && <p>🏪 商戶: {item.merchant}</p>}
+                                        {item.accountInfo && <p>💳 帳戶: <span className="font-mono">{item.accountInfo}</span></p>}
+                                        {item.contact && <p>🔗 繳費連結/聯絡: {item.contact}</p>}
+                                        {item.note && <p>📝 備註: {item.note}</p>}
+                                    </div>
                                 </div>
-                                <div className="text-right">
-                                    <p className="font-mono font-bold text-xl text-red-600">-{formatCurrency(item.amount)}</p>
+                                <div className="text-right flex flex-col items-end gap-2 min-w-[120px]">
+                                    <p className={`font-mono font-bold text-xl ${item.isPaid ? 'text-emerald-600' : 'text-red-600'}`}>${formatCurrency(item.amount)}</p>
+                                    {item.isPaid ? (
+                                        <span className="text-xs font-bold text-emerald-600 flex items-center gap-1"><ICONS.ShieldCheck /> 本月已結清</span>
+                                    ) : (
+                                        <button onClick={() => handlePayReminder(item)} className="bg-blue-600 text-white text-xs px-4 py-2 rounded-lg font-bold shadow hover:bg-blue-700 transition-colors flex items-center gap-1 w-full justify-center">
+                                            一鍵繳費入帳
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -3886,37 +3921,35 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties }: any) =
             <div id="reminders-report-print" className="hidden doc-print-container bg-white w-full text-black font-serif mx-auto p-8 relative">
                 <div className="text-center border-b-2 border-black pb-4 mb-6">
                     <h1 className="text-2xl font-bold">MONTHLY FIXED EXPENSES REPORT</h1>
-                    <p className="text-sm tracking-widest mt-1">家族每月固定開銷清單</p>
+                    <p className="text-sm tracking-widest mt-1">家族每月固定開銷清單 ({currentYear} 年 {currentMonth} 月)</p>
                 </div>
                 <div className="flex justify-between mb-4 text-sm">
                     <p><span className="font-bold">報告日期:</span> {new Date().toLocaleDateString()}</p>
-                    <p><span className="font-bold">預估總流出:</span> {formatCurrency(totalMonthlyFixed)}</p>
+                    <p><span className="font-bold">預估總流出:</span> {formatCurrency(totalMonthly)}</p>
                 </div>
                 <table className="w-full border-collapse border border-black text-sm">
                     <thead className="bg-gray-100">
                         <tr>
-                            <th className="border border-black p-2 text-center w-16">日期</th>
-                            <th className="border border-black p-2 text-left">項目 (Description)</th>
-                            <th className="border border-black p-2 text-left">類別 (Category)</th>
-                            <th className="border border-black p-2 text-right w-32">金額 (Amount)</th>
+                            <th className="border border-black p-2 text-center w-12">Day</th>
+                            <th className="border border-black p-2 text-left">Item / Account Details</th>
+                            <th className="border border-black p-2 text-center">Status</th>
+                            <th className="border border-black p-2 text-right w-24">Amount</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {allReminders.map(item => (
+                        {allReminders.map((item:any) => (
                             <tr key={item.id}>
-                                <td className="border border-black p-2 text-center font-bold">每 {item.dueDay} 日</td>
-                                <td className="border border-black p-2">{item.title} <br/><span className="text-[10px] text-gray-500">{item.note}</span></td>
-                                <td className="border border-black p-2">{item.category}</td>
-                                <td className="border border-black p-2 text-right font-mono font-bold text-red-600">-{formatCurrency(item.amount)}</td>
+                                <td className="border border-black p-2 text-center font-bold">{item.dueDay}</td>
+                                <td className="border border-black p-2">
+                                    <span className="font-bold">{item.title}</span> {item.paymentMethod==='Autopay' ? '(Auto)' : '(Man)'}<br/>
+                                    <span className="text-[10px] text-gray-600">{item.merchant} | A/C: {item.accountInfo}</span>
+                                </td>
+                                <td className={`border border-black p-2 text-center font-bold ${item.isPaid ? 'text-green-600' : 'text-red-600'}`}>{item.isPaid ? 'PAID' : 'UNPAID'}</td>
+                                <td className="border border-black p-2 text-right font-mono font-bold">-{formatCurrency(item.amount)}</td>
                             </tr>
                         ))}
-                        <tr className="bg-gray-50">
-                            <td colSpan={3} className="border border-black p-2 text-right font-bold">每月固定資金需求總計 (Total):</td>
-                            <td className="border border-black p-2 text-right font-mono font-bold text-lg">{formatCurrency(totalMonthlyFixed)}</td>
-                        </tr>
                     </tbody>
                 </table>
-                <div className="mt-12 text-center text-xs text-gray-500">Generated by Charles Wealth Nav System</div>
             </div>
         </div>
     );
@@ -3991,7 +4024,8 @@ const App: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState('overview');
   const [propertyViewId, setPropertyViewId] = useState<string | null>(null);
-  const [modalMode, setModalMode] = useState<'none' | 'transaction' | 'property' | 'doc' | 'lease' | 'loan' | 'bankLoan'>('none');
+  const [modalMode, setModalMode] = useState<'none' | 'transaction' | 'property' | 'doc' | 'lease' | 'loan' | 'bankLoan' | 'reminder'>('none');
+  const [editingReminder, setEditingReminder] = useState<ScheduledExpense | null>(null); // 👈 加入這行狀態
   const [editingLease, setEditingLease] = useState<Lease | null>(null);
 
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
@@ -4497,6 +4531,46 @@ useEffect(() => {
         }
         setModalMode('none');
       } catch(e) { alert("儲存銀行貸款失敗: " + e); }
+  };
+
+  // 👇 1. 儲存/更新自訂提醒 👇
+  const handleSaveReminder = async () => {
+      if (!editingReminder) return;
+      try {
+          const reminderData = {
+              ...editingReminder,
+              amount: Number(editingReminder.amount),
+              dueDay: Number(editingReminder.dueDay),
+              familyId: currentFamilyId
+          };
+          if (editingReminder.id) {
+              await setDoc(doc(db, "scheduledExpenses", editingReminder.id), reminderData);
+          } else {
+              await addDoc(collection(db, "scheduledExpenses"), reminderData);
+          }
+          setModalMode('none');
+      } catch (e) { alert("儲存提醒失敗: " + e); }
+  };
+
+  // 👇 2. 一鍵繳費並同步至數據中心 👇
+  const handlePayReminder = async (item: any) => {
+      if (!window.confirm(`確定要繳交【${item.title}】(${formatCurrency(item.amount)}) 並記錄到數據中心嗎？`)) return;
+      try {
+          const txData = {
+              date: new Date().toISOString().split('T')[0],
+              amount: item.amount,
+              merchant: item.merchant || item.title,
+              category: item.category,
+              member: item.member,
+              note: `[繳費] ${item.accountInfo || ''} ${item.note || ''}`.trim(),
+              year: new Date().getFullYear(),
+              month: new Date().getMonth() + 1,
+              familyId: currentFamilyId,
+              propertyId: item.id.startsWith('auto_prop_') ? item.id.replace('auto_prop_', '') : ''
+          };
+          await addDoc(collection(db, "transactions"), txData);
+          alert('✅ 繳費成功，已同步記錄至數據中心！');
+      } catch (e) { alert('繳費失敗: ' + e); }
   };
   
   const handleSelectProperty = async (id: string) => {
@@ -5282,7 +5356,11 @@ useEffect(() => {
                       scheduledExpenses={scheduledExpenses} 
                       bankLoans={bankLoans} 
                       properties={properties} 
+                      transactions={transactions}
                       setModalMode={setModalMode} 
+                      setEditingReminder={setEditingReminder}
+                      handlePayReminder={handlePayReminder}
+                      deleteItem={deleteItem}
                   />
               )}
             
@@ -5860,5 +5938,53 @@ useEffect(() => {
       </div>
   );
 };
+
+{/* --- 4. 自訂提醒編輯視窗 (Reminder Modal) --- */}
+          {modalMode === 'reminder' && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
+                  <div className="bg-white rounded-xl shadow-2xl p-6 w-[90%] md:w-[600px] animate-in fade-in zoom-in duration-200">
+                      <h3 className="font-bold text-xl mb-6 flex items-center gap-2"><ICONS.FileText /> {editingReminder?.id ? '編輯提醒事項' : '新增提醒事項'}</h3>
+                      <div className="space-y-4">
+                          <div className="grid grid-cols-2 gap-4">
+                              <div><label className="text-xs font-bold text-slate-500 mb-1 block">自訂標題 Title</label><input className="border w-full p-2 rounded text-sm" placeholder="例如: 渣打 Visa 卡數" value={editingReminder?.title || ''} onChange={e => setEditingReminder({...editingReminder, title: e.target.value} as any)} /></div>
+                              <div><label className="text-xs font-bold text-slate-500 mb-1 block">商戶機構 Merchant</label><input className="border w-full p-2 rounded text-sm" placeholder="例如: Standard Chartered" value={editingReminder?.merchant || ''} onChange={e => setEditingReminder({...editingReminder, merchant: e.target.value} as any)} /></div>
+                          </div>
+                          
+                          <div className="grid grid-cols-3 gap-4">
+                              <div><label className="text-xs font-bold text-slate-500 mb-1 block">金額 Amount</label><input type="number" className="border w-full p-2 rounded text-sm font-mono text-red-600 font-bold" value={editingReminder?.amount || ''} onChange={e => setEditingReminder({...editingReminder, amount: Number(e.target.value)} as any)} /></div>
+                              <div><label className="text-xs font-bold text-slate-500 mb-1 block">每月幾號 Due Day</label><input type="number" min="1" max="31" className="border w-full p-2 rounded text-sm font-mono" value={editingReminder?.dueDay || 1} onChange={e => setEditingReminder({...editingReminder, dueDay: Number(e.target.value)} as any)} /></div>
+                              <div><label className="text-xs font-bold text-slate-500 mb-1 block">繳費方式 Method</label><select className="border w-full p-2 rounded text-sm" value={editingReminder?.paymentMethod || 'Manual'} onChange={e => setEditingReminder({...editingReminder, paymentMethod: e.target.value} as any)}><option value="Manual">人手繳費 (Manual)</option><option value="Autopay">自動轉帳 (Autopay)</option></select></div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                  <label className="text-xs font-bold text-slate-500 mb-1 block">類別 Category</label>
+                                  <select className="border w-full p-2 rounded text-sm" value={editingReminder?.category} onChange={e=>setEditingReminder({...editingReminder, category: e.target.value} as any)}>
+                                      {(settings.categories || []).map((c:any) => <option key={c.name} value={c.name}>{c.name}</option>)}
+                                  </select>
+                              </div>
+                              <div>
+                                  <label className="text-xs font-bold text-slate-500 mb-1 block">負責成員 Member</label>
+                                  <select className="border w-full p-2 rounded text-sm" value={editingReminder?.member} onChange={e=>setEditingReminder({...editingReminder, member: e.target.value} as any)}>
+                                      {(settings?.members || []).map((m: string) => <option key={m} value={m}>{m}</option>)}
+                                  </select>
+                              </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
+                              <div><label className="text-xs font-bold text-slate-500 mb-1 block">帳戶資料 Account Info</label><input className="border w-full p-2 rounded text-sm font-mono" placeholder="卡號 / 帳號 / 保單號" value={editingReminder?.accountInfo || ''} onChange={e => setEditingReminder({...editingReminder, accountInfo: e.target.value} as any)} /></div>
+                              <div><label className="text-xs font-bold text-slate-500 mb-1 block">繳費連結/聯絡 Contact</label><input className="border w-full p-2 rounded text-sm" placeholder="網站網址 / App名稱" value={editingReminder?.contact || ''} onChange={e => setEditingReminder({...editingReminder, contact: e.target.value} as any)} /></div>
+                          </div>
+
+                          <div><label className="text-xs font-bold text-slate-500 mb-1 block">備註 Notes</label><textarea rows={2} className="border w-full p-2 rounded text-sm" value={editingReminder?.note || ''} onChange={e => setEditingReminder({...editingReminder, note: e.target.value} as any)} /></div>
+                      </div>
+                      
+                      <div className="flex gap-2 mt-6">
+                          <button onClick={handleSaveReminder} className="flex-1 bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700">儲存 Save</button>
+                          <button onClick={() => setModalMode('none')} className="flex-1 bg-gray-200 p-2 rounded font-bold hover:bg-gray-300">取消 Cancel</button>
+                      </div>
+                  </div>
+              </div>
+          )}
 
 export default App;

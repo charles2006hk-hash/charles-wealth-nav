@@ -43,6 +43,18 @@ interface PrivateLoan {
   notes: string;
 }
 
+// 👇 新增：固定支出提醒 👇
+interface ScheduledExpense {
+  id: string;
+  familyId?: string;
+  title: string;        // e.g., "渣打 Visa 卡數"
+  amount: number;       // e.g., 5000
+  dueDay: number;       // 每月幾號 (1-31)
+  category: string;     // e.g., "Credit Card"
+  member: string;       // e.g., "Charles"
+  note: string;
+}
+
 // --- 銀行分期貸款 (負債與槓桿) ---
 interface BankLoan {
   id: string;
@@ -3769,6 +3781,147 @@ const SuperAdminDashboard = () => {
     );
 };
 
+// --- 🌟 全新模塊：每月固定開銷與提醒 (Reminders) ---
+const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, setModalMode }: any) => {
+    
+    // 智能整合：手動輸入 + 系統自動生成的固定開銷
+    const allReminders = useMemo(() => {
+        const list: any[] = [];
+        
+        // 1. 手動輸入的卡數、保險等
+        scheduledExpenses.forEach((item: any) => {
+            list.push({ ...item, type: 'Manual', icon: 'FileText' });
+        });
+
+        // 2. 自動抓取：大新銀行等分期貸款
+        bankLoans.forEach((loan: any) => {
+            if (loan.status === 'Active') {
+                const day = new Date(loan.startDate).getDate();
+                list.push({ id: `auto_loan_${loan.id}`, title: `${loan.bankName} (${loan.purpose})`, amount: loan.monthlyPayment, dueDay: day, category: 'Bank Loan', member: 'Family', note: '系統自動抓取', type: 'Auto', icon: 'Home' });
+            }
+        });
+
+        // 3. 自動抓取：物業按揭供款
+        properties.forEach((prop: any) => {
+            if (prop.mortgageAmount > 0) {
+                list.push({ id: `auto_prop_${prop.id}`, title: `${prop.name} 按揭供款`, amount: prop.mortgageAmount, dueDay: 15, // 假設按揭預設15號
+                category: 'Mortgage', member: prop.owner || 'Family', note: `銀行: ${prop.bank}`, type: 'Auto', icon: 'Home' });
+            }
+        });
+
+        // 依照日期排序 (1號 -> 31號)
+        return list.sort((a, b) => a.dueDay - b.dueDay);
+    }, [scheduledExpenses, bankLoans, properties]);
+
+    const totalMonthlyFixed = allReminders.reduce((sum, item) => sum + item.amount, 0);
+
+    const handlePrintReminders = () => {
+         const printContent = document.getElementById('reminders-report-print');
+         if (!printContent) return;
+         const clone = printContent.cloneNode(true) as HTMLElement;
+         clone.classList.remove('hidden');
+         const wrapper = document.createElement('div');
+         wrapper.id = 'print-clone-root';
+         wrapper.appendChild(clone);
+         document.body.appendChild(wrapper);
+         document.body.classList.add('printing-mode');
+         setTimeout(() => {
+             window.print();
+             document.body.classList.remove('printing-mode');
+             if (document.body.contains(wrapper)) document.body.removeChild(wrapper);
+         }, 500); 
+    };
+
+    return (
+        <div className="space-y-6 animate-in fade-in pb-10">
+            <div className="flex flex-wrap justify-between items-center bg-white p-6 rounded-xl shadow-sm border border-slate-200 gap-4">
+                <div>
+                    <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">📅 每月固定開銷與提醒 (Monthly Obligations)</h2>
+                    <p className="text-slate-500 text-sm mt-1">系統已為您自動整合所有按揭、貸款與手動設定的帳單。</p>
+                </div>
+                <div className="flex gap-2">
+                    <button className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 shadow-sm flex items-center gap-2">
+                        <ICONS.Plus /> 新增自訂提醒
+                    </button>
+                    <button onClick={handlePrintReminders} className="px-4 py-2 bg-slate-800 text-white rounded-lg text-sm font-bold hover:bg-slate-900 shadow-sm flex items-center gap-2">
+                        <ICONS.Printer /> 導出 PDF 報表
+                    </button>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-red-50 p-6 rounded-xl border border-red-100 shadow-sm">
+                    <p className="text-sm text-red-600 font-bold mb-1">每月預估總流出 (Total Fixed Outflow)</p>
+                    <p className="text-3xl font-bold font-mono text-red-700">-{formatCurrency(totalMonthlyFixed)}</p>
+                </div>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden p-6">
+                <div className="relative border-l-2 border-slate-200 ml-4 space-y-6">
+                    {allReminders.map((item, idx) => (
+                        <div key={item.id} className="relative pl-6">
+                            <div className={`absolute -left-[9px] top-2 w-4 h-4 rounded-full border-4 border-white shadow-sm ${item.type === 'Auto' ? 'bg-indigo-500' : 'bg-orange-500'}`}></div>
+                            <div className={`p-4 rounded-lg border ${item.type === 'Auto' ? 'bg-indigo-50/50 border-indigo-100' : 'bg-white border-slate-200 shadow-sm'} flex flex-wrap justify-between items-center gap-4`}>
+                                <div>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="font-bold text-lg text-slate-800">每月 {item.dueDay} 日</span>
+                                        <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${item.type === 'Auto' ? 'bg-indigo-100 text-indigo-700' : 'bg-orange-100 text-orange-700'}`}>
+                                            {item.type === 'Auto' ? '系統連動' : '手動提醒'}
+                                        </span>
+                                    </div>
+                                    <h4 className="font-bold text-slate-700">{item.title}</h4>
+                                    <p className="text-xs text-slate-500">{item.category} | 負責人: {item.member} | {item.note}</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="font-mono font-bold text-xl text-red-600">-{formatCurrency(item.amount)}</p>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                    {allReminders.length === 0 && <p className="text-slate-400 pl-6">目前尚無任何每月提醒事項。</p>}
+                </div>
+            </div>
+
+            {/* 隱藏的 PDF 列印格式 */}
+            <div id="reminders-report-print" className="hidden doc-print-container bg-white w-full text-black font-serif mx-auto p-8 relative">
+                <div className="text-center border-b-2 border-black pb-4 mb-6">
+                    <h1 className="text-2xl font-bold">MONTHLY FIXED EXPENSES REPORT</h1>
+                    <p className="text-sm tracking-widest mt-1">家族每月固定開銷清單</p>
+                </div>
+                <div className="flex justify-between mb-4 text-sm">
+                    <p><span className="font-bold">報告日期:</span> {new Date().toLocaleDateString()}</p>
+                    <p><span className="font-bold">預估總流出:</span> {formatCurrency(totalMonthlyFixed)}</p>
+                </div>
+                <table className="w-full border-collapse border border-black text-sm">
+                    <thead className="bg-gray-100">
+                        <tr>
+                            <th className="border border-black p-2 text-center w-16">日期</th>
+                            <th className="border border-black p-2 text-left">項目 (Description)</th>
+                            <th className="border border-black p-2 text-left">類別 (Category)</th>
+                            <th className="border border-black p-2 text-right w-32">金額 (Amount)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {allReminders.map(item => (
+                            <tr key={item.id}>
+                                <td className="border border-black p-2 text-center font-bold">每 {item.dueDay} 日</td>
+                                <td className="border border-black p-2">{item.title} <br/><span className="text-[10px] text-gray-500">{item.note}</span></td>
+                                <td className="border border-black p-2">{item.category}</td>
+                                <td className="border border-black p-2 text-right font-mono font-bold text-red-600">-{formatCurrency(item.amount)}</td>
+                            </tr>
+                        ))}
+                        <tr className="bg-gray-50">
+                            <td colSpan={3} className="border border-black p-2 text-right font-bold">每月固定資金需求總計 (Total):</td>
+                            <td className="border border-black p-2 text-right font-mono font-bold text-lg">{formatCurrency(totalMonthlyFixed)}</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <div className="mt-12 text-center text-xs text-gray-500">Generated by Charles Wealth Nav System</div>
+            </div>
+        </div>
+    );
+};
+
 // --- 9. 主應用程式 ---
 const App: React.FC = () => {
   // --- 新增：用戶與家庭狀態 ---
@@ -3833,7 +3986,7 @@ const App: React.FC = () => {
   const [editingBankLoan, setEditingBankLoan] = useState<BankLoan | null>(null);
   const [eduDB, setEduDB] = useState<Record<string, EduConfig>>(INITIAL_EDUCATION_DB);
   const [settings, setSettings] = useState<AppSettings>(INITIAL_SETTINGS);
-  
+  const [scheduledExpenses, setScheduledExpenses] = useState<ScheduledExpense[]>([]);
   const [dataLoaded, setDataLoaded] = useState(false);
 
   const [activeTab, setActiveTab] = useState('overview');
@@ -3953,6 +4106,10 @@ const getTxType = (catName: string) => {
     // 👇 7. 新增：銀行貸款：只抓當前家庭的 👇
     const unsubBankLoan = onSnapshot(query(collection(db, "bankLoans"), where("familyId", "==", currentFamilyId)), s => 
         setBankLoans(s.docs.map(d => ({...d.data(), id: d.id} as BankLoan))));
+
+    // 👇 8. 新增：固定支出提醒：只抓當前家庭的 👇
+    const unsubExpense = onSnapshot(query(collection(db, "scheduledExpenses"), where("familyId", "==", currentFamilyId)), s => 
+        setScheduledExpenses(s.docs.map(d => ({...d.data(), id: d.id} as ScheduledExpense))));
     
     setDataLoaded(true);
     
@@ -3990,7 +4147,7 @@ const getTxType = (catName: string) => {
     });
 
     setDataLoaded(true);
-   return () => { unsubTx(); unsubProp(); unsubLease(); unsubEdu(); unsubSettings(); unsubLoan(); unsubBankLoan(); };
+   return () => { unsubTx(); unsubProp(); unsubLease(); unsubEdu(); unsubSettings(); unsubLoan(); unsubBankLoan(); unsubExpense(); };
   }, [currentFamilyId]); // 👈 依賴加入 currentFamilyId
 
     
@@ -5008,6 +5165,7 @@ useEffect(() => {
                           {id: 'overview', icon: 'LayoutDashboard', label: '總覽 Overview'},
                           {id: 'dashboard', icon: 'Home', label: '物業管理 Properties'}, 
                           {id: 'data', icon: 'Data', label: '數據中心 Data Hub'},
+                          {id: 'reminders', icon: 'FileText', label: '📅 繳費提醒 Reminders'},
                           // 👇 權限分流開始 👇
                           ...(isSuperAdmin ? [
                               {id: 'insurance', icon: 'Shield', label: '保險庫 Insurance'},
@@ -5119,6 +5277,15 @@ useEffect(() => {
                   <SuperAdminDashboard />
               )}
 
+              {activeTab === 'reminders' && (
+                  <RemindersDashboard 
+                      scheduledExpenses={scheduledExpenses} 
+                      bankLoans={bankLoans} 
+                      properties={properties} 
+                      setModalMode={setModalMode} 
+                  />
+              )}
+            
               {activeTab === 'data' && (
                   <div className="bg-white p-4 md:p-10 rounded-xl shadow animate-in fade-in h-full flex flex-col">
                       <div className="flex flex-wrap justify-between items-center mb-6 gap-4">

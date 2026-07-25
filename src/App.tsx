@@ -5925,21 +5925,8 @@ useEffect(() => {
                   </div>
               </div>
           )}
-        
-          <BulkClassifyModal 
-              isOpen={isBulkModalOpen} 
-              onClose={() => setIsBulkModalOpen(false)} 
-              templateTx={bulkTemplateTx} 
-              transactions={transactions}
-              properties={properties} 
-              onConfirmBatch={handleBatchUpdate} 
-              settings={settings}
-          />
-      </div>
-  );
-};
 
-{/* --- 4. 自訂提醒編輯視窗 (Reminder Modal) --- */}
+        {/* --- 4. 自訂提醒編輯視窗 (Reminder Modal) --- */}
           {modalMode === 'reminder' && (
               <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
                   <div className="bg-white rounded-xl shadow-2xl p-6 w-[90%] md:w-[600px] animate-in fade-in zoom-in duration-200">
@@ -5986,5 +5973,20 @@ useEffect(() => {
                   </div>
               </div>
           )}
+        
+          <BulkClassifyModal 
+              isOpen={isBulkModalOpen} 
+              onClose={() => setIsBulkModalOpen(false)} 
+              templateTx={bulkTemplateTx} 
+              transactions={transactions}
+              properties={properties} 
+              onConfirmBatch={handleBatchUpdate} 
+              settings={settings}
+          />
+      </div>
+  );
+};
+
+
 
 export default App;

@@ -4588,45 +4588,7 @@ useEffect(() => {
       } catch(e) { alert("儲存銀行貸款失敗: " + e); }
   };
 
-  // 👇 1. 儲存/更新自訂提醒 👇
-  const handleSaveReminder = async () => {
-      if (!editingReminder) return;
-      try {
-          const reminderData = {
-              ...editingReminder,
-              amount: Number(editingReminder.amount),
-              dueDay: Number(editingReminder.dueDay),
-              familyId: currentFamilyId
-          };
-          if (editingReminder.id) {
-              await setDoc(doc(db, "scheduledExpenses", editingReminder.id), reminderData);
-          } else {
-              await addDoc(collection(db, "scheduledExpenses"), reminderData);
-          }
-          setModalMode('none');
-      } catch (e) { alert("儲存提醒失敗: " + e); }
-  };
-
-  // 👇 2. 一鍵繳費並同步至數據中心 👇
-  const handlePayReminder = async (item: any) => {
-      if (!window.confirm(`確定要繳交【${item.title}】(${formatCurrency(item.amount)}) 並記錄到數據中心嗎？`)) return;
-      try {
-          const txData = {
-              date: new Date().toISOString().split('T')[0],
-              amount: item.amount,
-              merchant: item.merchant || item.title,
-              category: item.category,
-              member: item.member,
-              note: `[繳費] ${item.accountInfo || ''} ${item.note || ''}`.trim(),
-              year: new Date().getFullYear(),
-              month: new Date().getMonth() + 1,
-              familyId: currentFamilyId,
-              propertyId: item.id.startsWith('auto_prop_') ? item.id.replace('auto_prop_', '') : ''
-          };
-          await addDoc(collection(db, "transactions"), txData);
-          alert('✅ 繳費成功，已同步記錄至數據中心！');
-      } catch (e) { alert('繳費失敗: ' + e); }
-  };
+  
   
   const handleSelectProperty = async (id: string) => {
       // 1. 打開詳情頁

@@ -3782,7 +3782,7 @@ const SuperAdminDashboard = () => {
 };
 
 // --- 🌟 全新模塊：每月固定開銷與提醒 (Reminders) ---
-const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, setModalMode }: any) => {
+const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties }: any) => {
     
     // 智能整合：手動輸入 + 系統自動生成的固定開銷
     const allReminders = useMemo(() => {
@@ -3858,7 +3858,7 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, setModal
 
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden p-6">
                 <div className="relative border-l-2 border-slate-200 ml-4 space-y-6">
-                    {allReminders.map((item, idx) => (
+                    {allReminders.map((item) => (
                         <div key={item.id} className="relative pl-6">
                             <div className={`absolute -left-[9px] top-2 w-4 h-4 rounded-full border-4 border-white shadow-sm ${item.type === 'Auto' ? 'bg-indigo-500' : 'bg-orange-500'}`}></div>
                             <div className={`p-4 rounded-lg border ${item.type === 'Auto' ? 'bg-indigo-50/50 border-indigo-100' : 'bg-white border-slate-200 shadow-sm'} flex flex-wrap justify-between items-center gap-4`}>

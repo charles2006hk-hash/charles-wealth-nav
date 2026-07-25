@@ -3829,8 +3829,6 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
         }).sort((a, b) => a.dueDay - b.dueDay);
     }, [scheduledExpenses, bankLoans, properties, transactions, viewYear, viewMonth]);
 
-    const totalMonthly = allReminders.reduce((sum, item) => sum + item.amount, 0);
-    const totalPaid = allReminders.filter(i => i.isPaid).reduce((sum, item) => sum + item.amount, 0);
 
     // 💸 執行單筆繳費 (同步扣除銀行水位)
     const executePayment = async () => {

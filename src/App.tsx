@@ -1405,6 +1405,35 @@ const PropertyDashboard = ({
                         <input type="range" min="0" max="30" step="5" value={rentDrop} onChange={e=>setRentDrop(Number(e.target.value))} className="w-16 h-1" />
                     </div>
                 </div>
+
+              {/* 壓力測試 (保持不變) */}
+                <div className="flex items-center gap-4 border-l pl-4 hidden xl:flex">
+                    <div className="font-bold text-slate-700 text-xs">壓力測試:</div>
+                    <div className="flex items-center gap-2">
+                        <span className="text-[10px]">Rate +{stressRate}%</span>
+                        <input type="range" min="0" max="5" step="0.5" value={stressRate} onChange={e=>setStressRate(Number(e.target.value))} className="w-16 h-1" />
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span className="text-[10px]">Rent -{rentDrop}%</span>
+                        <input type="range" min="0" max="30" step="5" value={rentDrop} onChange={e=>setRentDrop(Number(e.target.value))} className="w-16 h-1" />
+                    </div>
+                </div>
+
+                {/* 👇 將「新增物業」按鈕加在這裡 👇 */}
+                <button 
+                    onClick={() => { 
+                        setEditingProp({ 
+                            id: '', name: '', type: 'Residential', status: 'Rented', 
+                            valuation: 0, rent: 0, mortgageAmount: 0, interestRate: 0, 
+                            mortgageYears: 0, managementFee: 0, govtRates: 0, govtRent: 0 
+                        }); 
+                        setModalMode('property'); 
+                    }} 
+                    className="ml-auto md:ml-4 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 shadow-sm flex items-center gap-2 whitespace-nowrap"
+                >
+                    <ICONS.Plus /> 新增物業
+                </button>
+            </div>
             </div>
 
             {/* 物業卡片列表 (已套用篩選) */}

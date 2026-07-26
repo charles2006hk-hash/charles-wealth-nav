@@ -3823,7 +3823,7 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
             if (prop.status !== 'Sold') {
                 if (prop.mortgageAmount > 0) list.push({ id: `auto_prop_mortgage_${prop.id}`, title: `${prop.name} 按揭供款`, amount: prop.mortgageAmount, dueDay: 15, category: 'Mortgage Payment (按揭供款)', member: prop.owner || 'Family', paymentMethod: 'Autopay', type: 'Auto' });
                 if (prop.managementFee > 0) list.push({ id: `auto_prop_mgt_${prop.id}`, title: `${prop.name} 管理費`, amount: prop.managementFee, dueDay: 1, category: 'Management Fee (管理費)', member: prop.owner || 'Family', paymentMethod: 'Autopay', type: 'Auto' });
-                if ((prop.govtRates > 0 || prop.govtRent > 0) && [1, 4, 7, 10].includes(viewMonth)) list.push({ id: `auto_prop_rates_${prop.id}`, title: `${prop.name} 差餉地租`, amount: (prop.govtRates || 0) + (prop.govtRent || 0), dueDay: 28, category: 'Govt Rates (差餉)', member: prop.owner || 'Family', paymentMethod: 'Manual', type: 'Auto' });
+                if ((prop.govtRates > 0 || prop.govtRent > 0) && [1, 4, 7, 10].includes(viewMonth)) list.push({ id: `auto_prop_rates_${prop.id}`, title: `${prop.name} 差餉地租`, amount: (prop.govtRates || 0) + (prop.govtRent || 0), dueDay: 28, category: 'Govt Rates (差餉)', member: prop.owner || 'Family', paymentMethod: 'Manual', frequency: 'Quarterly', type: 'Auto' });
             }
         });
         return list.map(item => {
@@ -4054,7 +4054,9 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
                             <div className={`p-4 rounded-lg border ${item.isPaid ? 'bg-emerald-50/30 border-emerald-100' : 'bg-white border-slate-200 shadow-sm'} flex flex-col md:flex-row justify-between items-start md:items-center gap-4`}>
                                 <div className="flex-1">
                                     <div className="flex items-center gap-2 mb-1">
-                                        <span className={`font-bold text-lg ${item.isPaid ? 'text-emerald-800 line-through' : 'text-slate-800'}`}>每月 {item.dueDay} 日</span>
+                                        <span className={`font-bold text-lg ${item.isPaid ? 'text-emerald-800 line-through' : 'text-slate-800'}`}>
+                                            {item.frequency === 'Annually' ? '每年' : item.frequency === 'Quarterly' ? '每季' : '每月'} {item.dueDay} 日
+                                        </span>
                                         {linkedAcc && <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-indigo-100 text-indigo-800">🏦 綁定: {linkedAcc.bankName}</span>}
                                         {item.frequency && item.frequency !== 'Monthly' && <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-blue-100 text-blue-700">{item.frequency === 'Annually' ? '年繳' : '季繳'}</span>}
                                     </div>

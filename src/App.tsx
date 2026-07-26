@@ -3799,14 +3799,17 @@ const SuperAdminDashboard = () => {
     );
 };
 
-// --- 🌟 旗艦版：銀行專戶水位監控與自動扣款中心 ---
+// --- 🌟 旗艦版：銀行專戶水位監控、進度總覽與自動扣款中心 ---
 const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transactions, bankAccounts, setModalMode, setEditingReminder, setEditingBankLoan, setEditingProp, setEditingBankAccount, setTopUpAccount, deleteItem, currentFamilyId }: any) => {
     
     const [viewYear, setViewYear] = useState(new Date().getFullYear());
     const [viewMonth, setViewMonth] = useState(new Date().getMonth() + 1);
+    
+    // 單筆繳費與批量繳費的 Modal 狀態
     const [payConfig, setPayConfig] = useState<any>(null);
+    const [bulkPayConfig, setBulkPayConfig] = useState<any>(null); // 新增：批量扣款的設定
 
-    // 智能整合所有項目
+    // 智能整合
     const allReminders = useMemo(() => {
         const list: any[] = [];
         scheduledExpenses.forEach((item: any) => {
@@ -3815,7 +3818,7 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
             if (freq === 'Quarterly' && (viewMonth % 3 !== (item.dueMonth || 1) % 3)) return; 
             list.push({ ...item, type: 'Manual' });
         });
-        bankLoans.forEach((loan: any) => { if (loan.status === 'Active') list.push({ id: `auto_loan_${loan.id}`, title: `${loan.bankName} (${loan.purpose})`, amount: loan.monthlyPayment, dueDay: new Date(loan.startDate).getDate(), category: 'Mortgage Payment (按揭供款)', member: 'Family', paymentMethod: 'Autopay', type: 'Auto' }); });
+        bankLoans.forEach((loan: any) => { if (loan.status === 'Active') list.push({ id: `auto_loan_${loan.id}`, title: `${loan.bankName} (${loan.purpose})`, amount: loan.monthlyPayment, dueDay: new Date(loan.startDate).getDate() || 1, category: 'Mortgage Payment (按揭供款)', member: 'Family', paymentMethod: 'Autopay', type: 'Auto' }); });
         properties.forEach((prop: any) => {
             if (prop.status !== 'Sold') {
                 if (prop.mortgageAmount > 0) list.push({ id: `auto_prop_mortgage_${prop.id}`, title: `${prop.name} 按揭供款`, amount: prop.mortgageAmount, dueDay: 15, category: 'Mortgage Payment (按揭供款)', member: prop.owner || 'Family', paymentMethod: 'Autopay', type: 'Auto' });
@@ -3829,14 +3832,18 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
         }).sort((a, b) => a.dueDay - b.dueDay);
     }, [scheduledExpenses, bankLoans, properties, transactions, viewYear, viewMonth]);
 
+    // 重新計算總數 (用於進度卡片)
+    const totalMonthly = allReminders.reduce((sum, item) => sum + item.amount, 0);
+    const totalPaid = allReminders.filter(i => i.isPaid).reduce((sum, item) => sum + item.amount, 0);
+    const totalUnpaid = totalMonthly - totalPaid;
+    const progressPercent = totalMonthly > 0 ? (totalPaid / totalMonthly) * 100 : 0;
 
-    // 💸 執行單筆繳費 (同步扣除銀行水位)
+    // 單筆繳費處理 (包含手續費與銀行水位連動)
     const executePayment = async () => {
         if (!payConfig) return;
         try {
             const batch = writeBatch(db);
             const propId = payConfig.id.startsWith('auto_prop_') ? payConfig.id.replace(/auto_prop_[a-z]+_/, '') : '';
-            
             const txRef = doc(collection(db, "transactions"));
             batch.set(txRef, { date: payConfig.payDate, amount: Number(payConfig.actualAmount), merchant: payConfig.merchant || payConfig.title, category: payConfig.category, member: payConfig.member, note: `[繳費] ${payConfig.accountInfo || ''} ${payConfig.note || ''}`.trim(), year: new Date(payConfig.payDate).getFullYear(), month: new Date(payConfig.payDate).getMonth() + 1, familyId: currentFamilyId, propertyId: propId });
 
@@ -3845,48 +3852,65 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
                 batch.set(feeRef, { date: payConfig.payDate, amount: Number(payConfig.handlingFee), merchant: payConfig.merchant || payConfig.title, category: 'Other (其他)', member: payConfig.member, note: `[手續費] ${payConfig.title}`, year: new Date(payConfig.payDate).getFullYear(), month: new Date(payConfig.payDate).getMonth() + 1, familyId: currentFamilyId, propertyId: propId });
             }
 
-            // 💡 智能連動：如果此項目有綁定銀行專戶，自動扣減戶口餘額
             const linkedAcc = bankAccounts.find((acc: any) => acc.linkedItemIds?.includes(payConfig.id));
-            if (linkedAcc) {
+            if (linkedAcc && payConfig.paymentMethod === 'Autopay') {
                 const accRef = doc(db, "bankAccounts", linkedAcc.id);
-                batch.update(accRef, { balance: linkedAcc.balance - Number(payConfig.actualAmount) - Number(payConfig.handlingFee) });
+                // 處理浮點數誤差
+                const newBalance = Number((linkedAcc.balance - Number(payConfig.actualAmount) - Number(payConfig.handlingFee)).toFixed(2));
+                batch.update(accRef, { balance: newBalance });
             }
 
             await batch.commit();
-            alert('✅ 繳費成功，已同步記錄至數據中心並更新戶口水位！');
+            alert('✅ 繳費成功，已同步記錄至數據中心！');
             setPayConfig(null);
         } catch (e) { alert('繳費失敗: ' + e); }
     };
 
-    // 🏦 一鍵執行銀行戶口本月所有扣款
-    const executeBankAutopay = async (acc: any, unpaidItems: any[], totalUnpaid: number) => {
-        if (!window.confirm(`確定要從【${acc.bankName}】自動扣除本月 ${unpaidItems.length} 筆到期款項 (共 ${formatCurrency(totalUnpaid)}) 嗎？`)) return;
+    // 批量扣款處理 (銀行一鍵扣款)
+    const executeBulkPay = async () => {
+        if (!bulkPayConfig) return;
         try {
             const batch = writeBatch(db);
-            unpaidItems.forEach(item => {
+            bulkPayConfig.items.forEach((item: any) => {
                 const txRef = doc(collection(db, "transactions"));
                 const propId = item.id.includes('auto_prop_') ? item.id.split('_').pop() : '';
-                batch.set(txRef, { date: new Date().toISOString().split('T')[0], amount: Number(item.amount), merchant: item.title, category: item.category, member: item.member, note: `[自動扣款] 來自 ${acc.bankName} (${acc.accountNumber})`, year: viewYear, month: viewMonth, familyId: currentFamilyId, propertyId: propId });
+                batch.set(txRef, { date: bulkPayConfig.payDate, amount: Number(item.amount), merchant: item.title, category: item.category, member: item.member, note: `[自動扣款] 來自 ${bulkPayConfig.account.bankName} (${bulkPayConfig.account.accountNumber})`, year: new Date(bulkPayConfig.payDate).getFullYear(), month: new Date(bulkPayConfig.payDate).getMonth() + 1, familyId: currentFamilyId, propertyId: propId });
             });
-            const accRef = doc(db, "bankAccounts", acc.id);
-            batch.update(accRef, { balance: acc.balance - totalUnpaid });
+            const accRef = doc(db, "bankAccounts", bulkPayConfig.account.id);
+            const newBalance = Number((bulkPayConfig.account.balance - bulkPayConfig.total).toFixed(2));
+            batch.update(accRef, { balance: newBalance });
+            
             await batch.commit();
             alert('✅ 批量扣款成功！');
+            setBulkPayConfig(null);
         } catch (e) { alert('扣款失敗: ' + e); }
+    };
+
+    const handlePrintReminders = () => {
+         const printContent = document.getElementById('reminders-report-print');
+         if (!printContent) return;
+         const clone = printContent.cloneNode(true) as HTMLElement;
+         clone.classList.remove('hidden');
+         const wrapper = document.createElement('div');
+         wrapper.id = 'print-clone-root';
+         wrapper.appendChild(clone);
+         document.body.appendChild(wrapper);
+         document.body.classList.add('printing-mode');
+         setTimeout(() => { window.print(); document.body.classList.remove('printing-mode'); if (document.body.contains(wrapper)) document.body.removeChild(wrapper); }, 500); 
     };
 
     return (
         <div className="space-y-6 animate-in fade-in pb-10 relative">
-            {/* 繳費專屬確認視窗 */}
+            {/* --- 單筆繳費確認視窗 --- */}
             {payConfig && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center modal-overlay">
                     <div className="bg-white rounded-xl shadow-2xl p-6 w-[90%] md:w-[400px] animate-in fade-in zoom-in duration-200">
                         <h3 className="font-bold text-lg mb-4 text-blue-800 border-b pb-2">💳 繳費確認櫃台</h3>
                         <p className="text-sm font-bold text-slate-700 mb-4">{payConfig.title}</p>
                         <div className="space-y-4">
-                            <div><label className="text-xs font-bold text-slate-500 mb-1 block">實際扣款日期</label><input type="date" className="border w-full p-2 rounded text-sm font-mono" value={payConfig.payDate} onChange={e=>setPayConfig({...payConfig, payDate: e.target.value})} /></div>
+                            <div><label className="text-xs font-bold text-slate-500 mb-1 block">實際扣款/繳費日期</label><input type="date" className="border w-full p-2 rounded text-sm font-mono outline-none focus:ring-2 focus:ring-blue-400" value={payConfig.payDate} onChange={e=>setPayConfig({...payConfig, payDate: e.target.value})} /></div>
                             <div><label className="text-xs font-bold text-slate-500 mb-1 block">實繳金額 (本金/保費)</label><input type="number" className="border w-full p-2 rounded text-sm font-mono text-red-600 font-bold" value={payConfig.actualAmount} onChange={e=>setPayConfig({...payConfig, actualAmount: Number(e.target.value)})} /></div>
-                            <div><label className="text-xs font-bold text-slate-500 mb-1 block flex items-center gap-1">額外手續費 (Handling Fee)</label><input type="number" className="border w-full p-2 rounded text-sm font-mono text-orange-600 font-bold" placeholder="0" value={payConfig.handlingFee || ''} onChange={e=>setPayConfig({...payConfig, handlingFee: Number(e.target.value)})} /></div>
+                            <div><label className="text-xs font-bold text-slate-500 mb-1 block flex items-center gap-1">銀行手續費 (Handling Fee) <span className="text-[10px] text-slate-400 font-normal">將獨立入帳</span></label><input type="number" className="border w-full p-2 rounded text-sm font-mono text-orange-600 font-bold" placeholder="0" value={payConfig.handlingFee || ''} onChange={e=>setPayConfig({...payConfig, handlingFee: Number(e.target.value)})} /></div>
                         </div>
                         <div className="flex gap-2 mt-6">
                             <button onClick={executePayment} className="flex-1 bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700 shadow">確認入帳</button>
@@ -3896,29 +3920,71 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
                 </div>
             )}
 
-            {/* 頂部時光機 */}
-            <div className="flex flex-wrap justify-between items-center bg-white p-6 rounded-xl shadow-sm border border-slate-200 gap-4">
+            {/* --- 批量扣款確認視窗 (銀行專戶用) --- */}
+            {bulkPayConfig && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center modal-overlay">
+                    <div className="bg-white rounded-xl shadow-2xl p-6 w-[90%] md:w-[400px] animate-in fade-in zoom-in duration-200">
+                        <h3 className="font-bold text-lg mb-4 text-indigo-800 border-b pb-2">🏦 批量扣款確認</h3>
+                        <p className="text-sm font-bold text-slate-700 mb-2">從【{bulkPayConfig.account.bankName}】扣除以下 {bulkPayConfig.items.length} 筆項目：</p>
+                        <ul className="text-xs text-slate-500 mb-4 list-disc pl-5">
+                            {bulkPayConfig.items.map((item:any) => <li key={item.id}>{item.title} (-${item.amount})</li>)}
+                        </ul>
+                        <div className="space-y-4">
+                            <div><label className="text-xs font-bold text-slate-500 mb-1 block">扣款日期 (預設為今天)</label><input type="date" className="border w-full p-2 rounded text-sm font-mono outline-none focus:ring-2 focus:ring-indigo-400" value={bulkPayConfig.payDate} onChange={e=>setBulkPayConfig({...bulkPayConfig, payDate: e.target.value})} /></div>
+                            <div className="bg-red-50 p-2 rounded border border-red-100 text-red-700 text-sm font-bold flex justify-between">
+                                <span>總扣款金額:</span><span>-{formatCurrency(bulkPayConfig.total)}</span>
+                            </div>
+                        </div>
+                        <div className="flex gap-2 mt-6">
+                            <button onClick={executeBulkPay} className="flex-1 bg-indigo-600 text-white p-2 rounded font-bold hover:bg-indigo-700 shadow">確認批量扣款</button>
+                            <button onClick={()=>setBulkPayConfig(null)} className="flex-1 bg-gray-200 p-2 rounded font-bold hover:bg-gray-300">取消</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* 頂部操作列與時光機 */}
+            <div className="flex flex-wrap justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200 gap-4">
                 <div className="flex items-center gap-4">
                     <div className="flex bg-slate-100 rounded-lg p-1 items-center">
                         <button onClick={()=>{ if(viewMonth===1){setViewMonth(12); setViewYear(y=>y-1);} else setViewMonth(m=>m-1); }} className="p-2 hover:bg-white rounded shadow-sm text-slate-600">◀</button>
                         <span className="px-4 font-bold text-slate-800 text-lg">{viewYear} 年 {viewMonth} 月</span>
                         <button onClick={()=>{ if(viewMonth===12){setViewMonth(1); setViewYear(y=>y+1);} else setViewMonth(m=>m+1); }} className="p-2 hover:bg-white rounded shadow-sm text-slate-600">▶</button>
                     </div>
+                    {(viewYear !== new Date().getFullYear() || viewMonth !== new Date().getMonth() + 1) && (
+                        <button onClick={()=>{setViewYear(new Date().getFullYear()); setViewMonth(new Date().getMonth()+1);}} className="text-xs text-blue-600 underline hover:text-blue-800">返回本月</button>
+                    )}
                 </div>
-                <div className="flex gap-2">
-                    <button onClick={() => { setEditingBankAccount({ id: '', bankName: '', accountNumber: '', balance: 0, linkedItemIds: [] }); setModalMode('bankAccount'); }} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 shadow-sm flex items-center gap-2"><ICONS.Plus /> 新增扣款專戶</button>
-                    <button onClick={() => { setEditingReminder({ id: '', title: '', amount: 0, dueDay: 1, frequency: 'Monthly', dueMonth: 1, category: 'Credit Card', member: 'Charles', note: '', paymentMethod: 'Manual' }); setModalMode('reminder'); }} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 shadow-sm flex items-center gap-2"><ICONS.Plus /> 新增手動提醒</button>
+                <div className="flex flex-wrap gap-2">
+                    <button onClick={() => { setEditingBankAccount({ id: '', bankName: '', accountNumber: '', balance: 0, linkedItemIds: [] }); setModalMode('bankAccount'); }} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 shadow-sm"><ICONS.Plus /> 新增扣款專戶</button>
+                    <button onClick={() => { setEditingReminder({ id: '', title: '', amount: 0, dueDay: 1, frequency: 'Monthly', dueMonth: 1, category: 'Credit Card', member: 'Charles', note: '', paymentMethod: 'Manual' }); setModalMode('reminder'); }} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 shadow-sm"><ICONS.Plus /> 新增手動提醒</button>
+                    <button onClick={handlePrintReminders} className="px-4 py-2 bg-slate-800 text-white rounded-lg text-sm font-bold hover:bg-slate-900 shadow-sm"><ICONS.Printer /> 導出 PDF</button>
                 </div>
             </div>
 
-            {/* 🏦 全新：實體銀行專戶水位監控 */}
+            {/* ✅ 找回的進度總覽卡片 ✅ */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <div className="flex justify-between text-sm font-bold text-slate-600 mb-2">
+                    <span>本月總體繳費進度 {progressPercent.toFixed(0)}%</span>
+                    <span>已繳 {formatCurrency(totalPaid)} / 預估 {formatCurrency(totalMonthly)}</span>
+                </div>
+                <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden mb-6">
+                    <div className="bg-emerald-500 h-full transition-all duration-1000" style={{ width: `${progressPercent}%` }}></div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center"><p className="text-xs text-slate-500 font-bold mb-1">本月預估總額</p><p className="text-2xl font-bold font-mono">{formatCurrency(totalMonthly)}</p></div>
+                    <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 text-center"><p className="text-xs text-emerald-600 font-bold mb-1">已入帳/已扣款 (Paid)</p><p className="text-2xl font-bold font-mono text-emerald-700">{formatCurrency(totalPaid)}</p></div>
+                    <div className="bg-red-50 p-4 rounded-xl border border-red-100 text-center"><p className="text-xs text-red-600 font-bold mb-1">尚欠款 (Unpaid)</p><p className="text-2xl font-bold font-mono text-red-700">{formatCurrency(totalUnpaid)}</p></div>
+                </div>
+            </div>
+
+            {/* 🏦 實體銀行專戶水位監控 */}
             <div className="bg-indigo-50 p-6 rounded-xl shadow-sm border border-indigo-100">
                 <h3 className="font-bold text-indigo-900 flex items-center gap-2 mb-2"><ICONS.Home /> 銀行專戶扣款水位監控 (Autopay Reserves)</h3>
-                <p className="text-xs text-indigo-600 mb-4">管理您的扣款戶口，隨時查看資金剩餘水位。點擊「入數」補充資金，或點擊「一鍵扣款」結算本月帳單。</p>
+                <p className="text-xs text-indigo-600 mb-4">管理您的扣款戶口，隨時查看資金剩餘水位。點擊「注入資金」補充資金，或點擊「一鍵扣款」結算本月帳單。</p>
                 
                 <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
                     {bankAccounts.map((acc: any) => {
-                        // 計算此戶口的本月帳單
                         const accItems = allReminders.filter(r => acc.linkedItemIds?.includes(r.id));
                         const totalDue = accItems.reduce((sum, r) => sum + r.amount, 0);
                         const unpaidItems = accItems.filter(r => !r.isPaid);
@@ -3958,9 +4024,12 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
                                     </div>
                                 </div>
                                 <div className="flex gap-2 ml-2">
+                                    {/* 開啟入金視窗，日期會預設為今天 */}
                                     <button onClick={()=>{setTopUpAccount(acc); setModalMode('topup');}} className="flex-1 bg-indigo-50 text-indigo-700 py-1.5 rounded text-xs font-bold hover:bg-indigo-100 border border-indigo-200">💰 注入資金</button>
-                                    <button onClick={()=>executeBankAutopay(acc, unpaidItems, totalUnpaid)} disabled={unpaidItems.length===0 || !isEnough} className="flex-1 bg-indigo-600 text-white py-1.5 rounded text-xs font-bold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-                                        {unpaidItems.length===0 ? '✅ 已全扣清' : '⚡ 一鍵執行扣款'}
+                                    <button onClick={()=>{
+                                        setBulkPayConfig({ account: acc, items: unpaidItems, total: totalUnpaid, payDate: new Date().toISOString().split('T')[0] });
+                                    }} disabled={unpaidItems.length===0 || !isEnough} className="flex-1 bg-indigo-600 text-white py-1.5 rounded text-xs font-bold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                                        {unpaidItems.length===0 ? '✅ 已全扣清' : '⚡ 批量扣款'}
                                     </button>
                                 </div>
                             </div>
@@ -3968,13 +4037,13 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
                     })}
                     {bankAccounts.length === 0 && (
                         <div className="text-indigo-400 text-sm p-8 text-center col-span-full border-2 border-dashed border-indigo-200 rounded-xl bg-white/50">
-                            您尚未建立銀行扣款專戶。點擊右上方「新增扣款專戶」開始監控。
+                            您尚未建立銀行扣款專戶。點擊上方「新增扣款專戶」開始監控。
                         </div>
                     )}
                 </div>
             </div>
 
-            {/* 詳細時間軸列表 (保持不變) */}
+            {/* 詳細時間軸列表 */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden p-6">
                 <div className="relative border-l-2 border-slate-200 ml-4 space-y-6">
                     {allReminders.map((item: any) => {
@@ -4006,7 +4075,7 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
                                     {item.isPaid ? (
                                         <span className="text-xs font-bold text-emerald-600 flex items-center gap-1"><ICONS.ShieldCheck /> 本月已入帳</span>
                                     ) : (
-                                        <button onClick={() => setPayConfig({ ...item, payDate: `${viewYear}-${String(viewMonth).padStart(2,'0')}-${String(item.dueDay).padStart(2,'0')}`, actualAmount: item.amount, handlingFee: 0 })} className={`text-white text-xs px-4 py-2.5 rounded-lg font-bold shadow transition-colors flex items-center gap-1 w-full justify-center ${linkedAcc ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
+                                        <button onClick={() => setPayConfig({ ...item, payDate: new Date().toISOString().split('T')[0], actualAmount: item.amount, handlingFee: 0 })} className={`text-white text-xs px-4 py-2.5 rounded-lg font-bold shadow transition-colors flex items-center gap-1 w-full justify-center ${linkedAcc ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
                                             {linkedAcc ? '手動入帳 (扣餘額)' : '繳費並記錄'}
                                         </button>
                                     )}
@@ -4015,6 +4084,29 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
                         </div>
                     )})}
                 </div>
+            </div>
+            
+            {/* 隱藏的列印報表 */}
+            <div id="reminders-report-print" className="hidden doc-print-container bg-white w-full text-black font-serif mx-auto p-8 relative">
+                 <div className="text-center border-b-2 border-black pb-4 mb-6">
+                    <h1 className="text-2xl font-bold">MONTHLY EXPENSES & FORECAST</h1>
+                    <p className="text-sm tracking-widest mt-1">家族固定開銷清單 ({viewYear} 年 {viewMonth} 月)</p>
+                </div>
+                <table className="w-full border-collapse border border-black text-sm">
+                    <thead className="bg-gray-100">
+                        <tr><th className="border border-black p-2 text-center w-12">Day</th><th className="border border-black p-2 text-left">Item / Details</th><th className="border border-black p-2 text-center">Status</th><th className="border border-black p-2 text-right w-24">Amount</th></tr>
+                    </thead>
+                    <tbody>
+                        {allReminders.map((item:any) => (
+                            <tr key={item.id}>
+                                <td className="border border-black p-2 text-center font-bold">{item.dueDay}</td>
+                                <td className="border border-black p-2"><span className="font-bold">{item.title}</span><br/><span className="text-[10px] text-gray-600">{item.merchant}</span></td>
+                                <td className={`border border-black p-2 text-center font-bold ${item.isPaid ? 'text-green-600' : 'text-red-600'}`}>{item.isPaid ? 'PAID' : 'UNPAID'}</td>
+                                <td className="border border-black p-2 text-right font-mono font-bold">-{formatCurrency(item.amount)}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
             </div>
         </div>
     );
@@ -4092,7 +4184,7 @@ const App: React.FC = () => {
   const [editingBankAccount, setEditingBankAccount] = useState<BankAccount | null>(null);
   const [topUpAccount, setTopUpAccount] = useState<BankAccount | null>(null);
   const [topUpAmount, setTopUpAmount] = useState<number | ''>('');
-
+  const [topUpDate, setTopUpDate] = useState<string>(new Date().toISOString().split('T')[0]);
   
   const [activeTab, setActiveTab] = useState('overview');
   const [propertyViewId, setPropertyViewId] = useState<string | null>(null);
@@ -6131,23 +6223,30 @@ useEffect(() => {
                   <div className="bg-white rounded-xl shadow-2xl p-6 w-[90%] md:w-[400px] animate-in fade-in zoom-in duration-200">
                       <h3 className="font-bold text-lg mb-4 text-emerald-800 border-b pb-2">💰 注入資金 (Top-up)</h3>
                       <p className="text-sm font-bold text-slate-700 mb-4">{topUpAccount.bankName} <span className="text-xs font-mono text-slate-500">({topUpAccount.accountNumber})</span></p>
+                      
                       <div className="space-y-4">
+                          <div>
+                              <label className="text-xs font-bold text-slate-500 mb-1 block">入帳日期 Date (預設今天)</label>
+                              <input type="date" className="border w-full p-2 rounded-lg text-sm font-mono outline-none focus:ring-2 focus:ring-emerald-400" value={topUpDate} onChange={e=>setTopUpDate(e.target.value)} />
+                          </div>
                           <div>
                               <label className="text-xs font-bold text-slate-500 mb-1 block">本次存入金額 Amount</label>
                               <input type="number" className="border w-full p-3 rounded-lg text-lg font-mono text-emerald-600 font-bold outline-none focus:ring-2 focus:ring-emerald-400" placeholder="0" value={topUpAmount} onChange={e=>setTopUpAmount(e.target.value ? Number(e.target.value) : '')} autoFocus />
                           </div>
                           <div className="bg-slate-50 p-3 rounded border text-xs text-slate-600">
                               目前的餘額：<span className="font-mono font-bold text-slate-800">{formatCurrency(topUpAccount.balance)}</span><br/>
-                              入數後預計：<span className="font-mono font-bold text-emerald-600">{formatCurrency(topUpAccount.balance + Number(topUpAmount || 0))}</span>
+                              入數後預計：<span className="font-mono font-bold text-emerald-600">{formatCurrency(Number((topUpAccount.balance + Number(topUpAmount || 0)).toFixed(2)))}</span>
                           </div>
                       </div>
+
                       <div className="flex gap-2 mt-6">
                           <button onClick={async () => {
                               if (!topUpAmount) return;
                               try {
+                                  // 使用選擇的 topUpDate
                                   await updateDoc(doc(db, "bankAccounts", topUpAccount.id), {
-                                      balance: topUpAccount.balance + Number(topUpAmount),
-                                      lastTopUpDate: new Date().toISOString().split('T')[0],
+                                      balance: Number((topUpAccount.balance + Number(topUpAmount)).toFixed(2)),
+                                      lastTopUpDate: topUpDate, 
                                       lastTopUpAmount: Number(topUpAmount)
                                   });
                                   setModalMode('none'); setTopUpAccount(null); setTopUpAmount('');

@@ -3839,23 +3839,45 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
                 if ((prop.govtRates > 0 || prop.govtRent > 0) && [1, 4, 7, 10].includes(viewMonth)) list.push({ id: `auto_prop_rates_${prop.id}`, title: `${prop.name} 差餉地租`, amount: (prop.govtRates || 0) + (prop.govtRent || 0), dueDay: 28, category: 'Govt Rates (差餉)', member: prop.owner || 'Family', paymentMethod: 'Manual', frequency: 'Quarterly', type: 'Auto' });
             }
         });
-        // 🔍 最終狀態比對：偵測數據中心本月是否已繳
-        return list.map(item => {
-            // 改用 find 找出具體的那筆交易
-            const matchedTx = transactions.find((t: any) => 
-                t.year === viewYear && 
-                t.month === viewMonth && 
-                (
-                    (t.merchant || '').toLowerCase().includes((item.merchant || item.title).toLowerCase()) || 
-                    (item.merchant && (t.merchant || '').toLowerCase().includes(item.merchant.toLowerCase()))
-                )
-            );
+        // 🔍 最終狀態比對：兩階段精準配對 (防同名項目互相搶單)
+        const exactConsumed = new Set();
+        
+        // 階段 1：精準配對 (名稱相符 且 金額完全一致)
+        const preMatched = list.map(item => {
+            const exactTx = transactions.find((t: any) => {
+                if (t.year !== viewYear || t.month !== viewMonth || exactConsumed.has(t.id)) return false;
+                const tMerchant = (t.merchant || '').toLowerCase();
+                const iTitle = (item.title || '').toLowerCase();
+                const iMerchant = (item.merchant || '').toLowerCase();
+                const nameMatch = tMerchant.includes(iTitle) || (iMerchant && tMerchant.includes(iMerchant)) || iTitle.includes(tMerchant);
+                
+                return nameMatch && Math.abs(t.amount) === item.amount;
+            });
+            if (exactTx) exactConsumed.add(exactTx.id);
+            return { ...item, matchedTx: exactTx || null };
+        });
+
+        // 階段 2：模糊配對 (給那些手動修改過入帳金額的項目)
+        const fuzzyConsumed = new Set(exactConsumed);
+        return preMatched.map(item => {
+            let finalTx = item.matchedTx;
+            if (!finalTx) {
+                finalTx = transactions.find((t: any) => {
+                    if (t.year !== viewYear || t.month !== viewMonth || fuzzyConsumed.has(t.id)) return false;
+                    const tMerchant = (t.merchant || '').toLowerCase();
+                    const iTitle = (item.title || '').toLowerCase();
+                    const iMerchant = (item.merchant || '').toLowerCase();
+                    
+                    return tMerchant.includes(iTitle) || (iMerchant && tMerchant.includes(iMerchant)) || iTitle.includes(tMerchant);
+                });
+                if (finalTx) fuzzyConsumed.add(finalTx.id);
+            }
             
-            return { 
-                ...item, 
-                isPaid: !!matchedTx, 
-                // 💡 關鍵修復：如果已繳費，將卡片顯示的金額覆蓋為「實際入帳的真實金額」
-                amount: matchedTx ? Math.abs(matchedTx.amount) : item.amount 
+            return {
+                ...item,
+                isPaid: !!finalTx,
+                matchedTx: finalTx || null, // 👈 加上這行，把配對到的交易紀錄綁定給它，供 Undo 使用
+                amount: finalTx ? Math.abs(finalTx.amount) : item.amount
             };
         }).sort((a, b) => a.dueDay - b.dueDay);
     }, [scheduledExpenses, bankLoans, properties, transactions, viewYear, viewMonth]);
@@ -3914,6 +3936,34 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
         } catch (e) { alert('扣款失敗: ' + e); }
     };
 
+    // ↩️ 取消入帳 (Undo) 功能
+    const handleUndoPayment = async (item: any) => {
+        if (!item.matchedTx) return;
+        if (!window.confirm(`確定要復原「${item.title}」的繳費紀錄嗎？\n這將會從數據中心刪除該筆紀錄，並將金額退回關聯的銀行專戶（如果有）。`)) return;
+
+        try {
+            const batch = writeBatch(db);
+            
+            // 1. 從數據中心刪除該筆誤按的交易
+            const txRef = doc(db, "transactions", item.matchedTx.id);
+            batch.delete(txRef);
+
+            // 2. 如果該項目有綁定銀行專戶，將金額退回 (加回餘額)
+            const linkedAcc = bankAccounts.find((acc: any) => acc.linkedItemIds?.includes(item.id));
+            if (linkedAcc) {
+                const accRef = doc(db, "bankAccounts", linkedAcc.id);
+                // 避免浮點數誤差，使用 Number().toFixed(2)
+                const restoredBalance = Number((linkedAcc.balance + Math.abs(item.matchedTx.amount)).toFixed(2));
+                batch.update(accRef, { balance: restoredBalance });
+            }
+
+            await batch.commit();
+            alert('✅ 復原成功！入帳紀錄已刪除，銀行水位已還原。');
+        } catch (e) {
+            alert('復原失敗: ' + e);
+        }
+    };
+  
     const handlePrintReminders = () => {
          const printContent = document.getElementById('reminders-report-print');
          if (!printContent) return;
@@ -4105,7 +4155,17 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
                                 <div className="text-right flex flex-col items-end gap-2 min-w-[140px]">
                                     <p className={`font-mono font-bold text-xl ${item.isPaid ? 'text-emerald-600' : 'text-red-600'}`}>{formatCurrency(item.amount)}</p>
                                     {item.isPaid ? (
-                                        <span className="text-xs font-bold text-emerald-600 flex items-center gap-1"><ICONS.ShieldCheck /> 本月已入帳</span>
+                                        <div className="flex flex-col items-end gap-1.5">
+                                            <span className="text-xs font-bold text-emerald-600 flex items-center gap-1"><ICONS.ShieldCheck /> 本月已入帳</span>
+                                            <button 
+                                                onClick={() => handleUndoPayment(item)} 
+                                                className="text-[10px] text-slate-400 hover:text-red-500 underline flex items-center gap-1 transition-colors"
+                                                title="刪除此筆交易並復原狀態"
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
+                                                復原 (Undo)
+                                            </button>
+                                        </div>
                                     ) : (
                                         <button onClick={() => setPayConfig({ ...item, payDate: new Date().toISOString().split('T')[0], actualAmount: item.amount, handlingFee: 0 })} className={`text-white text-xs px-4 py-2.5 rounded-lg font-bold shadow transition-colors flex items-center gap-1 w-full justify-center ${linkedAcc ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
                                             {linkedAcc ? '手動入帳 (扣餘額)' : '繳費並記錄'}

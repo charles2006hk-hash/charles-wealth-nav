@@ -533,8 +533,13 @@ const convertNumberToEnglish = (n: number) => {
 
 const formatCurrency = (val: any) => {
     const num = Number(val);
-    if (isNaN(num)) return '$0.';
-    return `$${num.toLocaleString()}.`;
+    if (isNaN(num)) return '$0.00';
+    
+    // 使用 'en-US' 標準，並強制設定最少與最多 2 位小數
+    return `$${num.toLocaleString('en-US', { 
+        minimumFractionDigits: 2, 
+        maximumFractionDigits: 2 
+    })}`;
 };
 
 const calculateDuration = (start: string, end?: string) => {
@@ -3826,9 +3831,24 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
                 if ((prop.govtRates > 0 || prop.govtRent > 0) && [1, 4, 7, 10].includes(viewMonth)) list.push({ id: `auto_prop_rates_${prop.id}`, title: `${prop.name} 差餉地租`, amount: (prop.govtRates || 0) + (prop.govtRent || 0), dueDay: 28, category: 'Govt Rates (差餉)', member: prop.owner || 'Family', paymentMethod: 'Manual', frequency: 'Quarterly', type: 'Auto' });
             }
         });
+        // 🔍 最終狀態比對：偵測數據中心本月是否已繳
         return list.map(item => {
-            const isPaid = transactions.some((t: any) => t.year === viewYear && t.month === viewMonth && ((t.merchant || '').toLowerCase().includes((item.merchant || item.title).toLowerCase()) || (item.merchant && (t.merchant || '').toLowerCase().includes((item.merchant||'').toLowerCase()))));
-            return { ...item, isPaid };
+            // 改用 find 找出具體的那筆交易
+            const matchedTx = transactions.find((t: any) => 
+                t.year === viewYear && 
+                t.month === viewMonth && 
+                (
+                    (t.merchant || '').toLowerCase().includes((item.merchant || item.title).toLowerCase()) || 
+                    (item.merchant && (t.merchant || '').toLowerCase().includes(item.merchant.toLowerCase()))
+                )
+            );
+            
+            return { 
+                ...item, 
+                isPaid: !!matchedTx, 
+                // 💡 關鍵修復：如果已繳費，將卡片顯示的金額覆蓋為「實際入帳的真實金額」
+                amount: matchedTx ? Math.abs(matchedTx.amount) : item.amount 
+            };
         }).sort((a, b) => a.dueDay - b.dueDay);
     }, [scheduledExpenses, bankLoans, properties, transactions, viewYear, viewMonth]);
 
@@ -4069,11 +4089,13 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
                                         </div>
                                     </h4>
                                     <div className="text-xs text-slate-500 mt-2">
-                                        <p>🏷 {item.category} | 👤 {item.member} {item.note && <span className="ml-2 font-bold text-slate-400">📝 {item.note}</span>}</p>
+                                        <p className={`font-mono font-bold text-xl ${item.isPaid ? 'text-emerald-600' : 'text-red-600'}`}>
+                                            {item.type === 'Predicted' ? '約 ' : ''}{formatCurrency(item.amount)}
+                                        </p>
                                     </div>
                                 </div>
                                 <div className="text-right flex flex-col items-end gap-2 min-w-[140px]">
-                                    <p className={`font-mono font-bold text-xl ${item.isPaid ? 'text-emerald-600' : 'text-red-600'}`}>${formatCurrency(item.amount)}</p>
+                                    <p className={`font-mono font-bold text-xl ${item.isPaid ? 'text-emerald-600' : 'text-red-600'}`}>{formatCurrency(item.amount)}</p>
                                     {item.isPaid ? (
                                         <span className="text-xs font-bold text-emerald-600 flex items-center gap-1"><ICONS.ShieldCheck /> 本月已入帳</span>
                                     ) : (

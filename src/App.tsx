@@ -1392,8 +1392,7 @@ const PropertyDashboard = ({
                         </button>
                     )}
                 </div>
-
-                {/* 壓力測試 (保持不變) */}
+{/* 壓力測試 (保持不變) */}
                 <div className="flex items-center gap-4 border-l pl-4 hidden xl:flex">
                     <div className="font-bold text-slate-700 text-xs">壓力測試:</div>
                     <div className="flex items-center gap-2">
@@ -1406,20 +1405,14 @@ const PropertyDashboard = ({
                     </div>
                 </div>
 
+                {/* 💡 修復：直接使用 onAddProperty，解決 Vercel 編譯失敗問題 */}
                 <button 
-                    onClick={() => { 
-                        setEditingProp({ 
-                            id: '', name: '', type: 'Residential', status: 'Rented', 
-                            valuation: 0, rent: 0, mortgageAmount: 0, interestRate: 0, 
-                            mortgageYears: 0, managementFee: 0, govtRates: 0, govtRent: 0 
-                        }); 
-                        setModalMode('property'); 
-                    }} 
+                    onClick={onAddProperty} 
                     className="ml-auto md:ml-4 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 shadow-sm flex items-center gap-2 whitespace-nowrap"
                 >
                     <ICONS.Plus /> 新增物業
                 </button>
-            </div> 
+            </div>
           
 
             {/* 物業卡片列表 (已套用篩選) */}
@@ -1478,23 +1471,23 @@ const PropertyDashboard = ({
                                 </div>
                             </div>
                             
-                            <div className="grid grid-cols-2 gap-3 text-sm bg-slate-50 p-3 rounded-xl border border-slate-100">
+                           <div className="grid grid-cols-2 gap-3 text-sm bg-slate-50 p-3 rounded-xl border border-slate-100">
                                 <div>
-                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{p.status==='Sold' ? 'Sold Price' : 'Valuation'}</p>
-                                    <p className="font-mono font-bold text-slate-700">{formatCurrency(p.status==='Sold' ? p.salePrice : p.currentValue)}</p>
+                                    <p className="text-[10px] text-slate-500 font-bold tracking-wider">{p.status === 'Sold' ? '賣出價格' : '物業估值'}</p>
+                                    <p className="font-mono font-bold text-slate-700">{formatCurrency(p.status === 'Sold' ? p.salePrice : p.currentValue)}</p>
                                 </div>
                                 <div>
-                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{p.status==='Sold' ? 'Profit' : 'Rent'}</p>
-                                    <p className={`font-mono font-bold ${p.status==='Sold' ? 'text-green-600' : 'text-emerald-600'}`}>
-                                        {p.status==='Sold' ? formatCurrency((p.salePrice||0) - (p.purchasePrice||0)) : (p.activeLease ? formatCurrency(p.activeLease.monthlyRent) : '-')}
+                                    <p className="text-[10px] text-slate-500 font-bold tracking-wider">{p.status === 'Sold' ? '賣出利潤' : '每月租金'}</p>
+                                    <p className={`font-mono font-bold ${p.status === 'Sold' ? 'text-green-600' : 'text-emerald-600'}`}>
+                                        {p.status === 'Sold' ? formatCurrency((p.salePrice || 0) - (p.purchasePrice || 0)) : (p.activeLease ? formatCurrency(p.activeLease.monthlyRent) : '-')}
                                     </p>
                                 </div>
                                 <div>
-                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Net Income</p>
+                                    <p className="text-[10px] text-blue-500 font-bold tracking-wider">淨收入</p>
                                     <p className={`font-mono font-bold ${p.net >= 0 ? 'text-blue-600' : 'text-red-500'}`}>{formatCurrency(p.net)}</p>
                                 </div>
                                 <div>
-                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Expense (Stress)</p>
+                                    <p className="text-[10px] text-slate-500 font-bold tracking-wider">開支 (壓力測試)</p>
                                     <p className="font-mono text-red-400">-{formatCurrency(p.stressedExpense)}</p>
                                 </div>
                             </div>

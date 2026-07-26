@@ -1406,20 +1406,6 @@ const PropertyDashboard = ({
                     </div>
                 </div>
 
-              {/* 壓力測試 (保持不變) */}
-                <div className="flex items-center gap-4 border-l pl-4 hidden xl:flex">
-                    <div className="font-bold text-slate-700 text-xs">壓力測試:</div>
-                    <div className="flex items-center gap-2">
-                        <span className="text-[10px]">Rate +{stressRate}%</span>
-                        <input type="range" min="0" max="5" step="0.5" value={stressRate} onChange={e=>setStressRate(Number(e.target.value))} className="w-16 h-1" />
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <span className="text-[10px]">Rent -{rentDrop}%</span>
-                        <input type="range" min="0" max="30" step="5" value={rentDrop} onChange={e=>setRentDrop(Number(e.target.value))} className="w-16 h-1" />
-                    </div>
-                </div>
-
-                {/* 👇 將「新增物業」按鈕加在這裡 👇 */}
                 <button 
                     onClick={() => { 
                         setEditingProp({ 
@@ -1433,8 +1419,8 @@ const PropertyDashboard = ({
                 >
                     <ICONS.Plus /> 新增物業
                 </button>
-            </div>
-            </div>
+            </div> 
+          
 
             {/* 物業卡片列表 (已套用篩選) */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

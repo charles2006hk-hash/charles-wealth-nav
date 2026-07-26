@@ -4279,7 +4279,7 @@ const App: React.FC = () => {
 
 // 🤖 系統全自動巡邏入帳引擎 (Client-Side Auto-Pay Cron)
   useEffect(() => {
-      if (!dataLoaded || scheduledExpenses.length === 0 || !currentFamilyId) return;
+      if (!dataLoaded || !currentFamilyId) return;
 
       const executeAutoPatrol = async () => {
           const today = new Date();
@@ -4290,51 +4290,67 @@ const App: React.FC = () => {
           const batch = writeBatch(db);
           let hasNewWrites = false;
 
+          // 輔助函數：執行防重複寫入
+          const processAutoRecord = (idPrefix: string, dueDay: number, amount: number, title: string, category: string, member: string, note: string) => {
+              if (currentDay >= dueDay && amount > 0) {
+                  const txId = `auto_rec_${idPrefix}_${currentYear}_${currentMonth}`;
+                  const isAlreadyPaid = transactions.some(t => t.id === txId);
+                  
+                  if (!isAlreadyPaid) {
+                      const txRef = doc(db, "transactions", txId);
+                      batch.set(txRef, {
+                          date: `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(dueDay).padStart(2, '0')}`,
+                          amount: Number(amount),
+                          merchant: title, category: category, member: member || 'System',
+                          note: `[系統全自動入帳] ${note}`.trim(),
+                          year: currentYear, month: currentMonth, familyId: currentFamilyId
+                      });
+                      hasNewWrites = true;
+                  }
+              }
+          };
+
+          // 1. 巡邏手動提醒 (Manual Reminders)
           scheduledExpenses.forEach(item => {
               if (item.isAutoRecord) {
-                  // 檢查今天是否已經過了該項目的「扣款日」
-                  if (currentDay >= item.dueDay) {
-                      const freq = item.frequency || 'Monthly';
-                      if (freq === 'Annually' && item.dueMonth !== currentMonth) return;
-                      if (freq === 'Quarterly' && (currentMonth % 3 !== (item.dueMonth || 1) % 3)) return;
+                  const freq = item.frequency || 'Monthly';
+                  if (freq === 'Annually' && item.dueMonth !== currentMonth) return;
+                  if (freq === 'Quarterly' && (currentMonth % 3 !== (item.dueMonth || 1) % 3)) return;
+                  processAutoRecord(item.id, item.dueDay, item.amount, item.title, item.category, item.member, item.note);
+              }
+          });
 
-                      // 💡 核心防護：產生絕對唯一、防重複的 ID (例如: auto_rec_123_2026_7)
-                      const txId = `auto_rec_${item.id}_${currentYear}_${currentMonth}`;
-                      
-                      // 檢查數據中心是否已經有這筆專屬 ID 的紀錄
-                      const isAlreadyPaid = transactions.some(t => t.id === txId);
-                      
-                      if (!isAlreadyPaid) {
-                          const txRef = doc(db, "transactions", txId);
-                          batch.set(txRef, {
-                              date: `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(item.dueDay).padStart(2, '0')}`,
-                              amount: Number(item.amount),
-                              merchant: item.title,
-                              category: item.category,
-                              member: item.member || 'System',
-                              note: `[系統全自動入帳] ${item.note || ''}`.trim(),
-                              year: currentYear,
-                              month: currentMonth,
-                              familyId: currentFamilyId
-                          });
-                          hasNewWrites = true;
-                      }
+          // 2. 巡邏物業連動 (Properties - 按揭與管理費)
+          properties.forEach(prop => {
+              if (prop.status !== 'Sold' && (prop as any).isAutoRecord) {
+                  const owner = prop.owner || 'Family';
+                  // 按揭 (預設 15 號)
+                  processAutoRecord(`prop_mort_${prop.id}`, 15, prop.mortgageAmount, `${prop.name} 按揭供款`, 'Mortgage Payment (按揭供款)', owner, '物業按揭');
+                  // 管理費 (預設 1 號)
+                  processAutoRecord(`prop_mgt_${prop.id}`, 1, prop.managementFee, `${prop.name} 管理費`, 'Management Fee (管理費)', owner, '物業管理費');
+                  // 季度差餉地租 (1,4,7,10月 28號)
+                  if ([1, 4, 7, 10].includes(currentMonth)) {
+                      processAutoRecord(`prop_rates_${prop.id}`, 28, (prop.govtRates || 0) + (prop.govtRent || 0), `${prop.name} 差餉地租`, 'Govt Rates (差餉)', owner, `Q${Math.ceil(currentMonth/3)} 季度`);
                   }
               }
           });
 
-          if (hasNewWrites) {
-              try {
-                  await batch.commit();
-                  console.log("✅ 系統已自動補登本月到期款項");
-              } catch (e) {
-                  console.error("Auto record failed", e);
+          // 3. 巡邏銀行貸款 (Bank Loans)
+          bankLoans.forEach(loan => {
+              if (loan.status === 'Active' && (loan as any).isAutoRecord) {
+                  const dueDay = new Date(loan.startDate).getDate() || 1;
+                  processAutoRecord(`bankloan_${loan.id}`, dueDay, loan.monthlyPayment, `${loan.bankName} (${loan.purpose})`, 'Mortgage Payment (按揭供款)', 'Family', '分期貸款');
               }
+          });
+
+          if (hasNewWrites) {
+              try { await batch.commit(); console.log("✅ 系統已自動補登本月到期款項"); } 
+              catch (e) { console.error("Auto record failed", e); }
           }
       };
 
       executeAutoPatrol();
-  }, [dataLoaded, scheduledExpenses, transactions, currentFamilyId]);
+  }, [dataLoaded, scheduledExpenses, properties, bankLoans, transactions, currentFamilyId]);
   
   // 👇 銀行專戶管理狀態 👇
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
@@ -4869,6 +4885,7 @@ useEffect(() => {
              monthlyPayment: Number(editingBankLoan.monthlyPayment),
              penaltyRate: Number(editingBankLoan.penaltyRate),
              interestRate: Number(editingBankLoan.interestRate || 0), // 👈 新增這行：確保轉為數字
+             isAutoRecord: !!(editingBankLoan as any).isAutoRecord,
              familyId: currentFamilyId
         };
         if (editingBankLoan.id) {
@@ -6082,6 +6099,21 @@ useEffect(() => {
                           <details className="group border rounded-lg p-2"><summary className="font-bold text-sm cursor-pointer text-slate-700 flex justify-between items-center">銀行按揭設定 (點擊展開) <span className="text-xs text-slate-400">▼</span></summary><div className="p-4 bg-yellow-50 rounded-lg border border-yellow-100 grid grid-cols-2 gap-4 mt-2"><div><label className="text-xs text-slate-500 block mb-1">Bank</label><select className="border w-full p-2 rounded text-sm" value={editingProp?.bank} onChange={e => setEditingProp({...editingProp, bank: e.target.value} as any)}><option value="">Select...</option>{settings.banks.map(b => <option key={b} value={b}>{b}</option>)}</select></div><div><label className="text-xs text-slate-500 block mb-1">Mortgage Loan</label><div className="relative"><input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.mortgageLoan || ''} onChange={e => setEditingProp({...editingProp, mortgageLoan: Number(e.target.value)} as any)} /><span className="absolute right-2 top-2 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.mortgageLoan)}</span></div></div><div><label className="text-xs text-slate-500 block mb-1">Outstanding</label><div className="relative"><input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.outstandingLoan || ''} onChange={e => setEditingProp({...editingProp, outstandingLoan: Number(e.target.value)} as any)} /><span className="absolute right-2 top-2 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.outstandingLoan)}</span></div></div><div><label className="text-xs text-slate-500 block mb-1">Rate (%)</label><input className="border w-full p-2 rounded text-sm" type="number" step="0.1" value={editingProp?.interestRate || ''} onChange={e => setEditingProp({...editingProp, interestRate: Number(e.target.value)} as any)} /></div><div><label className="text-xs text-slate-500 block mb-1">Tenure (Yrs)</label><input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.tenure || ''} onChange={e => setEditingProp({...editingProp, tenure: Number(e.target.value)} as any)} /></div><div><label className="text-xs text-slate-500 block mb-1">Monthly Pay</label><div className="relative"><input className="border w-full p-2 rounded text-sm bg-white font-bold text-red-600" type="number" value={editingProp?.mortgageAmount || ''} onChange={e => setEditingProp({...editingProp, mortgageAmount: Number(e.target.value)} as any)} /><span className="absolute right-2 top-2 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.mortgageAmount)}</span></div></div></div></details>
                           <div className="space-y-2"><label className="text-xs font-bold text-slate-500 uppercase">Valuation & Expenses</label><div className="grid grid-cols-2 gap-3"><div><label className="text-xs">Current Value</label><div className="relative"><input className="border w-full p-2 rounded" type="number" value={editingProp?.currentValue || ''} onChange={e => setEditingProp({...editingProp, currentValue: Number(e.target.value)} as any)} /><span className="absolute right-2 top-2 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.currentValue)}</span></div></div><div><label className="text-xs">Est. Rent</label><div className="relative"><input className="border w-full p-2 rounded" type="number" value={editingProp?.estRent || ''} onChange={e => setEditingProp({...editingProp, estRent: Number(e.target.value)} as any)} /><span className="absolute right-2 top-2 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.estRent)}</span></div></div></div><div className="grid grid-cols-3 gap-2"><div><label className="text-xs">Mgt Fee</label><input className="border p-1 text-sm w-full rounded" type="number" value={editingProp?.managementFee || ''} onChange={e=>setEditingProp({...editingProp, managementFee: Number(e.target.value)} as any)} /></div><div><label className="text-xs">Rates (Qtr)</label><input className="border p-1 text-sm w-full rounded" type="number" value={editingProp?.govtRates || ''} onChange={e=>setEditingProp({...editingProp, govtRates: Number(e.target.value)} as any)} /></div><div><label className="text-xs">Govt Rent</label><input className="border p-1 text-sm w-full rounded" type="number" value={editingProp?.govtRent || ''} onChange={e=>setEditingProp({...editingProp, govtRent: Number(e.target.value)} as any)} /></div></div></div>
                       </div>
+                    {/* 👇 全自動入帳引擎開關 (物業版) 👇 */}
+                          <label className="flex items-start gap-3 p-3 mt-4 bg-emerald-50 border border-emerald-200 rounded-lg cursor-pointer transition-colors hover:bg-emerald-100 shadow-sm">
+                              <input 
+                                  type="checkbox" 
+                                  className="w-5 h-5 mt-0.5 text-emerald-600 rounded focus:ring-emerald-500 cursor-pointer" 
+                                  checked={(editingProp as any)?.isAutoRecord || false} 
+                                  onChange={e => setEditingProp({...editingProp, isAutoRecord: e.target.checked} as any)} 
+                              />
+                              <div>
+                                  <div className="text-sm font-bold text-emerald-800">啟用此物業的「全自動入帳」(Auto-Pay)</div>
+                                  <div className="text-[10px] text-emerald-600 mt-1">
+                                      勾選後，系統每月會自動幫您入帳此物業的「管理費(1號)」、「按揭(15號)」及「季度差餉地租(28號)」。
+                                  </div>
+                              </div>
+                          </label>
                       <div className="flex gap-2 mt-8 pt-4 border-t">
                           <button onClick={handleSaveProperty} className="flex-1 bg-blue-600 text-white p-3 rounded-lg font-bold hover:bg-blue-700">Save Property</button>
                           <button onClick={() => setModalMode('none')} className="flex-1 bg-gray-100 text-slate-600 p-3 rounded-lg font-bold hover:bg-gray-200">Cancel</button>
@@ -6227,7 +6259,21 @@ useEffect(() => {
                               <textarea rows={2} placeholder="例如: 綁定 Mortgage Link、經手人資訊..." className="border w-full p-2 rounded text-sm" value={editingBankLoan?.notes || ''} onChange={e => setEditingBankLoan({...editingBankLoan, notes: e.target.value} as any)} />
                           </div>
                       </div>
-                      
+                      {/* 👇 全自動入帳引擎開關 (銀行貸款版) 👇 */}
+                          <label className="flex items-start gap-3 p-3 mt-2 bg-emerald-50 border border-emerald-200 rounded-lg cursor-pointer transition-colors hover:bg-emerald-100 shadow-sm">
+                              <input 
+                                  type="checkbox" 
+                                  className="w-5 h-5 mt-0.5 text-emerald-600 rounded focus:ring-emerald-500 cursor-pointer" 
+                                  checked={(editingBankLoan as any)?.isAutoRecord || false} 
+                                  onChange={e => setEditingBankLoan({...editingBankLoan, isAutoRecord: e.target.checked} as any)} 
+                              />
+                              <div>
+                                  <div className="text-sm font-bold text-emerald-800">啟用「系統全自動入帳」(Auto-Pay)</div>
+                                  <div className="text-[10px] text-emerald-600 mt-1">
+                                      勾選後，每月到了「首期還款日」的號碼時，系統會自動將此筆貸款供款寫入數據中心。
+                                  </div>
+                              </div>
+                          </label>
                       {/* 👇 按鈕區塊，確保有正確閉合 👇 */}
                       <div className="flex gap-2 mt-6">
                           <button onClick={handleSaveBankLoan} className="flex-1 bg-slate-800 text-white p-2 rounded font-bold hover:bg-slate-900">儲存 Save</button>

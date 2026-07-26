@@ -59,6 +59,7 @@ interface ScheduledExpense {
   accountInfo?: string; 
   paymentMethod?: 'Autopay' | 'Manual'; 
   contact?: string;     
+  isAutoRecord?: boolean; // 新增：是否啟用系統自動入帳
 }
 
 // 👇 新增：實體銀行專戶 (資金池與水位監控) 👇
@@ -3987,7 +3988,12 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
                         <p className="text-sm font-bold text-slate-700 mb-4">{payConfig.title}</p>
                         <div className="space-y-4">
                             <div><label className="text-xs font-bold text-slate-500 mb-1 block">實際扣款/繳費日期</label><input type="date" className="border w-full p-2 rounded text-sm font-mono outline-none focus:ring-2 focus:ring-blue-400" value={payConfig.payDate} onChange={e=>setPayConfig({...payConfig, payDate: e.target.value})} /></div>
-                            <div><label className="text-xs font-bold text-slate-500 mb-1 block">實繳金額 (本金/保費)</label><input type="number" className="border w-full p-2 rounded text-sm font-mono text-red-600 font-bold" value={payConfig.actualAmount} onChange={e=>setPayConfig({...payConfig, actualAmount: Number(e.target.value)})} /></div>
+                            <div><label className="text-xs font-bold text-slate-500 mb-1 block">實繳金額 (本金/保費)</label><input type="number" className="border w-full p-2 rounded text-sm font-mono text-red-600 font-bold outline-none focus:ring-2 focus:ring-blue-400" value={payConfig.actualAmount} onChange={e=>setPayConfig({...payConfig, actualAmount: Number(e.target.value)})} /></div> 
+                          {/* 👇 新增：付款人 / 代繳方 👇 */}                             
+                          <div>                                 
+                            <label className="text-xs font-bold text-slate-500 mb-1 block">付款人 / 代繳方 (Payer)</label>                                 
+                            <input type="text" className="border w-full p-2 rounded text-sm font-bold text-blue-700 outline-none focus:ring-2 focus:ring-blue-400" value={payConfig.member || ''} onChange={e=>setPayConfig({...payConfig, member: e.target.value})} placeholder="例如: 公司代繳、Charles..." />                             
+                          </div>
                             <div><label className="text-xs font-bold text-slate-500 mb-1 block flex items-center gap-1">銀行手續費 (Handling Fee) <span className="text-[10px] text-slate-400 font-normal">將獨立入帳</span></label><input type="number" className="border w-full p-2 rounded text-sm font-mono text-orange-600 font-bold" placeholder="0" value={payConfig.handlingFee || ''} onChange={e=>setPayConfig({...payConfig, handlingFee: Number(e.target.value)})} /></div>
                         </div>
                         <div className="flex gap-2 mt-6">
@@ -4271,6 +4277,65 @@ const App: React.FC = () => {
   const [scheduledExpenses, setScheduledExpenses] = useState<ScheduledExpense[]>([]);
   const [dataLoaded, setDataLoaded] = useState(false);
 
+// 🤖 系統全自動巡邏入帳引擎 (Client-Side Auto-Pay Cron)
+  useEffect(() => {
+      if (!dataLoaded || scheduledExpenses.length === 0 || !currentFamilyId) return;
+
+      const executeAutoPatrol = async () => {
+          const today = new Date();
+          const currentYear = today.getFullYear();
+          const currentMonth = today.getMonth() + 1;
+          const currentDay = today.getDate();
+
+          const batch = writeBatch(db);
+          let hasNewWrites = false;
+
+          scheduledExpenses.forEach(item => {
+              if (item.isAutoRecord) {
+                  // 檢查今天是否已經過了該項目的「扣款日」
+                  if (currentDay >= item.dueDay) {
+                      const freq = item.frequency || 'Monthly';
+                      if (freq === 'Annually' && item.dueMonth !== currentMonth) return;
+                      if (freq === 'Quarterly' && (currentMonth % 3 !== (item.dueMonth || 1) % 3)) return;
+
+                      // 💡 核心防護：產生絕對唯一、防重複的 ID (例如: auto_rec_123_2026_7)
+                      const txId = `auto_rec_${item.id}_${currentYear}_${currentMonth}`;
+                      
+                      // 檢查數據中心是否已經有這筆專屬 ID 的紀錄
+                      const isAlreadyPaid = transactions.some(t => t.id === txId);
+                      
+                      if (!isAlreadyPaid) {
+                          const txRef = doc(db, "transactions", txId);
+                          batch.set(txRef, {
+                              date: `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(item.dueDay).padStart(2, '0')}`,
+                              amount: Number(item.amount),
+                              merchant: item.title,
+                              category: item.category,
+                              member: item.member || 'System',
+                              note: `[系統全自動入帳] ${item.note || ''}`.trim(),
+                              year: currentYear,
+                              month: currentMonth,
+                              familyId: currentFamilyId
+                          });
+                          hasNewWrites = true;
+                      }
+                  }
+              }
+          });
+
+          if (hasNewWrites) {
+              try {
+                  await batch.commit();
+                  console.log("✅ 系統已自動補登本月到期款項");
+              } catch (e) {
+                  console.error("Auto record failed", e);
+              }
+          }
+      };
+
+      executeAutoPatrol();
+  }, [dataLoaded, scheduledExpenses, transactions, currentFamilyId]);
+  
   // 👇 銀行專戶管理狀態 👇
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [editingBankAccount, setEditingBankAccount] = useState<BankAccount | null>(null);
@@ -6186,11 +6251,11 @@ useEffect(() => {
                               <div><label className="text-xs font-bold text-slate-500 mb-1 block">{editingReminder?.paymentMethod === 'Autopay' ? '扣款銀行 (Bank)' : '商戶機構 (Merchant)'}</label><input className="border w-full p-2 rounded text-sm" placeholder={editingReminder?.paymentMethod === 'Autopay' ? '例如: 大新銀行 / DBS' : '例如: Standard Chartered'} value={editingReminder?.merchant || ''} onChange={e => setEditingReminder({...editingReminder, merchant: e.target.value} as any)} /></div>
                           </div>
                           
-                          {/* 👇 這是最新的頻率與日期設定區 👇 */}
+                          {/* 頻率與日期設定區 */}
                           <div className="grid grid-cols-3 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
                               <div>
                                   <label className="text-xs font-bold text-slate-500 mb-1 block">繳費頻率</label>
-                                  <select className="border w-full p-2 rounded text-sm font-bold text-indigo-700" value={editingReminder?.frequency || 'Monthly'} onChange={e => setEditingReminder({...editingReminder, frequency: e.target.value} as any)}>
+                                  <select className="border w-full p-2 rounded text-sm font-bold text-indigo-700 outline-none focus:ring-2 focus:ring-indigo-400" value={editingReminder?.frequency || 'Monthly'} onChange={e => setEditingReminder({...editingReminder, frequency: e.target.value} as any)}>
                                       <option value="Monthly">每月 (Monthly)</option>
                                       <option value="Quarterly">每季 (Quarterly)</option>
                                       <option value="Annually">每年 (Annually)</option>
@@ -6201,46 +6266,70 @@ useEffect(() => {
                                       {editingReminder?.frequency === 'Annually' ? '指定月份' : editingReminder?.frequency === 'Quarterly' ? '起始月份' : '繳款日 (Due Day)'}
                                   </label>
                                   {editingReminder?.frequency !== 'Monthly' ? (
-                                      <select className="border w-full p-2 rounded text-sm font-mono" value={editingReminder?.dueMonth || 1} onChange={e => setEditingReminder({...editingReminder, dueMonth: Number(e.target.value)} as any)}>
+                                      <select className="border w-full p-2 rounded text-sm font-mono outline-none focus:ring-2 focus:ring-indigo-400" value={editingReminder?.dueMonth || 1} onChange={e => setEditingReminder({...editingReminder, dueMonth: Number(e.target.value)} as any)}>
                                           {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => <option key={m} value={m}>{m} 月</option>)}
                                       </select>
                                   ) : (
-                                      <input type="number" min="1" max="31" placeholder="日 (1-31)" className="border w-full p-2 rounded text-sm font-mono" value={editingReminder?.dueDay || 1} onChange={e => setEditingReminder({...editingReminder, dueDay: Number(e.target.value)} as any)} />
+                                      <input type="number" min="1" max="31" placeholder="日 (1-31)" className="border w-full p-2 rounded text-sm font-mono outline-none focus:ring-2 focus:ring-indigo-400" value={editingReminder?.dueDay || 1} onChange={e => setEditingReminder({...editingReminder, dueDay: Number(e.target.value)} as any)} />
                                   )}
                               </div>
                               {editingReminder?.frequency !== 'Monthly' && (
                                   <div>
                                       <label className="text-xs font-bold text-slate-500 mb-1 block">幾號繳 (Due Day)</label>
-                                      <input type="number" min="1" max="31" className="border w-full p-2 rounded text-sm font-mono" value={editingReminder?.dueDay || 1} onChange={e => setEditingReminder({...editingReminder, dueDay: Number(e.target.value)} as any)} />
+                                      <input type="number" min="1" max="31" className="border w-full p-2 rounded text-sm font-mono outline-none focus:ring-2 focus:ring-indigo-400" value={editingReminder?.dueDay || 1} onChange={e => setEditingReminder({...editingReminder, dueDay: Number(e.target.value)} as any)} />
                                   </div>
                               )}
                           </div>
-                          {/* 👆 頻率區塊結束 👆 */}
+
+                          {/* 👇 全自動入帳引擎開關 👇 */}
+                          <label className="flex items-start gap-3 p-3 bg-emerald-50 border border-emerald-200 rounded-lg cursor-pointer transition-colors hover:bg-emerald-100 shadow-sm">
+                              <input 
+                                  type="checkbox" 
+                                  className="w-5 h-5 mt-0.5 text-emerald-600 rounded focus:ring-emerald-500 cursor-pointer" 
+                                  checked={editingReminder?.isAutoRecord || false} 
+                                  onChange={e => setEditingReminder({...editingReminder, isAutoRecord: e.target.checked} as any)} 
+                              />
+                              <div>
+                                  <div className="text-sm font-bold text-emerald-800">啟用「系統全自動入帳」(Auto-Pay)</div>
+                                  <div className="text-[10px] text-emerald-600 mt-1">
+                                      勾選後，每月只要時間一到，系統就會自動將此筆費用寫入數據中心，您無需再手動點擊繳費。<br/>
+                                      <span className="font-bold underline">如何停止？</span> 日後只需編輯此提醒並「取消勾選」，即可立刻停止自動扣款。
+                                  </div>
+                              </div>
+                          </label>
 
                           <div className="grid grid-cols-3 gap-4">
-                              <div><label className="text-xs font-bold text-slate-500 mb-1 block">金額 Amount</label><input type="number" className="border w-full p-2 rounded text-sm font-mono text-red-600 font-bold" value={editingReminder?.amount || ''} onChange={e => setEditingReminder({...editingReminder, amount: Number(e.target.value)} as any)} /></div>
-                              <div><label className="text-xs font-bold text-slate-500 mb-1 block">繳費方式 Method</label><select className="border w-full p-2 rounded text-sm" value={editingReminder?.paymentMethod || 'Manual'} onChange={e => setEditingReminder({...editingReminder, paymentMethod: e.target.value} as any)}><option value="Manual">人手繳費 (Manual)</option><option value="Autopay">自動轉帳 (Autopay)</option></select></div>
-                              <div><label className="text-xs font-bold text-slate-500 mb-1 block">負責成員 Member</label><select className="border w-full p-2 rounded text-sm" value={editingReminder?.member} onChange={e=>setEditingReminder({...editingReminder, member: e.target.value} as any)}>{(settings?.members || []).map((m: string) => <option key={m} value={m}>{m}</option>)}</select></div>
+                              <div><label className="text-xs font-bold text-slate-500 mb-1 block">金額 Amount</label><input type="number" className="border w-full p-2 rounded text-sm font-mono text-red-600 font-bold outline-none focus:ring-2 focus:ring-red-400" value={editingReminder?.amount || ''} onChange={e => setEditingReminder({...editingReminder, amount: Number(e.target.value)} as any)} /></div>
+                              <div><label className="text-xs font-bold text-slate-500 mb-1 block">繳費方式 Method</label><select className="border w-full p-2 rounded text-sm outline-none focus:ring-2 focus:ring-indigo-400" value={editingReminder?.paymentMethod || 'Manual'} onChange={e => setEditingReminder({...editingReminder, paymentMethod: e.target.value} as any)}><option value="Manual">人手繳費 (Manual)</option><option value="Autopay">自動轉帳 (Autopay)</option></select></div>
+                              <div><label className="text-xs font-bold text-slate-500 mb-1 block">負責成員 Member</label><select className="border w-full p-2 rounded text-sm outline-none focus:ring-2 focus:ring-indigo-400" value={editingReminder?.member} onChange={e=>setEditingReminder({...editingReminder, member: e.target.value} as any)}>{(settings?.members || []).map((m: string) => <option key={m} value={m}>{m}</option>)}</select></div>
                           </div>
 
                           <div className="grid grid-cols-2 gap-4">
                               <div>
                                   <label className="text-xs font-bold text-slate-500 mb-1 block">入帳類別 Category</label>
-                                  <select className="border w-full p-2 rounded text-sm" value={editingReminder?.category} onChange={e=>setEditingReminder({...editingReminder, category: e.target.value} as any)}>
+                                  <select className="border w-full p-2 rounded text-sm outline-none focus:ring-2 focus:ring-indigo-400" value={editingReminder?.category} onChange={e=>setEditingReminder({...editingReminder, category: e.target.value} as any)}>
                                       {(settings?.categories || []).map((c:any) => <option key={c.name} value={c.name}>{c.name}</option>)}
                                   </select>
                               </div>
-                              <div><label className="text-xs font-bold text-slate-500 mb-1 block">帳戶資料 Account Info</label><input className="border w-full p-2 rounded text-sm font-mono" placeholder="卡號 / 帳號 / 保單號" value={editingReminder?.accountInfo || ''} onChange={e => setEditingReminder({...editingReminder, accountInfo: e.target.value} as any)} /></div>
+                              <div><label className="text-xs font-bold text-slate-500 mb-1 block">帳戶資料 Account Info</label><input className="border w-full p-2 rounded text-sm font-mono outline-none focus:ring-2 focus:ring-indigo-400" placeholder="卡號 / 帳號 / 保單號" value={editingReminder?.accountInfo || ''} onChange={e => setEditingReminder({...editingReminder, accountInfo: e.target.value} as any)} /></div>
                           </div>
 
-                          <div><label className="text-xs font-bold text-slate-500 mb-1 block">繳費連結/聯絡 Contact</label><input className="border w-full p-2 rounded text-sm" placeholder="網站網址 / App名稱" value={editingReminder?.contact || ''} onChange={e => setEditingReminder({...editingReminder, contact: e.target.value} as any)} /></div>
-                          <div><label className="text-xs font-bold text-slate-500 mb-1 block">備註 Notes</label><textarea rows={2} className="border w-full p-2 rounded text-sm" value={editingReminder?.note || ''} onChange={e => setEditingReminder({...editingReminder, note: e.target.value} as any)} /></div>
+                          <div><label className="text-xs font-bold text-slate-500 mb-1 block">繳費連結/聯絡 Contact</label><input className="border w-full p-2 rounded text-sm outline-none focus:ring-2 focus:ring-indigo-400" placeholder="網站網址 / App名稱" value={editingReminder?.contact || ''} onChange={e => setEditingReminder({...editingReminder, contact: e.target.value} as any)} /></div>
+                          <div><label className="text-xs font-bold text-slate-500 mb-1 block">備註 Notes</label><textarea rows={2} className="border w-full p-2 rounded text-sm outline-none focus:ring-2 focus:ring-indigo-400" value={editingReminder?.note || ''} onChange={e => setEditingReminder({...editingReminder, note: e.target.value} as any)} /></div>
                       </div>
                       
                       <div className="flex gap-2 mt-6">
                           <button onClick={async () => {
                               try {
-                                  const rData = { ...editingReminder, amount: Number(editingReminder?.amount), dueDay: Number(editingReminder?.dueDay), dueMonth: Number(editingReminder?.dueMonth || 1), familyId: currentFamilyId };
+                                  // 將 isAutoRecord 狀態一併儲存
+                                  const rData = { 
+                                      ...editingReminder, 
+                                      amount: Number(editingReminder?.amount), 
+                                      dueDay: Number(editingReminder?.dueDay), 
+                                      dueMonth: Number(editingReminder?.dueMonth || 1), 
+                                      isAutoRecord: !!editingReminder?.isAutoRecord,
+                                      familyId: currentFamilyId 
+                                  };
                                   if (rData.id) {
                                       await updateDoc(doc(db, "scheduledExpenses", rData.id), rData);
                                   } else {
@@ -6248,8 +6337,8 @@ useEffect(() => {
                                   }
                                   setModalMode('none');
                               } catch(e) { alert("儲存失敗: "+e); }
-                          }} className="flex-1 bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700 shadow">儲存 Save</button>
-                          <button onClick={() => setModalMode('none')} className="flex-1 bg-gray-200 p-2 rounded font-bold hover:bg-gray-300">取消 Cancel</button>
+                          }} className="flex-1 bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700 shadow transition-colors">儲存 Save</button>
+                          <button onClick={() => setModalMode('none')} className="flex-1 bg-gray-200 p-2 rounded font-bold hover:bg-gray-300 transition-colors">取消 Cancel</button>
                       </div>
                   </div>
               </div>

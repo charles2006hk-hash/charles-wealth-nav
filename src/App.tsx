@@ -4204,6 +4204,20 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
                             </tr>
                         ))}
                     </tbody>
+                    
+                    {/* 👇 新增這段：表單底部的總數 Footer 👇 */}
+                    <tfoot>
+                        <tr className="bg-gray-100 border-t-2 border-black">
+                            <td colSpan={3} className="border border-black p-2 text-right font-bold tracking-widest">
+                                本月總計 (Total Expected) :
+                            </td>
+                            <td className="border border-black p-2 text-right font-mono font-bold text-base">
+                                -{formatCurrency(totalMonthly)}
+                            </td>
+                        </tr>
+                    </tfoot>
+                    {/* 👆 新增結束 👆 */}
+
                 </table>
             </div>
         </div>

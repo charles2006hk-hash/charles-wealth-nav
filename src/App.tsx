@@ -3990,10 +3990,40 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
                             <div><label className="text-xs font-bold text-slate-500 mb-1 block">實際扣款/繳費日期</label><input type="date" className="border w-full p-2 rounded text-sm font-mono outline-none focus:ring-2 focus:ring-blue-400" value={payConfig.payDate} onChange={e=>setPayConfig({...payConfig, payDate: e.target.value})} /></div>
                             <div><label className="text-xs font-bold text-slate-500 mb-1 block">實繳金額 (本金/保費)</label><input type="number" className="border w-full p-2 rounded text-sm font-mono text-red-600 font-bold outline-none focus:ring-2 focus:ring-blue-400" value={payConfig.actualAmount} onChange={e=>setPayConfig({...payConfig, actualAmount: Number(e.target.value)})} /></div> 
                           {/* 👇 新增：付款人 / 代繳方 👇 */}                             
-                          <div>                                 
-                            <label className="text-xs font-bold text-slate-500 mb-1 block">付款人 / 代繳方 (Payer)</label>                                 
-                            <input type="text" className="border w-full p-2 rounded text-sm font-bold text-blue-700 outline-none focus:ring-2 focus:ring-blue-400" value={payConfig.member || ''} onChange={e=>setPayConfig({...payConfig, member: e.target.value})} placeholder="例如: 公司代繳、Charles..." />                             
-                          </div>
+                          <div>
+                                <label className="text-xs font-bold text-slate-500 mb-1 flex justify-between items-end">
+                                    <span>付款人 / 代繳方 (Payer)</span>
+                                    {/* 👇 加入代繳快捷鍵 👇 */}
+                                    <div className="flex gap-1">
+                                        <button 
+                                            onClick={() => setPayConfig({...payConfig, member: '租客代付 (Tenant)'})} 
+                                            className="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-0.5 rounded transition-colors"
+                                        >
+                                            租客付
+                                        </button>
+                                        <button 
+                                            onClick={() => setPayConfig({...payConfig, member: '公司代付 (Company)'})} 
+                                            className="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-0.5 rounded transition-colors"
+                                        >
+                                            公司付
+                                        </button>
+                                    </div>
+                                </label>
+                                <input 
+                                    type="text" 
+                                    className="border w-full p-2 rounded text-sm font-bold text-blue-700 outline-none focus:ring-2 focus:ring-blue-400" 
+                                    value={payConfig.member || ''} 
+                                    onChange={e => setPayConfig({...payConfig, member: e.target.value})} 
+                                    placeholder="例如: 公司代繳、租客、或合夥人名字..." 
+                                />
+                                {/* 💡 系統提示說明 */}
+                                {payConfig.member && payConfig.member !== 'Family' && !payConfig.member.includes('Charles') && (
+                                    <div className="text-[10px] text-emerald-600 mt-1 flex items-start gap-1">
+                                        <ICONS.ShieldCheck />
+                                        <span>系統判定為代付：此筆帳單將標記為完成，但不會從主資金池中扣除。</span>
+                                    </div>
+                                )}
+                            </div>
                             <div><label className="text-xs font-bold text-slate-500 mb-1 block flex items-center gap-1">銀行手續費 (Handling Fee) <span className="text-[10px] text-slate-400 font-normal">將獨立入帳</span></label><input type="number" className="border w-full p-2 rounded text-sm font-mono text-orange-600 font-bold" placeholder="0" value={payConfig.handlingFee || ''} onChange={e=>setPayConfig({...payConfig, handlingFee: Number(e.target.value)})} /></div>
                         </div>
                         <div className="flex gap-2 mt-6">

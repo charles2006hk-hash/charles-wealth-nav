@@ -5952,19 +5952,66 @@ useEffect(() => {
                                 <input type="text" placeholder="Detail/Merchant" className="w-full border rounded p-2" value={editingTx?.merchant} onChange={e=>setEditingTx({...editingTx, merchant: e.target.value} as any)} />
                             </div>
                             
-                            {/* 金額輸入優化 */}
-                            <div className="relative">
-                                <label className="text-xs font-bold text-slate-500 mb-1 block">金額 Amount (輸入數字即可)</label>
+                           {/* 金額輸入優化與外幣計算引擎 */}
+                            <div className="relative bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                <div className="flex justify-between items-end mb-1">
+                                    <label className="text-xs font-bold text-slate-700 block">入帳金額 Amount (HKD)</label>
+                                    <button 
+                                        type="button"
+                                        onClick={() => {
+                                            // 切換外幣計算機顯示狀態 (利用一個臨時的 DOM 狀態，避免污染主組件狀態)
+                                            const el = document.getElementById('fx-calculator');
+                                            if(el) el.classList.toggle('hidden');
+                                        }}
+                                        className="text-[10px] text-blue-600 hover:bg-blue-100 px-2 py-0.5 rounded transition-colors"
+                                    >
+                                        💱 外幣折算計算機
+                                    </button>
+                                </div>
                                 <input 
                                     type="number" 
                                     placeholder="0" 
-                                    className="w-full border rounded p-2 pr-24 font-mono text-lg" 
-                                    value={editingTx?.amount} 
-                                    onChange={e=>setEditingTx({...editingTx, amount: Number(e.target.value)} as any)} 
+                                    className="w-full border rounded p-2 pr-24 font-mono text-lg bg-white outline-none focus:ring-2 focus:ring-blue-400" 
+                                    value={editingTx?.amount || ''} 
+                                    onChange={e => setEditingTx({...editingTx, amount: Number(e.target.value)} as any)} 
                                 />
-                                <span className="absolute right-3 top-9 text-sm text-gray-400 font-mono pointer-events-none">
+                                <span className="absolute right-6 top-[42px] text-sm text-gray-400 font-mono pointer-events-none">
                                     {formatCurrency(editingTx?.amount)}
                                 </span>
+                                
+                                {/* 隱藏的外幣計算機 */}
+                                <div id="fx-calculator" className="hidden mt-3 pt-3 border-t border-slate-200">
+                                    <div className="flex gap-2 items-center">
+                                        <div className="flex-1">
+                                            <label className="text-[10px] text-slate-500 block mb-1">外幣金額 (e.g. 人民幣)</label>
+                                            <input type="number" id="fx-amt" className="w-full border rounded p-1.5 text-sm font-mono" placeholder="110000" />
+                                        </div>
+                                        <div className="text-slate-400 text-sm mt-4">×</div>
+                                        <div className="flex-1">
+                                            <label className="text-[10px] text-slate-500 block mb-1">匯率 (Rate)</label>
+                                            <input type="number" id="fx-rate" step="0.0001" className="w-full border rounded p-1.5 text-sm font-mono" placeholder="0.828" />
+                                        </div>
+                                        <button 
+                                            type="button"
+                                            onClick={() => {
+                                                const amt = Number((document.getElementById('fx-amt') as HTMLInputElement)?.value || 0);
+                                                const rate = Number((document.getElementById('fx-rate') as HTMLInputElement)?.value || 0);
+                                                if (amt > 0 && rate > 0) {
+                                                    // 解決浮點數誤差 (Floating Point Error)，先乘 10000 再除
+                                                    const finalHkd = Math.round((amt * rate) * 100) / 100;
+                                                    setEditingTx({
+                                                        ...editingTx, 
+                                                        amount: finalHkd,
+                                                        note: `[FX] ¥${amt.toLocaleString()} @ ${rate} ${editingTx?.note ? ' | ' + editingTx.note : ''}`
+                                                    } as any);
+                                                }
+                                            }}
+                                            className="mt-4 bg-slate-800 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-slate-900"
+                                        >
+                                            帶入
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
 
                             {/* --- ✅ 這裡就是更新後的類別選擇區塊 --- */}

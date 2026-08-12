@@ -5986,7 +5986,8 @@ useEffect(() => {
                                             <label className="text-[10px] text-slate-500 block mb-1">外幣金額 (e.g. 人民幣)</label>
                                             <input type="number" id="fx-amt" className="w-full border rounded p-1.5 text-sm font-mono" placeholder="110000" />
                                         </div>
-                                        <div className="text-slate-400 text-sm mt-4">×</div>
+                                        {/* 💡 修改為除號 */}
+                                        <div className="text-slate-400 text-sm mt-4 font-bold text-lg">÷</div>
                                         <div className="flex-1">
                                             <label className="text-[10px] text-slate-500 block mb-1">匯率 (Rate)</label>
                                             <input type="number" id="fx-rate" step="0.0001" className="w-full border rounded p-1.5 text-sm font-mono" placeholder="0.828" />
@@ -5997,12 +5998,12 @@ useEffect(() => {
                                                 const amt = Number((document.getElementById('fx-amt') as HTMLInputElement)?.value || 0);
                                                 const rate = Number((document.getElementById('fx-rate') as HTMLInputElement)?.value || 0);
                                                 if (amt > 0 && rate > 0) {
-                                                    // 解決浮點數誤差 (Floating Point Error)，先乘 10000 再除
-                                                    const finalHkd = Math.round((amt * rate) * 100) / 100;
+                                                    // 💡 修正邏輯：外幣 / 匯率 = 港幣，並處理浮點數四捨五入到小數點後兩位
+                                                    const finalHkd = Math.round((amt / rate) * 100) / 100;
                                                     setEditingTx({
                                                         ...editingTx, 
                                                         amount: finalHkd,
-                                                        note: `[FX] ¥${amt.toLocaleString()} @ ${rate} ${editingTx?.note ? ' | ' + editingTx.note : ''}`
+                                                        note: `[FX] ¥${amt.toLocaleString()} ÷ ${rate} ${editingTx?.note ? ' | ' + editingTx.note : ''}`
                                                     } as any);
                                                 }
                                             }}

@@ -33,14 +33,18 @@ const auth = getAuth(app);
 interface PrivateLoan {
   id: string;
   familyId?: string;
-  name: string; // e.g., "建設借款"
-  principal: number; // 本金 e.g., 3000000
-  rate: number; // 年化利率 e.g., 0.06
-  term: 'Monthly' | 'Quarterly' | 'Semi-annual' | 'Annually'; // 👈 升級為支援多種頻率
-  nextDeductionDate: string; // 下次扣息日
-  lastDeductionDate: string; // 上次扣息日
+  name: string; 
+  principal: number; 
+  rate: number; 
+  term: 'Monthly' | 'Quarterly' | 'Semi-annual' | 'Annually';
+  nextDeductionDate: string; 
+  lastDeductionDate: string; 
   status: 'Active' | 'Settled';
   notes: string;
+  // 👇 新增分期還款專用欄位 👇
+  isInstallment?: boolean;    // 是否為分期模式
+  totalInstallments?: number; // 總期數
+  installmentAmount?: number; // 每期約定還款額
 }
 
 // 👇 升級：固定支出提醒 (支援季/年與詳細資料) 👇
@@ -3141,47 +3145,91 @@ const InvestmentDashboard = ({ transactions, settings, setEditingTx, setModalMod
                                     </button>
                                 </div>
                             </div>
-                            {loans.map((loan: any) => (
-                                <div key={loan.id} className="p-6">
-                                    <div className="flex flex-wrap justify-between items-start mb-4">
-                                        <div>
-                                            <h4 className="font-bold text-lg flex items-center gap-2">
-                                                {loan.name}
-                                                <button onClick={() => { setEditingLoan(loan); setModalMode('loan'); }} className="text-slate-400 hover:text-blue-600">
-                                                    <ICONS.Edit2 />
-                                                </button>
-                                            </h4>
-                                            <div className="flex items-center gap-2 mt-1">
-                                                <span className="text-xs bg-slate-100 px-2 py-1 rounded text-slate-600">年化 {(loan.rate * 100).toFixed(1)}%</span>
-                                                <span className="text-xs bg-blue-50 px-2 py-1 rounded text-blue-600 font-bold">
-                                                    {loan.term === 'Monthly' ? '每月還款' : loan.term === 'Quarterly' ? '每季還款' : loan.term === 'Annually' ? '每年還款' : '每半年還款'}
-                                                </span>
+                            {loans.map((loan: any) => {
+                                // 💡 動態掃描數據中心：精準算出「現在已還了多少」
+                                const repaidAmount = transactions
+                                    .filter((t: any) => t.merchant.includes(loan.name) && t.amount > 0)
+                                    .reduce((sum: number, t: any) => sum + t.amount, 0);
+
+                                // 針對分期模式的進度計算
+                                const isInst = loan.isInstallment;
+                                const targetAmount = isInst ? (loan.totalInstallments * loan.installmentAmount) : loan.principal;
+                                const progressPercent = targetAmount > 0 ? Math.min((repaidAmount / targetAmount) * 100, 100) : 0;
+                                const remainingAmount = targetAmount - repaidAmount;
+                                
+                                // 計算已還/剩餘期數
+                                const repaidTerms = isInst && loan.installmentAmount > 0 ? Math.floor(repaidAmount / loan.installmentAmount) : 0;
+                                const remainingTerms = isInst ? loan.totalInstallments - repaidTerms : 0;
+
+                                return (
+                                    <div key={loan.id} className="p-6">
+                                        <div className="flex flex-wrap justify-between items-start mb-4">
+                                            <div>
+                                                <h4 className="font-bold text-lg flex items-center gap-2">
+                                                    {loan.name}
+                                                    <button onClick={() => { setEditingLoan(loan); setModalMode('loan'); }} className="text-slate-400 hover:text-blue-600">
+                                                        <ICONS.Edit2 />
+                                                    </button>
+                                                </h4>
+                                                <div className="flex items-center gap-2 mt-1">
+                                                    <span className="text-xs bg-slate-100 px-2 py-1 rounded text-slate-600">年化 {(loan.rate * 100).toFixed(1)}%</span>
+                                                    <span className="text-xs bg-blue-50 px-2 py-1 rounded text-blue-600 font-bold">
+                                                        {loan.term === 'Monthly' ? '每月' : loan.term === 'Quarterly' ? '每季' : loan.term === 'Annually' ? '每年' : '每半年'}結算
+                                                    </span>
+                                                    {isInst && <span className="text-xs bg-purple-100 px-2 py-1 rounded text-purple-700 font-bold">分期模式</span>}
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <div className="text-2xl font-mono font-bold text-slate-800">{formatCurrency(loan.principal)}</div>
+                                                <div className="text-xs text-slate-500">借出本金</div>
                                             </div>
                                         </div>
-                                        <div className="text-right">
-                                            <div className="text-2xl font-mono font-bold text-slate-800">{formatCurrency(loan.principal)}</div>
-                                            <div className="text-xs text-slate-500">借出本金</div>
-                                        </div>
-                                    </div>
-                                    <div className="mt-6">
-                                        <h5 className="text-xs font-bold text-slate-500 uppercase mb-3">Next Expected Payment</h5>
-                                        <div className="relative border-l-2 border-slate-200 ml-3 pb-2">
-                                            <div className="relative pl-6">
-                                                <div className="absolute -left-[9px] top-1 w-4 h-4 rounded-full bg-blue-500 border-4 border-white shadow-sm"></div>
+                                        
+                                        {/* 👇 雙核渲染引擎：根據模式自動切換 UI 👇 */}
+                                        {isInst ? (
+                                            <div className="mt-6 border-t pt-4">
+                                                <div className="flex justify-between text-xs font-bold text-slate-600 mb-1">
+                                                    <span>已還款: {formatCurrency(repaidAmount)} ({repaidTerms} 期)</span>
+                                                    <span>尚餘: {formatCurrency(remainingAmount > 0 ? remainingAmount : 0)} ({remainingTerms > 0 ? remainingTerms : 0} 期)</span>
+                                                </div>
+                                                <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden mb-4">
+                                                    <div className="bg-blue-500 h-full rounded-full transition-all" style={{ width: `${progressPercent}%` }}></div>
+                                                </div>
                                                 <div className="flex justify-between items-center bg-blue-50 p-3 rounded-lg border border-blue-100">
                                                     <div>
-                                                        <span className="font-bold text-blue-800 block text-sm">下次結算 ({loan.nextDeductionDate || '未設定'})</span>
-                                                        <span className="text-xs text-blue-600">預計應收利息/本息</span>
+                                                        <span className="font-bold text-blue-800 block text-sm">每期應還 (PMT)</span>
+                                                        <span className="text-xs text-blue-600">次回結算: {loan.nextDeductionDate || '未設定'}</span>
                                                     </div>
-                                                    <span className="font-mono font-bold text-blue-700">
-                                                        +{formatCurrency(loan.principal * loan.rate / (loan.term === 'Monthly' ? 12 : loan.term === 'Quarterly' ? 4 : loan.term === 'Annually' ? 1 : 2))}
+                                                    <span className="font-mono font-bold text-blue-700 text-lg">
+                                                        +{formatCurrency(loan.installmentAmount)}
                                                     </span>
                                                 </div>
                                             </div>
-                                        </div>
+                                        ) : (
+                                            <div className="mt-6 border-t pt-4">
+                                                <div className="flex justify-between items-center mb-3">
+                                                    <span className="text-xs font-bold text-slate-500 uppercase">Next Expected Payment</span>
+                                                    <span className="text-xs bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded font-bold border border-emerald-100">累計已收利息: {formatCurrency(repaidAmount)}</span>
+                                                </div>
+                                                <div className="relative border-l-2 border-slate-200 ml-3 pb-2">
+                                                    <div className="relative pl-6">
+                                                        <div className="absolute -left-[9px] top-1 w-4 h-4 rounded-full bg-blue-500 border-4 border-white shadow-sm"></div>
+                                                        <div className="flex justify-between items-center bg-blue-50 p-3 rounded-lg border border-blue-100">
+                                                            <div>
+                                                                <span className="font-bold text-blue-800 block text-sm">次回結算 ({loan.nextDeductionDate || '未設定'})</span>
+                                                                <span className="text-xs text-blue-600">預計應收利息</span>
+                                                            </div>
+                                                            <span className="font-mono font-bold text-blue-700 text-lg">
+                                                                +{formatCurrency(loan.principal * loan.rate / (loan.term === 'Monthly' ? 12 : loan.term === 'Quarterly' ? 4 : loan.term === 'Annually' ? 1 : 2))}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
 
                         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -4839,7 +4887,10 @@ useEffect(() => {
              ...editingLoan,
              principal: Number(editingLoan.principal),
              rate: Number(editingLoan.rate),
-             term: editingLoan.term || 'Monthly', // 👈 確保頻率存入資料庫
+             term: editingLoan.term || 'Monthly',
+             isInstallment: !!editingLoan.isInstallment,
+             totalInstallments: Number(editingLoan.totalInstallments || 0),
+             installmentAmount: Number(editingLoan.installmentAmount || 0),
              familyId: currentFamilyId // 確保有家庭標籤
         };
         if (editingLoan.id) {
@@ -6214,13 +6265,12 @@ useEffect(() => {
                   <div className="bg-white rounded-xl shadow-2xl p-6 w-[90%] md:w-[500px] animate-in fade-in zoom-in duration-200">
                       <h3 className="font-bold text-xl mb-6">{editingLoan?.id ? '編輯私人貸款' : '新增私人貸款'}</h3>
                       <div className="space-y-4">
-                          <div><label className="text-xs font-bold text-slate-500 mb-1 block">項目名稱 Name</label><input className="border w-full p-2 rounded text-sm" placeholder="例如: 建設借款" value={editingLoan?.name || ''} onChange={e => setEditingLoan({...editingLoan, name: e.target.value} as any)} /></div>
+                          <div><label className="text-xs font-bold text-slate-500 mb-1 block">項目名稱 Name</label><input className="border w-full p-2 rounded text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder="例如: 建設借款、Gordon" value={editingLoan?.name || ''} onChange={e => setEditingLoan({...editingLoan, name: e.target.value} as any)} /></div>
                           <div className="grid grid-cols-2 gap-4">
-                              <div><label className="text-xs font-bold text-slate-500 mb-1 block">本金 Principal</label><input type="number" className="border w-full p-2 rounded text-sm font-mono" value={editingLoan?.principal || ''} onChange={e => setEditingLoan({...editingLoan, principal: Number(e.target.value)} as any)} /></div>
-                              <div><label className="text-xs font-bold text-slate-500 mb-1 block">年利率 Rate (小數，如 0.06)</label><input type="number" step="0.01" className="border w-full p-2 rounded text-sm font-mono" value={editingLoan?.rate || ''} onChange={e => setEditingLoan({...editingLoan, rate: Number(e.target.value)} as any)} /></div>
+                              <div><label className="text-xs font-bold text-slate-500 mb-1 block">本金 Principal</label><input type="number" className="border w-full p-2 rounded text-sm font-mono outline-none focus:ring-2 focus:ring-blue-400" value={editingLoan?.principal ?? ''} onChange={e => setEditingLoan({...editingLoan, principal: e.target.value === '' ? '' : Number(e.target.value)} as any)} /></div>
+                              <div><label className="text-xs font-bold text-slate-500 mb-1 block">年利率 Rate (如 0.06 為 6%)</label><input type="number" step="0.001" className="border w-full p-2 rounded text-sm font-mono outline-none focus:ring-2 focus:ring-blue-400" value={editingLoan?.rate ?? ''} onChange={e => setEditingLoan({...editingLoan, rate: e.target.value === '' ? '' : Number(e.target.value)} as any)} /></div>
                           </div>
                           
-                          {/* 👇 加入還款頻率下拉選單 👇 */}
                           <div>
                               <label className="text-xs font-bold text-slate-500 mb-1 block">還款頻率 Term</label>
                               <select className="border w-full p-2 rounded text-sm font-bold text-indigo-700 outline-none focus:ring-2 focus:ring-indigo-400" value={editingLoan?.term || 'Monthly'} onChange={e => setEditingLoan({...editingLoan, term: e.target.value} as any)}>
@@ -6231,16 +6281,44 @@ useEffect(() => {
                               </select>
                           </div>
 
+                          {/* 💡 新增：切換「純收息」與「等額分期還本息」選項 */}
+                          <label className="flex items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-lg cursor-pointer transition-colors hover:bg-slate-100">
+                              <input 
+                                  type="checkbox" 
+                                  checked={editingLoan?.isInstallment || false} 
+                                  onChange={e => setEditingLoan({ ...editingLoan, isInstallment: e.target.checked } as any)} 
+                                  className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer" 
+                              />
+                              <div>
+                                  <span className="text-sm font-bold text-slate-800 block">啟用「分期還本息」模式 (Installment)</span>
+                                  <span className="text-[10px] text-slate-500 block">預設未勾選為「純收息 (Interest-only)」；勾選後可設定固定期數與每期還款金額。</span>
+                              </div>
+                          </label>
+
+                          {/* 💡 條件渲染：勾選分期模式後顯示參數輸入框 */}
+                          {editingLoan?.isInstallment && (
+                              <div className="grid grid-cols-2 gap-4 p-3 bg-blue-50 border border-blue-200 rounded-lg animate-in fade-in zoom-in duration-150">
+                                  <div>
+                                      <label className="text-xs font-bold text-blue-900 mb-1 block">約定總期數 (Total Terms)</label>
+                                      <input type="number" min="1" className="border w-full p-2 rounded text-sm font-mono outline-none focus:ring-2 focus:ring-blue-400" placeholder="例如: 24" value={editingLoan?.totalInstallments ?? ''} onChange={e => setEditingLoan({...editingLoan, totalInstallments: e.target.value === '' ? '' : Number(e.target.value)} as any)} />
+                                  </div>
+                                  <div>
+                                      <label className="text-xs font-bold text-blue-900 mb-1 block">每期約定還款 (PMT)</label>
+                                      <input type="number" step="0.01" className="border w-full p-2 rounded text-sm font-mono text-red-600 font-bold outline-none focus:ring-2 focus:ring-blue-400" placeholder="例如: 3333.33" value={editingLoan?.installmentAmount ?? ''} onChange={e => setEditingLoan({...editingLoan, installmentAmount: e.target.value === '' ? '' : Number(e.target.value)} as any)} />
+                                  </div>
+                              </div>
+                          )}
+
                           <div className="grid grid-cols-2 gap-4">
-                              <div><label className="text-xs font-bold text-slate-500 mb-1 block">上次結算日 Last Date</label><input type="date" className="border w-full p-2 rounded text-sm" value={editingLoan?.lastDeductionDate || ''} onChange={e => setEditingLoan({...editingLoan, lastDeductionDate: e.target.value} as any)} /></div>
-                              <div><label className="text-xs font-bold text-slate-500 mb-1 block">下次結算日 Next Date</label><input type="date" className="border w-full p-2 rounded text-sm" value={editingLoan?.nextDeductionDate || ''} onChange={e => setEditingLoan({...editingLoan, nextDeductionDate: e.target.value} as any)} /></div>
+                              <div><label className="text-xs font-bold text-slate-500 mb-1 block">上次結算日 Last Date</label><input type="date" className="border w-full p-2 rounded text-sm font-mono outline-none focus:ring-2 focus:ring-blue-400" value={editingLoan?.lastDeductionDate || ''} onChange={e => setEditingLoan({...editingLoan, lastDeductionDate: e.target.value} as any)} /></div>
+                              <div><label className="text-xs font-bold text-slate-500 mb-1 block">下次結算日 Next Date</label><input type="date" className="border w-full p-2 rounded text-sm font-mono outline-none focus:ring-2 focus:ring-blue-400" value={editingLoan?.nextDeductionDate || ''} onChange={e => setEditingLoan({...editingLoan, nextDeductionDate: e.target.value} as any)} /></div>
                           </div>
-                          <div><label className="text-xs font-bold text-slate-500 mb-1 block">備註 Notes</label><textarea className="border w-full p-2 rounded text-sm" rows={2} value={editingLoan?.notes || ''} onChange={e => setEditingLoan({...editingLoan, notes: e.target.value} as any)} /></div>
+                          <div><label className="text-xs font-bold text-slate-500 mb-1 block">備註 Notes</label><textarea className="border w-full p-2 rounded text-sm outline-none focus:ring-2 focus:ring-blue-400" rows={2} value={editingLoan?.notes || ''} onChange={e => setEditingLoan({...editingLoan, notes: e.target.value} as any)} /></div>
                       </div>
                       <div className="flex gap-2 mt-6">
-                          <button onClick={handleSaveLoan} className="flex-1 bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700">儲存 Save</button>
-                          {editingLoan?.id && <button onClick={() => { deleteItem('loans', editingLoan.id); setModalMode('none'); }} className="bg-red-50 text-red-600 px-4 rounded font-bold hover:bg-red-100"><ICONS.Trash /></button>}
-                          <button onClick={() => setModalMode('none')} className="flex-1 bg-gray-200 p-2 rounded font-bold hover:bg-gray-300">取消 Cancel</button>
+                          <button onClick={handleSaveLoan} className="flex-1 bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700 shadow transition-colors">儲存 Save</button>
+                          {editingLoan?.id && <button onClick={() => { deleteItem('loans', editingLoan.id); setModalMode('none'); }} className="bg-red-50 text-red-600 px-4 rounded font-bold hover:bg-red-100 transition-colors" title="刪除"><ICONS.Trash /></button>}
+                          <button onClick={() => setModalMode('none')} className="flex-1 bg-gray-200 p-2 rounded font-bold hover:bg-gray-300 transition-colors">取消 Cancel</button>
                       </div>
                   </div>
               </div>

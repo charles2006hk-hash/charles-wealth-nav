@@ -33,12 +33,12 @@ const auth = getAuth(app);
 interface PrivateLoan {
   id: string;
   familyId?: string;
-  name: string; // e.g., "建設借款"
-  principal: number; // 本金 e.g., 3000000
-  rate: number; // 年化利率 e.g., 6%
-  term: 'Semi-annual'; // 結算週期
-  nextDeductionDate: string; // 下次扣息日
-  lastDeductionDate: string; // 上次扣息日
+  name: string; 
+  principal: number; 
+  rate: number; 
+  term: 'Monthly' | 'Quarterly' | 'Semi-annual' | 'Annually'; // 👈 支援多種頻率
+  nextDeductionDate: string; 
+  lastDeductionDate: string; 
   status: 'Active' | 'Settled';
   notes: string;
 }
@@ -2961,39 +2961,15 @@ const PartnerClearingHub = ({ transactions, settings, setEditingTx, setModalMode
 const InvestmentDashboard = ({ transactions, settings, setEditingTx, setModalMode, deleteItem, loans, setEditingLoan, bankLoans, setEditingBankLoan }: any) => {
     const [invTab, setInvTab] = useState('portfolio'); 
 
-    const loanHistory = useMemo(() => {
-        const principal = 3000000;
-        const rate = 0.06;
-        const history = [];
-        const startYear = 2015;
-        const currentYear = new Date().getFullYear(); 
-        const currentDate = new Date();
+    // 💡 動態計算：從數據中心抓取所有來自「借貸」的真實利息收入
+    const totalInterestReceived = useMemo(() => {
+        return transactions
+            .filter((t: any) => 
+                loans.some((l: any) => t.merchant.includes(l.name)) && t.amount > 0
+            )
+            .reduce((sum: number, t: any) => sum + t.amount, 0);
+    }, [transactions, loans]);
 
-        for (let y = startYear; y <= currentYear; y++) {
-            if (new Date(y, 0, 1) < currentDate) {
-                 history.push({ year: y, month: 1, amount: principal * rate / 2, type: 'Interest', note: '上半年利息' });
-            }
-            if (new Date(y, 6, 1) < currentDate) {
-                 history.push({ year: y, month: 7, amount: principal * rate / 2, type: 'Interest', note: '下半年利息' });
-            }
-        }
-        
-        let nextDate = new Date(currentYear, 0, 1);
-        if (nextDate < currentDate) nextDate = new Date(currentYear, 6, 1); 
-        if (nextDate < currentDate) nextDate = new Date(currentYear + 1, 0, 1); 
-        
-        const nextDateStr = nextDate.toISOString().split('T')[0];
-        const nextAmount = principal * rate / 2;
-
-        return {
-            history: history.sort((a,b) => b.year - a.year),
-            totalReceived: history.reduce((acc: number, h: any) => acc + h.amount, 0), // 👈 加上 : number 和 : any
-            nextDate: nextDateStr,
-            nextAmount: nextAmount
-        };
-    }, []);
-
-    const totalInterestReceived = loanHistory.totalReceived;
     const peProjects = INITIAL_PE_PROJECTS;
 
     const totalLoanPrincipal = loans.reduce((acc: number, l: any) => acc + (l.principal || 0), 0);
@@ -3176,9 +3152,36 @@ const InvestmentDashboard = ({ transactions, settings, setEditingTx, setModalMod
                                                 </button>
                                             </h4>
                                             <div className="flex items-center gap-2 mt-1">
-                                                <span className="text-xs bg-slate-100 px-2 py-1 rounded text-slate-600">年化 {loan.rate}%</span>
-                                                <span className="text-xs bg-slate-100 px-2 py-1 rounded text-slate-600">每半年結算</span>
+                                                <span className="text-xs bg-slate-100 px-2 py-1 rounded text-slate-600">年化 {(loan.rate * 100).toFixed(1)}%</span>
+                                                <span className="text-xs bg-slate-100 px-2 py-1 rounded text-blue-600 font-bold">
+                                                    {loan.term === 'Monthly' ? '每月還款' : loan.term === 'Quarterly' ? '每季還款' : loan.term === 'Annually' ? '每年還款' : '每半年還款'}
+                                                </span>
                                             </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="text-2xl font-mono font-bold text-slate-800">{formatCurrency(loan.principal)}</div>
+                                            <div className="text-xs text-slate-500">借出本金</div>
+                                        </div>
+                                    </div>
+                                    
+                                    {/* 動態計算每期應收利息 */}
+                                    <div className="mt-6">
+                                        <h5 className="text-xs font-bold text-slate-500 uppercase mb-3">Next Expected Payment</h5>
+                                        <div className="relative border-l-2 border-slate-200 ml-3 pb-2">
+                                            <div className="relative pl-6">
+                                                <div className="absolute -left-[9px] top-1 w-4 h-4 rounded-full bg-blue-500 border-4 border-white shadow-sm"></div>
+                                                <div className="flex justify-between items-center bg-blue-50 p-3 rounded-lg border border-blue-100">
+                                                    <div>
+                                                        <span className="font-bold text-blue-800 block text-sm">下次還款日 ({loan.nextDeductionDate || '未設定'})</span>
+                                                        <span className="text-xs text-blue-600">預計應收利息/本息</span>
+                                                    </div>
+                                                    <span className="font-mono font-bold text-blue-700">
+                                                        +{formatCurrency(loan.principal * loan.rate / (loan.term === 'Monthly' ? 12 : loan.term === 'Quarterly' ? 4 : loan.term === 'Annually' ? 1 : 2))}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                         </div>
                                         <div className="text-right">
                                             <div className="text-2xl font-mono font-bold text-slate-800">{formatCurrency(loan.principal)}</div>
@@ -3198,15 +3201,7 @@ const InvestmentDashboard = ({ transactions, settings, setEditingTx, setModalMod
                                                     <span className="font-mono font-bold text-blue-700">+{formatCurrency(loanHistory.nextAmount)}</span>
                                                 </div>
                                             </div>
-                                            {loanHistory.history.slice(0, 3).map((h, idx) => (
-                                                <div key={idx} className="relative pl-6 opacity-75">
-                                                    <div className="absolute -left-[5px] top-2 w-2 h-2 rounded-full bg-slate-300"></div>
-                                                    <div className="flex justify-between text-sm">
-                                                        <span className="text-slate-600">{h.year} {h.month === 1 ? 'Jan' : 'Jul'} - {h.note}</span>
-                                                        <span className="font-mono text-emerald-600">+{formatCurrency(h.amount)}</span>
-                                                    </div>
-                                                </div>
-                                            ))}
+                                            
                                         </div>
                                     </div>
                                 </div>
@@ -4868,6 +4863,7 @@ useEffect(() => {
              ...editingLoan,
              principal: Number(editingLoan.principal),
              rate: Number(editingLoan.rate),
+             term: editingLoan.term || 'Monthly', // 👈 新增這行：確保還款頻率有正確存入資料庫
              familyId: currentFamilyId // 確保有家庭標籤
         };
         if (editingLoan.id) {
@@ -6256,6 +6252,19 @@ useEffect(() => {
                                   <input type="number" step="0.01" className="border w-full p-2 rounded text-sm font-mono" value={editingLoan?.rate || ''} onChange={e => setEditingLoan({...editingLoan, rate: Number(e.target.value)} as any)} />
                               </div>
                           </div>
+
+                         
+                          <div>
+                              <label className="text-xs font-bold text-slate-500 mb-1 block">還款頻率 Term</label>
+                              <select className="border w-full p-2 rounded text-sm font-bold text-indigo-700 outline-none focus:ring-2 focus:ring-indigo-400" value={editingLoan?.term || 'Monthly'} onChange={e => setEditingLoan({...editingLoan, term: e.target.value} as any)}>
+                                  <option value="Monthly">每月 (Monthly)</option>
+                                  <option value="Quarterly">每季 (Quarterly)</option>
+                                  <option value="Semi-annual">每半年 (Semi-annual)</option>
+                                  <option value="Annually">每年 (Annually)</option>
+                              </select>
+                          </div>
+                          
+                          
                           <div className="grid grid-cols-2 gap-4">
                               <div>
                                   <label className="text-xs font-bold text-slate-500 mb-1 block">上次結算日 Last Date</label>

@@ -6074,6 +6074,11 @@ useEffect(() => {
 
 
 
+          {/* ============================================================== */}
+          {/* 👇 請將 property, loan, bankLoan 這三個 modal 完整替換為以下內容 👇 */}
+          {/* ============================================================== */}
+
+          {/* --- 1. 物業編輯視窗 (Property Modal) --- */}
           {modalMode === 'property' && (
               <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
                   <div className="bg-white rounded-xl shadow-2xl p-6 w-[95%] md:w-[600px] max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in duration-200">
@@ -6096,7 +6101,6 @@ useEffect(() => {
                                       <select className="border w-full p-2 rounded" value={editingProp?.owner} onChange={e => setEditingProp({...editingProp, owner: e.target.value} as any)}>
                                           <option value="">Select...</option>
                                           <option value="Joint">Joint (合夥)</option>
-                                          {/* 👇 自動同步系統的 Members (成員/合夥人) 名單 👇 */}
                                           {(settings?.members || []).map((m: string) => (
                                               <option key={m} value={m}>{m}</option>
                                           ))}
@@ -6106,7 +6110,6 @@ useEffect(() => {
                               </div>
                           </div>
 
-                          {/* 👇 新增：合夥人動態設定區塊 👇 */}
                           {(editingProp?.ownershipType === 'Joint' || editingProp?.owner === 'Joint') && (
                               <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg space-y-3">
                                   <div className="flex justify-between items-center">
@@ -6134,7 +6137,6 @@ useEffect(() => {
                                               }}
                                           >
                                               <option value="">選擇系統成員...</option>
-                                              {/* 完美連動系統的 Member 名單 */}
                                               {(settings?.members || []).map((m: string) => (
                                                   <option key={m} value={m}>{m}</option>
                                               ))}
@@ -6164,9 +6166,7 @@ useEffect(() => {
                                       </div>
                                   ))}
                                   
-                                  {/* 防呆計算：總和提示 */}
                               {(() => {
-                                  // 先定義一個安全的常數，確保它絕對是個陣列，不會是 undefined
                                   const currentShares = editingProp?.shares || []; 
                                   const total = currentShares.reduce((sum: number, s: any) => sum + (s.ratio || 0), 0);
                                   
@@ -6181,28 +6181,29 @@ useEffect(() => {
                               })()}
                               </div>
                           )}
-                          {/* 👆 新增結束 👆 */}
 
-                          <div className="space-y-2"><label className="text-xs font-bold text-slate-500 uppercase">Purchase & Sale Detail</label><div className="p-4 bg-blue-50 rounded-lg border border-blue-100 space-y-3"><div className="grid grid-cols-2 gap-2"><div className="relative"><label className="text-xs text-slate-500 block mb-1">Purchase Price</label><input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.purchasePrice || ''} onChange={e => setEditingProp({...editingProp, purchasePrice: Number(e.target.value)} as any)} /><span className="absolute right-2 top-8 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.purchasePrice)}</span></div><div><label className="text-xs text-slate-500 block mb-1">Purchase Date</label><input className="border w-full p-2 rounded text-sm" type="date" value={editingProp?.purchaseDate || ''} onChange={e => setEditingProp({...editingProp, purchaseDate: e.target.value} as any)} /></div></div><div className="grid grid-cols-2 gap-2"><div><label className="text-xs text-slate-500 block mb-1">Agent</label><select className="border w-full p-2 rounded text-sm" value={editingProp?.purchaseAgent} onChange={e => setEditingProp({...editingProp, purchaseAgent: e.target.value} as any)}><option value="">Select...</option>{settings.agents.map(a => <option key={a} value={a}>{a}</option>)}</select></div><div className="relative"><label className="text-xs text-slate-500 block mb-1">Commission</label><input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.purchaseCommission || ''} onChange={e => setEditingProp({...editingProp, purchaseCommission: Number(e.target.value)} as any)} /><span className="absolute right-2 top-8 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.purchaseCommission)}</span></div></div>{editingProp?.status === 'Sold' && (<div className="mt-2 border-t pt-2 border-blue-200 bg-blue-100/50 p-2 rounded"><div className="grid grid-cols-2 gap-2"><div className="relative"><label className="text-xs text-slate-700 font-bold block mb-1">Sale Price (賣出價)</label><input className="border w-full p-2 rounded text-sm font-bold text-green-700" type="number" value={editingProp?.salePrice || ''} onChange={e => setEditingProp({...editingProp, salePrice: Number(e.target.value)} as any)} /><span className="absolute right-2 top-8 text-xs text-gray-500 pointer-events-none">{formatCurrency(editingProp?.salePrice)}</span></div><div><label className="text-xs text-slate-700 font-bold block mb-1">Sale Date (賣出日)</label><input className="border w-full p-2 rounded text-sm" type="date" value={editingProp?.saleDate || ''} onChange={e => setEditingProp({...editingProp, saleDate: e.target.value} as any)} /></div></div></div>)}</div></div>
-                          <details className="group border rounded-lg p-2"><summary className="font-bold text-sm cursor-pointer text-slate-700 flex justify-between items-center">銀行按揭設定 (點擊展開) <span className="text-xs text-slate-400">▼</span></summary><div className="p-4 bg-yellow-50 rounded-lg border border-yellow-100 grid grid-cols-2 gap-4 mt-2"><div><label className="text-xs text-slate-500 block mb-1">Bank</label><select className="border w-full p-2 rounded text-sm" value={editingProp?.bank} onChange={e => setEditingProp({...editingProp, bank: e.target.value} as any)}><option value="">Select...</option>{settings.banks.map(b => <option key={b} value={b}>{b}</option>)}</select></div><div><label className="text-xs text-slate-500 block mb-1">Mortgage Loan</label><div className="relative"><input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.mortgageLoan || ''} onChange={e => setEditingProp({...editingProp, mortgageLoan: Number(e.target.value)} as any)} /><span className="absolute right-2 top-2 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.mortgageLoan)}</span></div></div><div><label className="text-xs text-slate-500 block mb-1">Outstanding</label><div className="relative"><input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.outstandingLoan || ''} onChange={e => setEditingProp({...editingProp, outstandingLoan: Number(e.target.value)} as any)} /><span className="absolute right-2 top-2 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.outstandingLoan)}</span></div></div><div><label className="text-xs text-slate-500 block mb-1">Rate (%)</label><input className="border w-full p-2 rounded text-sm" type="number" step="0.1" value={editingProp?.interestRate || ''} onChange={e => setEditingProp({...editingProp, interestRate: Number(e.target.value)} as any)} /></div><div><label className="text-xs text-slate-500 block mb-1">Tenure (Yrs)</label><input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.tenure || ''} onChange={e => setEditingProp({...editingProp, tenure: Number(e.target.value)} as any)} /></div><div><label className="text-xs text-slate-500 block mb-1">Monthly Pay</label><div className="relative"><input className="border w-full p-2 rounded text-sm bg-white font-bold text-red-600" type="number" value={editingProp?.mortgageAmount || ''} onChange={e => setEditingProp({...editingProp, mortgageAmount: Number(e.target.value)} as any)} /><span className="absolute right-2 top-2 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.mortgageAmount)}</span></div></div></div></details>
+                          <div className="space-y-2"><label className="text-xs font-bold text-slate-500 uppercase">Purchase & Sale Detail</label><div className="p-4 bg-blue-50 rounded-lg border border-blue-100 space-y-3"><div className="grid grid-cols-2 gap-2"><div className="relative"><label className="text-xs text-slate-500 block mb-1">Purchase Price</label><input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.purchasePrice || ''} onChange={e => setEditingProp({...editingProp, purchasePrice: Number(e.target.value)} as any)} /><span className="absolute right-2 top-8 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.purchasePrice)}</span></div><div><label className="text-xs text-slate-500 block mb-1">Purchase Date</label><input className="border w-full p-2 rounded text-sm" type="date" value={editingProp?.purchaseDate || ''} onChange={e => setEditingProp({...editingProp, purchaseDate: e.target.value} as any)} /></div></div><div className="grid grid-cols-2 gap-2"><div><label className="text-xs text-slate-500 block mb-1">Agent</label><select className="border w-full p-2 rounded text-sm" value={editingProp?.purchaseAgent} onChange={e => setEditingProp({...editingProp, purchaseAgent: e.target.value} as any)}><option value="">Select...</option>{(settings?.agents || []).map((a: string) => <option key={a} value={a}>{a}</option>)}</select></div><div className="relative"><label className="text-xs text-slate-500 block mb-1">Commission</label><input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.purchaseCommission || ''} onChange={e => setEditingProp({...editingProp, purchaseCommission: Number(e.target.value)} as any)} /><span className="absolute right-2 top-8 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.purchaseCommission)}</span></div></div>{editingProp?.status === 'Sold' && (<div className="mt-2 border-t pt-2 border-blue-200 bg-blue-100/50 p-2 rounded"><div className="grid grid-cols-2 gap-2"><div className="relative"><label className="text-xs text-slate-700 font-bold block mb-1">Sale Price (賣出價)</label><input className="border w-full p-2 rounded text-sm font-bold text-green-700" type="number" value={editingProp?.salePrice || ''} onChange={e => setEditingProp({...editingProp, salePrice: Number(e.target.value)} as any)} /><span className="absolute right-2 top-8 text-xs text-gray-500 pointer-events-none">{formatCurrency(editingProp?.salePrice)}</span></div><div><label className="text-xs text-slate-700 font-bold block mb-1">Sale Date (賣出日)</label><input className="border w-full p-2 rounded text-sm" type="date" value={editingProp?.saleDate || ''} onChange={e => setEditingProp({...editingProp, saleDate: e.target.value} as any)} /></div></div></div>)}</div></div>
+                          <details className="group border rounded-lg p-2"><summary className="font-bold text-sm cursor-pointer text-slate-700 flex justify-between items-center">銀行按揭設定 (點擊展開) <span className="text-xs text-slate-400">▼</span></summary><div className="p-4 bg-yellow-50 rounded-lg border border-yellow-100 grid grid-cols-2 gap-4 mt-2"><div><label className="text-xs text-slate-500 block mb-1">Bank</label><select className="border w-full p-2 rounded text-sm" value={editingProp?.bank} onChange={e => setEditingProp({...editingProp, bank: e.target.value} as any)}><option value="">Select...</option>{(settings?.banks || []).map((b: string) => <option key={b} value={b}>{b}</option>)}</select></div><div><label className="text-xs text-slate-500 block mb-1">Mortgage Loan</label><div className="relative"><input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.mortgageLoan || ''} onChange={e => setEditingProp({...editingProp, mortgageLoan: Number(e.target.value)} as any)} /><span className="absolute right-2 top-2 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.mortgageLoan)}</span></div></div><div><label className="text-xs text-slate-500 block mb-1">Outstanding</label><div className="relative"><input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.outstandingLoan || ''} onChange={e => setEditingProp({...editingProp, outstandingLoan: Number(e.target.value)} as any)} /><span className="absolute right-2 top-2 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.outstandingLoan)}</span></div></div><div><label className="text-xs text-slate-500 block mb-1">Rate (%)</label><input className="border w-full p-2 rounded text-sm" type="number" step="0.1" value={editingProp?.interestRate || ''} onChange={e => setEditingProp({...editingProp, interestRate: Number(e.target.value)} as any)} /></div><div><label className="text-xs text-slate-500 block mb-1">Tenure (Yrs)</label><input className="border w-full p-2 rounded text-sm" type="number" value={editingProp?.tenure || ''} onChange={e => setEditingProp({...editingProp, tenure: Number(e.target.value)} as any)} /></div><div><label className="text-xs text-slate-500 block mb-1">Monthly Pay</label><div className="relative"><input className="border w-full p-2 rounded text-sm bg-white font-bold text-red-600" type="number" value={editingProp?.mortgageAmount || ''} onChange={e => setEditingProp({...editingProp, mortgageAmount: Number(e.target.value)} as any)} /><span className="absolute right-2 top-2 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.mortgageAmount)}</span></div></div></div></details>
                           <div className="space-y-2"><label className="text-xs font-bold text-slate-500 uppercase">Valuation & Expenses</label><div className="grid grid-cols-2 gap-3"><div><label className="text-xs">Current Value</label><div className="relative"><input className="border w-full p-2 rounded" type="number" value={editingProp?.currentValue || ''} onChange={e => setEditingProp({...editingProp, currentValue: Number(e.target.value)} as any)} /><span className="absolute right-2 top-2 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.currentValue)}</span></div></div><div><label className="text-xs">Est. Rent</label><div className="relative"><input className="border w-full p-2 rounded" type="number" value={editingProp?.estRent || ''} onChange={e => setEditingProp({...editingProp, estRent: Number(e.target.value)} as any)} /><span className="absolute right-2 top-2 text-xs text-gray-400 pointer-events-none">{formatCurrency(editingProp?.estRent)}</span></div></div></div><div className="grid grid-cols-3 gap-2"><div><label className="text-xs">Mgt Fee</label><input className="border p-1 text-sm w-full rounded" type="number" value={editingProp?.managementFee || ''} onChange={e=>setEditingProp({...editingProp, managementFee: Number(e.target.value)} as any)} /></div><div><label className="text-xs">Rates (Qtr)</label><input className="border p-1 text-sm w-full rounded" type="number" value={editingProp?.govtRates || ''} onChange={e=>setEditingProp({...editingProp, govtRates: Number(e.target.value)} as any)} /></div><div><label className="text-xs">Govt Rent</label><input className="border p-1 text-sm w-full rounded" type="number" value={editingProp?.govtRent || ''} onChange={e=>setEditingProp({...editingProp, govtRent: Number(e.target.value)} as any)} /></div></div></div>
                       </div>
-                    {/* 👇 全自動入帳引擎開關 (物業版) 👇 */}
-                          <label className="flex items-start gap-3 p-3 mt-4 bg-emerald-50 border border-emerald-200 rounded-lg cursor-pointer transition-colors hover:bg-emerald-100 shadow-sm">
-                              <input 
-                                  type="checkbox" 
-                                  className="w-5 h-5 mt-0.5 text-emerald-600 rounded focus:ring-emerald-500 cursor-pointer" 
-                                  checked={(editingProp as any)?.isAutoRecord || false} 
-                                  onChange={e => setEditingProp({...editingProp, isAutoRecord: e.target.checked} as any)} 
-                              />
-                              <div>
-                                  <div className="text-sm font-bold text-emerald-800">啟用此物業的「全自動入帳」(Auto-Pay)</div>
-                                  <div className="text-[10px] text-emerald-600 mt-1">
-                                      勾選後，系統每月會自動幫您入帳此物業的「管理費(1號)」、「按揭(15號)」及「季度差餉地租(28號)」。
-                                  </div>
+
+                      {/* 👇 全自動入帳引擎開關 (物業版) 👇 */}
+                      <label className="flex items-start gap-3 p-3 mt-4 bg-emerald-50 border border-emerald-200 rounded-lg cursor-pointer transition-colors hover:bg-emerald-100 shadow-sm">
+                          <input 
+                              type="checkbox" 
+                              className="w-5 h-5 mt-0.5 text-emerald-600 rounded focus:ring-emerald-500 cursor-pointer" 
+                              checked={(editingProp as any)?.isAutoRecord || false} 
+                              onChange={e => setEditingProp({...editingProp, isAutoRecord: e.target.checked} as any)} 
+                          />
+                          <div>
+                              <div className="text-sm font-bold text-emerald-800">啟用此物業的「全自動入帳」(Auto-Pay)</div>
+                              <div className="text-[10px] text-emerald-600 mt-1">
+                                  勾選後，系統每月會自動幫您入帳此物業的「管理費(1號)」、「按揭(15號)」及「季度差餉地租(28號)」。
                               </div>
-                          </label>
-                      <div className="flex gap-2 mt-8 pt-4 border-t">
+                          </div>
+                      </label>
+
+                      <div className="flex gap-2 mt-6 pt-4 border-t">
                           <button onClick={handleSaveProperty} className="flex-1 bg-blue-600 text-white p-3 rounded-lg font-bold hover:bg-blue-700">Save Property</button>
                           <button onClick={() => setModalMode('none')} className="flex-1 bg-gray-100 text-slate-600 p-3 rounded-lg font-bold hover:bg-gray-200">Cancel</button>
                       </div>
@@ -6210,29 +6211,8 @@ useEffect(() => {
               </div>
           )}
 
-          {/* --- 1. 租約編輯視窗 (Lease Modal) --- */}
-          {modalMode === 'lease' && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
-                  <div className="bg-white rounded-xl shadow-2xl p-6 w-[90%] md:w-[500px] animate-in fade-in zoom-in duration-200">
-                      <h3 className="font-bold text-xl mb-6">Manage Lease</h3>
-                      <div className="space-y-4">
-                          <input className="border w-full p-2 rounded" placeholder="Tenant Name" list="tenant-list" value={editingLease?.tenantName || ''} onChange={e => setEditingLease({...editingLease, tenantName: e.target.value} as any)} />
-                          <datalist id="tenant-list">{(settings?.tenants || []).map((t: string) => <option key={t} value={t} />)}</datalist>
-                          <input className="border w-full p-2 rounded" placeholder="Tenant ID" value={editingLease?.tenantID || ''} onChange={e => setEditingLease({...editingLease, tenantID: e.target.value} as any)} />
-                          <div className="grid grid-cols-2 gap-4"><div><label className="text-xs">Start Date</label><input type="date" className="border w-full p-2 rounded" value={editingLease?.startDate || ''} onChange={e => setEditingLease({...editingLease, startDate: e.target.value} as any)} /></div><div><label className="text-xs">End Date</label><input type="date" className="border w-full p-2 rounded" value={editingLease?.endDate || ''} onChange={e => setEditingLease({...editingLease, endDate: e.target.value} as any)} /></div></div>
-                          <div className="grid grid-cols-2 gap-4"><div><label className="text-xs">Monthly Rent</label><input type="number" className="border w-full p-2 rounded" value={editingLease?.monthlyRent || ''} onChange={e => setEditingLease({...editingLease, monthlyRent: Number(e.target.value)} as any)} /></div><div><label className="text-xs">Deposit</label><input type="number" className="border w-full p-2 rounded" value={editingLease?.deposit || ''} onChange={e => setEditingLease({...editingLease, deposit: Number(e.target.value)} as any)} /></div></div>
-                          <select className="border w-full p-2 rounded" value={editingLease?.status} onChange={e => setEditingLease({...editingLease, status: e.target.value} as any)}><option value="Active">Active</option><option value="Terminated">Terminated</option></select>
-                          <div className="border-t pt-3 mt-3"><label className="block text-sm font-bold text-slate-700 mb-2">租約文件圖片 (最多10張)</label><div className="flex flex-wrap gap-2 mb-2">{editingLease?.attachments?.map((img, idx) => (<div key={idx} className="relative w-16 h-16"><img src={img} className="w-full h-full object-cover rounded border" alt="upload" /><button onClick={()=>handleRemoveImage(idx, 'lease')} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs"><ICONS.X /></button></div>))}<label className="w-16 h-16 flex items-center justify-center border-2 border-dashed border-gray-300 rounded cursor-pointer hover:bg-gray-50 text-gray-400"><ICONS.Plus /><input type="file" className="hidden" accept="image/*" multiple onChange={(e)=>handleImageUpload(e, 'lease')} /></label></div></div>
-                      </div>
-                      <div className="flex gap-2 mt-6">
-                          <button onClick={handleSaveLease} className="flex-1 bg-blue-600 text-white p-2 rounded hover:bg-blue-700 font-bold">Save Lease</button>
-                          <button onClick={() => setModalMode('none')} className="flex-1 bg-gray-200 p-2 rounded hover:bg-gray-300 font-bold">Cancel</button>
-                      </div>
-                  </div>
-              </div>
-          )}
 
-          {/* --- 2. 貸款編輯視窗 (Loan Modal) --- */}
+          {/* --- 2. 私人貸款編輯視窗 (Loan Modal) --- */}
           {modalMode === 'loan' && (
               <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
                   <div className="bg-white rounded-xl shadow-2xl p-6 w-[90%] md:w-[500px] animate-in fade-in zoom-in duration-200">
@@ -6252,8 +6232,7 @@ useEffect(() => {
                                   <input type="number" step="0.01" className="border w-full p-2 rounded text-sm font-mono" value={editingLoan?.rate || ''} onChange={e => setEditingLoan({...editingLoan, rate: Number(e.target.value)} as any)} />
                               </div>
                           </div>
-
-                         
+                          
                           <div>
                               <label className="text-xs font-bold text-slate-500 mb-1 block">還款頻率 Term</label>
                               <select className="border w-full p-2 rounded text-sm font-bold text-indigo-700 outline-none focus:ring-2 focus:ring-indigo-400" value={editingLoan?.term || 'Monthly'} onChange={e => setEditingLoan({...editingLoan, term: e.target.value} as any)}>
@@ -6263,8 +6242,7 @@ useEffect(() => {
                                   <option value="Annually">每年 (Annually)</option>
                               </select>
                           </div>
-                          
-                          
+
                           <div className="grid grid-cols-2 gap-4">
                               <div>
                                   <label className="text-xs font-bold text-slate-500 mb-1 block">上次結算日 Last Date</label>
@@ -6291,6 +6269,7 @@ useEffect(() => {
               </div>
           )}
 
+
           {/* --- 3. 銀行貸款編輯視窗 (Bank Loan Modal) --- */}
           {modalMode === 'bankLoan' && (
               <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
@@ -6298,86 +6277,47 @@ useEffect(() => {
                       <h3 className="font-bold text-xl mb-6 flex items-center gap-2"><ICONS.Home /> {editingBankLoan?.id ? '編輯銀行貸款' : '新增銀行貸款'}</h3>
                       <div className="space-y-4">
                           <div className="grid grid-cols-2 gap-4">
-                              <div>
-                                  <label className="text-xs font-bold text-slate-500 mb-1 block">銀行名稱 Bank</label>
-                                  <input className="border w-full p-2 rounded text-sm" value={editingBankLoan?.bankName || ''} onChange={e => setEditingBankLoan({...editingBankLoan, bankName: e.target.value} as any)} />
-                              </div>
-                              <div>
-                                  <label className="text-xs font-bold text-slate-500 mb-1 block">用途 Purpose</label>
-                                  <input className="border w-full p-2 rounded text-sm" value={editingBankLoan?.purpose || ''} onChange={e => setEditingBankLoan({...editingBankLoan, purpose: e.target.value} as any)} />
-                              </div>
+                              <div><label className="text-xs font-bold text-slate-500 mb-1 block">銀行名稱 Bank</label><input className="border w-full p-2 rounded text-sm" value={editingBankLoan?.bankName || ''} onChange={e => setEditingBankLoan({...editingBankLoan, bankName: e.target.value} as any)} /></div>
+                              <div><label className="text-xs font-bold text-slate-500 mb-1 block">用途 Purpose</label><input className="border w-full p-2 rounded text-sm" value={editingBankLoan?.purpose || ''} onChange={e => setEditingBankLoan({...editingBankLoan, purpose: e.target.value} as any)} /></div>
                           </div>
                           
                           <div className="grid grid-cols-2 gap-4">
-                              <div>
-                                  <label className="text-xs font-bold text-slate-500 mb-1 block">總貸款額 Principal</label>
-                                  <input type="number" className="border w-full p-2 rounded text-sm font-mono" value={editingBankLoan?.principal || ''} onChange={e => setEditingBankLoan({...editingBankLoan, principal: Number(e.target.value)} as any)} />
-                              </div>
-                              <div>
-                                  <label className="text-xs font-bold text-slate-500 mb-1 block">總期數 (月) Term</label>
-                                  <select className="border w-full p-2 rounded text-sm font-mono" value={editingBankLoan?.termMonths || 36} onChange={e => setEditingBankLoan({...editingBankLoan, termMonths: Number(e.target.value)} as any)}>
-                                      <option value={12}>12 期</option>
-                                      <option value={24}>24 期</option>
-                                      <option value={36}>36 期</option>
-                                      <option value={48}>48 期</option>
-                                      <option value={60}>60 期</option>
-                                      <option value={72}>72 期</option>
-                                  </select>
-                              </div>
+                              <div><label className="text-xs font-bold text-slate-500 mb-1 block">總貸款額 Principal</label><input type="number" className="border w-full p-2 rounded text-sm font-mono" value={editingBankLoan?.principal || ''} onChange={e => setEditingBankLoan({...editingBankLoan, principal: Number(e.target.value)} as any)} /></div>
+                              <div><label className="text-xs font-bold text-slate-500 mb-1 block">總期數 (月) Term</label><input type="number" className="border w-full p-2 rounded text-sm font-mono" value={editingBankLoan?.termMonths || ''} onChange={e => setEditingBankLoan({...editingBankLoan, termMonths: Number(e.target.value)} as any)} /></div>
                           </div>
 
                           <div className="grid grid-cols-3 gap-4">
-                              <div className="relative">
-                                  <label className="text-xs font-bold text-slate-500 mb-1 block">每月還款 PMT</label>
-                                  <input type="number" className="border w-full p-2 rounded text-sm font-mono text-red-600 font-bold pr-8 outline-none focus:border-red-400 focus:ring-1 focus:ring-red-400" value={editingBankLoan?.monthlyPayment || ''} onChange={e => setEditingBankLoan({...editingBankLoan, monthlyPayment: Number(e.target.value)} as any)} />
-                                  {/* 自動計算 PMT 的魔術棒 */}
-                                  <button type="button" onClick={() => autoCalculateBankLoan('PMT')} className="absolute right-2 top-7 text-lg hover:scale-125 transition-transform" title="由利率自動計算供款">✨</button>
-                              </div>
-                              <div className="relative">
-                                  <label className="text-xs font-bold text-slate-500 mb-1 block">年利率 Rate (%)</label>
-                                  <input type="number" step="0.01" className="border w-full p-2 rounded text-sm font-mono text-blue-600 font-bold pr-8 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400" value={editingBankLoan?.interestRate || ''} onChange={e => setEditingBankLoan({...editingBankLoan, interestRate: Number(e.target.value)} as any)} />
-                                  {/* 反推利率的魔術棒 */}
-                                  <button type="button" onClick={() => autoCalculateBankLoan('Rate')} className="absolute right-2 top-7 text-lg hover:scale-125 transition-transform" title="由供款反推利率">✨</button>
-                              </div>
-                              <div>
-                                  <label className="text-xs font-bold text-slate-500 mb-1 block">罰息率 Penalty</label>
-                                  <input type="number" step="0.01" placeholder="0.03 = 3%" className="border w-full p-2 rounded text-sm font-mono outline-none focus:border-slate-400" value={editingBankLoan?.penaltyRate || ''} onChange={e => setEditingBankLoan({...editingBankLoan, penaltyRate: Number(e.target.value)} as any)} />
-                              </div>
+                              <div><label className="text-xs font-bold text-slate-500 mb-1 block">每月還款 PMT</label><input type="number" className="border w-full p-2 rounded text-sm font-mono text-red-600 font-bold" value={editingBankLoan?.monthlyPayment || ''} onChange={e => setEditingBankLoan({...editingBankLoan, monthlyPayment: Number(e.target.value)} as any)} /></div>
+                              <div><label className="text-xs font-bold text-slate-500 mb-1 block">年利率 Rate (%)</label><input type="number" step="0.001" className="border w-full p-2 rounded text-sm font-mono text-blue-600 font-bold" value={editingBankLoan?.interestRate || ''} onChange={e => setEditingBankLoan({...editingBankLoan, interestRate: Number(e.target.value)} as any)} /></div>
+                              <div><label className="text-xs font-bold text-slate-500 mb-1 block">罰息率 Penalty</label><input type="number" step="0.01" className="border w-full p-2 rounded text-sm font-mono" value={editingBankLoan?.penaltyRate || ''} onChange={e => setEditingBankLoan({...editingBankLoan, penaltyRate: Number(e.target.value)} as any)} /></div>
                           </div>
-
+                          
                           <div className="grid grid-cols-2 gap-4">
-                              <div>
-                                  <label className="text-xs font-bold text-slate-500 mb-1 block">首期還款日 Start Date</label>
-                                  <input type="date" className="border w-full p-2 rounded text-sm" value={editingBankLoan?.startDate || ''} onChange={e => setEditingBankLoan({...editingBankLoan, startDate: e.target.value} as any)} />
-                              </div>
-                              <div>
-                                  {/* 空白排版用 */}
-                              </div>
+                              <div><label className="text-xs font-bold text-slate-500 mb-1 block">首期還款日 Start Date</label><input type="date" className="border w-full p-2 rounded text-sm" value={editingBankLoan?.startDate || ''} onChange={e => setEditingBankLoan({...editingBankLoan, startDate: e.target.value} as any)} /></div>
+                              <div><label className="text-xs font-bold text-slate-500 mb-1 block">狀態 Status</label><select className="border w-full p-2 rounded text-sm" value={editingBankLoan?.status || 'Active'} onChange={e => setEditingBankLoan({...editingBankLoan, status: e.target.value} as any)}><option value="Active">Active</option><option value="Settled">Settled</option></select></div>
                           </div>
 
-                          <div>
-                              <label className="text-xs font-bold text-slate-500 mb-1 block">備註 Notes</label>
-                              <textarea rows={2} placeholder="例如: 綁定 Mortgage Link、經手人資訊..." className="border w-full p-2 rounded text-sm" value={editingBankLoan?.notes || ''} onChange={e => setEditingBankLoan({...editingBankLoan, notes: e.target.value} as any)} />
-                          </div>
+                          <div><label className="text-xs font-bold text-slate-500 mb-1 block">備註 Notes</label><textarea className="border w-full p-2 rounded text-sm" rows={2} placeholder="例如: 綁定 Mortgage Link..." value={editingBankLoan?.notes || ''} onChange={e => setEditingBankLoan({...editingBankLoan, notes: e.target.value} as any)} /></div>
                       </div>
+
                       {/* 👇 全自動入帳引擎開關 (銀行貸款版) 👇 */}
-                          <label className="flex items-start gap-3 p-3 mt-2 bg-emerald-50 border border-emerald-200 rounded-lg cursor-pointer transition-colors hover:bg-emerald-100 shadow-sm">
-                              <input 
-                                  type="checkbox" 
-                                  className="w-5 h-5 mt-0.5 text-emerald-600 rounded focus:ring-emerald-500 cursor-pointer" 
-                                  checked={(editingBankLoan as any)?.isAutoRecord || false} 
-                                  onChange={e => setEditingBankLoan({...editingBankLoan, isAutoRecord: e.target.checked} as any)} 
-                              />
-                              <div>
-                                  <div className="text-sm font-bold text-emerald-800">啟用「系統全自動入帳」(Auto-Pay)</div>
-                                  <div className="text-[10px] text-emerald-600 mt-1">
-                                      勾選後，每月到了「首期還款日」的號碼時，系統會自動將此筆貸款供款寫入數據中心。
-                                  </div>
+                      <label className="flex items-start gap-3 p-3 mt-4 bg-emerald-50 border border-emerald-200 rounded-lg cursor-pointer transition-colors hover:bg-emerald-100 shadow-sm">
+                          <input 
+                              type="checkbox" 
+                              className="w-5 h-5 mt-0.5 text-emerald-600 rounded focus:ring-emerald-500 cursor-pointer" 
+                              checked={(editingBankLoan as any)?.isAutoRecord || false} 
+                              onChange={e => setEditingBankLoan({...editingBankLoan, isAutoRecord: e.target.checked} as any)} 
+                          />
+                          <div>
+                              <div className="text-sm font-bold text-emerald-800">啟用「系統全自動入帳」(Auto-Pay)</div>
+                              <div className="text-[10px] text-emerald-600 mt-1">
+                                  勾選後，每月到了「首期還款日」的號碼時，系統會自動將此筆貸款供款寫入數據中心。
                               </div>
-                          </label>
-                      {/* 👇 按鈕區塊，確保有正確閉合 👇 */}
+                          </div>
+                      </label>
+
                       <div className="flex gap-2 mt-6">
-                          <button onClick={handleSaveBankLoan} className="flex-1 bg-slate-800 text-white p-2 rounded font-bold hover:bg-slate-900">儲存 Save</button>
+                          <button onClick={handleSaveBankLoan} className="flex-1 bg-slate-800 text-white p-2 rounded font-bold hover:bg-slate-900 shadow">儲存 Save</button>
                           {editingBankLoan?.id && (
                               <button onClick={() => { deleteItem('bankLoans', editingBankLoan.id); setModalMode('none'); }} className="bg-red-50 text-red-600 px-4 rounded font-bold hover:bg-red-100"><ICONS.Trash /></button>
                           )}
@@ -6387,6 +6327,7 @@ useEffect(() => {
               </div>
           )}
 
+       
        {/* --- 4. 自訂提醒編輯視窗 (Reminder Modal) --- */}
           {modalMode === 'reminder' && (
               <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">

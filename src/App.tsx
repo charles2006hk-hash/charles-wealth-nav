@@ -41,10 +41,10 @@ interface PrivateLoan {
   lastDeductionDate: string; 
   status: 'Active' | 'Settled';
   notes: string;
-  // 👇 新增分期還款專用欄位 👇
-  isInstallment?: boolean;    // 是否為分期模式
-  totalInstallments?: number; // 總期數
-  installmentAmount?: number; // 每期約定還款額
+  isInstallment?: boolean;    
+  totalInstallments?: number; 
+  installmentAmount?: number; 
+  isAutoRecord?: boolean; // 👈 新增：全自動入帳開關
 }
 
 // 👇 升級：固定支出提醒 (支援季/年與詳細資料) 👇
@@ -3986,7 +3986,7 @@ const SuperAdminDashboard = () => {
 };
 
 // --- 🌟 旗艦版：銀行專戶水位監控、進度總覽與自動扣款中心 ---
-const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transactions, bankAccounts, setModalMode, setEditingReminder, setEditingBankLoan, setEditingProp, setEditingBankAccount, setTopUpAccount, deleteItem, currentFamilyId }: any) => {
+const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transactions, bankAccounts, loans, setModalMode, setEditingReminder, setEditingBankLoan, setEditingProp, setEditingLoan, setEditingBankAccount, setTopUpAccount, deleteItem, currentFamilyId }: any) => {
     
     const [viewYear, setViewYear] = useState(new Date().getFullYear());
     const [viewMonth, setViewMonth] = useState(new Date().getMonth() + 1);
@@ -4010,6 +4010,29 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
                 if (prop.mortgageAmount > 0) list.push({ id: `auto_prop_mortgage_${prop.id}`, title: `${prop.name} 按揭供款`, amount: prop.mortgageAmount, dueDay: 15, category: 'Mortgage Payment (按揭供款)', member: prop.owner || 'Family', paymentMethod: 'Autopay', type: 'Auto' });
                 if (prop.managementFee > 0) list.push({ id: `auto_prop_mgt_${prop.id}`, title: `${prop.name} 管理費`, amount: prop.managementFee, dueDay: 1, category: 'Management Fee (管理費)', member: prop.owner || 'Family', paymentMethod: 'Autopay', type: 'Auto' });
                 if ((prop.govtRates > 0 || prop.govtRent > 0) && [1, 4, 7, 10].includes(viewMonth)) list.push({ id: `auto_prop_rates_${prop.id}`, title: `${prop.name} 差餉地租`, amount: (prop.govtRates || 0) + (prop.govtRent || 0), dueDay: 28, category: 'Govt Rates (差餉)', member: prop.owner || 'Family', paymentMethod: 'Manual', frequency: 'Quarterly', type: 'Auto' });
+            }
+        });
+
+        // 👇 新增：私人借貸 (收錢提醒) 👇
+        loans.forEach((loan: any) => {
+            if (loan.status === 'Active') {
+                const isInst = loan.isInstallment;
+                const amount = isInst && loan.installmentAmount ? loan.installmentAmount : (loan.principal * loan.rate / (loan.term === 'Monthly' ? 12 : loan.term === 'Quarterly' ? 4 : loan.term === 'Annually' ? 1 : 2));
+                const dueDay = loan.nextDeductionDate ? new Date(loan.nextDeductionDate).getDate() : 1;
+                
+                if (amount > 0) {
+                    list.push({ 
+                        id: `auto_priv_loan_${loan.id}`, 
+                        title: `${loan.name} (借貸收款)`, 
+                        amount: amount, 
+                        dueDay: dueDay || 1, 
+                        category: 'Loan Repayment Income (借貸還款收入)', 
+                        member: loan.name, 
+                        paymentMethod: loan.isAutoRecord ? 'Autopay' : 'Manual', 
+                        type: 'Auto',
+                        isIncome: true // 標記為收入，讓 UI 顯示為藍色/綠色
+                    });
+                }
             }
         });
         // 🔍 最終狀態比對：兩階段精準配對 (防同名項目互相搶單)
@@ -4053,7 +4076,7 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
                 amount: finalTx ? Math.abs(finalTx.amount) : item.amount
             };
         }).sort((a, b) => a.dueDay - b.dueDay);
-    }, [scheduledExpenses, bankLoans, properties, transactions, viewYear, viewMonth]);
+    }, [scheduledExpenses, bankLoans, loans, properties, transactions, viewYear, viewMonth]);
 
     // 重新計算總數 (用於進度卡片)
     const totalMonthly = allReminders.reduce((sum, item) => sum + item.amount, 0);
@@ -4352,16 +4375,19 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
                                             {item.type === 'Manual' && <><button onClick={() => { setEditingReminder(item); setModalMode('reminder'); }} className="text-slate-400 hover:text-blue-600"><ICONS.Edit2 /></button><button onClick={() => deleteItem('scheduledExpenses', item.id)} className="text-slate-400 hover:text-red-500"><ICONS.Trash /></button></>}
                                             {item.id.startsWith('auto_loan_') && <button onClick={() => { const l = bankLoans.find((x:any) => x.id === item.id.replace('auto_loan_', '')); if(l) { setEditingBankLoan(l); setModalMode('bankLoan'); } }} className="text-slate-400 hover:text-blue-600"><ICONS.Edit2 /></button>}
                                             {item.id.startsWith('auto_prop_') && <button onClick={() => { const p = properties.find((x:any) => x.id === item.id.replace(/auto_prop_[a-z]+_/, '')); if(p) { setEditingProp(p); setModalMode('property'); } }} className="text-slate-400 hover:text-blue-600"><ICONS.Edit2 /></button>}
+                                            {item.id.startsWith('auto_priv_loan_') && <button onClick={() => { const l = loans.find((x:any) => x.id === item.id.replace('auto_priv_loan_', '')); if(l) { setEditingLoan(l); setModalMode('loan'); } }} className="text-slate-400 hover:text-blue-600"><ICONS.Edit2 /></button>}
                                         </div>
                                     </h4>
-                                    <div className="text-xs text-slate-500 mt-2">
-                                        <p className={`font-mono font-bold text-xl ${item.isPaid ? 'text-emerald-600' : 'text-red-600'}`}>
-                                            {item.type === 'Predicted' ? '約 ' : ''}{formatCurrency(item.amount)}
+                                   <div className="text-xs text-slate-500 mt-2">
+                                        <p className={`font-mono font-bold text-xl ${item.isPaid ? 'text-emerald-600' : (item.isIncome ? 'text-blue-600' : 'text-red-600')}`}>
+                                            {item.type === 'Predicted' ? '約 ' : ''}{item.isIncome ? '+' : ''}{formatCurrency(item.amount)}
                                         </p>
                                     </div>
                                 </div>
                                 <div className="text-right flex flex-col items-end gap-2 min-w-[140px]">
-                                    <p className={`font-mono font-bold text-xl ${item.isPaid ? 'text-emerald-600' : 'text-red-600'}`}>{formatCurrency(item.amount)}</p>
+                                    <p className={`font-mono font-bold text-xl ${item.isPaid ? 'text-emerald-600' : (item.isIncome ? 'text-blue-600' : 'text-red-600')}`}>
+                                        {item.isIncome ? '+' : ''}{formatCurrency(item.amount)}
+                                    </p>
                                     {item.isPaid ? (
                                         <div className="flex flex-col items-end gap-1.5">
                                             <span className="text-xs font-bold text-emerald-600 flex items-center gap-1"><ICONS.ShieldCheck /> 本月已入帳</span>
@@ -4375,8 +4401,8 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
                                             </button>
                                         </div>
                                     ) : (
-                                        <button onClick={() => setPayConfig({ ...item, payDate: new Date().toISOString().split('T')[0], actualAmount: item.amount, handlingFee: 0 })} className={`text-white text-xs px-4 py-2.5 rounded-lg font-bold shadow transition-colors flex items-center gap-1 w-full justify-center ${linkedAcc ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
-                                            {linkedAcc ? '手動入帳 (扣餘額)' : '繳費並記錄'}
+                                        <button onClick={() => setPayConfig({ ...item, payDate: new Date().toISOString().split('T')[0], actualAmount: item.amount, handlingFee: 0 })} className={`text-white text-xs px-4 py-2.5 rounded-lg font-bold shadow transition-colors flex items-center gap-1 w-full justify-center ${linkedAcc ? 'bg-indigo-600 hover:bg-indigo-700' : (item.isIncome ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-blue-600 hover:bg-blue-700')}`}>
+                                            {linkedAcc ? '手動入帳 (扣餘額)' : (item.isIncome ? '確認收款入帳' : '繳費並記錄')}
                                         </button>
                                     )}
                                 </div>
@@ -4551,11 +4577,16 @@ const App: React.FC = () => {
               }
           });
 
-          // 3. 巡邏銀行貸款 (Bank Loans)
-          bankLoans.forEach(loan => {
-              if (loan.status === 'Active' && (loan as any).isAutoRecord) {
-                  const dueDay = new Date(loan.startDate).getDate() || 1;
-                  processAutoRecord(`bankloan_${loan.id}`, dueDay, loan.monthlyPayment, `${loan.bankName} (${loan.purpose})`, 'Mortgage Payment (按揭供款)', 'Family', '分期貸款');
+          // 4. 👇 巡邏私人借貸 (Private Loans - 收錢) 👇
+          loans.forEach((loan: any) => {
+              if (loan.status === 'Active' && loan.isAutoRecord) {
+                  const isInst = loan.isInstallment;
+                  // 動態判斷：如果是分期就用 PMT，純收息就用公式算
+                  const amount = isInst && loan.installmentAmount ? loan.installmentAmount : (loan.principal * loan.rate / (loan.term === 'Monthly' ? 12 : loan.term === 'Quarterly' ? 4 : loan.term === 'Annually' ? 1 : 2));
+                  const dueDay = loan.nextDeductionDate ? new Date(loan.nextDeductionDate).getDate() : 1;
+                  
+                  // 注意：分類名稱包含 "Income"，這樣系統才會將其識別為正數收入 (+)
+                  processAutoRecord(`priv_loan_${loan.id}`, dueDay, amount, `${loan.name} (借款還款)`, 'Loan Repayment Income (借貸還款收入)', loan.name, '私人借貸自動收帳');
               }
           });
 
@@ -4566,7 +4597,7 @@ const App: React.FC = () => {
       };
 
       executeAutoPatrol();
-  }, [dataLoaded, scheduledExpenses, properties, bankLoans, transactions, currentFamilyId]);
+  }, [dataLoaded, scheduledExpenses, properties, bankLoans, loans, transactions, currentFamilyId]);
   
   // 👇 銀行專戶管理狀態 👇
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
@@ -5043,6 +5074,7 @@ useEffect(() => {
              isInstallment: !!editingLoan.isInstallment,
              totalInstallments: Number(editingLoan.totalInstallments || 0),
              installmentAmount: Number(editingLoan.installmentAmount || 0),
+             isAutoRecord: !!(editingLoan as any).isAutoRecord,
              familyId: currentFamilyId
         };
         if (editingLoan.id) {
@@ -5902,13 +5934,15 @@ useEffect(() => {
                       bankLoans={bankLoans} 
                       properties={properties} 
                       transactions={transactions}
-                      bankAccounts={bankAccounts}                   // 👈 新增：傳入銀行專戶水位資料
+                      bankAccounts={bankAccounts}
+                      loans={loans}                                 // 👈 新增：傳入私人借貸清單
                       setModalMode={setModalMode} 
                       setEditingReminder={setEditingReminder}
                       setEditingBankLoan={setEditingBankLoan}
                       setEditingProp={setEditingProp}
-                      setEditingBankAccount={setEditingBankAccount} // 👈 新增：傳遞銀行編輯功能
-                      setTopUpAccount={setTopUpAccount}             // 👈 新增：傳遞入金/Top-up功能
+                      setEditingLoan={setEditingLoan}               // 👈 新增：傳入貸款編輯函數
+                      setEditingBankAccount={setEditingBankAccount} 
+                      setTopUpAccount={setTopUpAccount}             
                       deleteItem={deleteItem}
                       currentFamilyId={currentFamilyId}
                   />
@@ -6514,6 +6548,21 @@ useEffect(() => {
                               <div><label className="text-xs font-bold text-slate-500 mb-1 block">下次結算日 Next Date</label><input type="date" className="border w-full p-2 rounded text-sm font-mono outline-none focus:ring-2 focus:ring-blue-400" value={editingLoan?.nextDeductionDate || ''} onChange={e => setEditingLoan({...editingLoan, nextDeductionDate: e.target.value} as any)} /></div>
                           </div>
                           <div><label className="text-xs font-bold text-slate-500 mb-1 block">備註 Notes</label><textarea className="border w-full p-2 rounded text-sm outline-none focus:ring-2 focus:ring-blue-400" rows={2} value={editingLoan?.notes || ''} onChange={e => setEditingLoan({...editingLoan, notes: e.target.value} as any)} /></div>
+                          {/* 👇 全自動入帳引擎開關 (私人貸款版) 👇 */}
+                          <label className="flex items-start gap-3 p-3 bg-emerald-50 border border-emerald-200 rounded-lg cursor-pointer transition-colors hover:bg-emerald-100 shadow-sm mt-4">
+                              <input 
+                                  type="checkbox" 
+                                  className="w-5 h-5 mt-0.5 text-emerald-600 rounded focus:ring-emerald-500 cursor-pointer" 
+                                  checked={(editingLoan as any)?.isAutoRecord || false} 
+                                  onChange={e => setEditingLoan({...editingLoan, isAutoRecord: e.target.checked} as any)} 
+                              />
+                              <div>
+                                  <div className="text-sm font-bold text-emerald-800">啟用「系統全自動入帳」(Auto-Pay)</div>
+                                  <div className="text-[10px] text-emerald-600 mt-1">
+                                      勾選後，每月到了「下次結算日」的號碼時，系統會自動幫您將這筆應收帳款寫入數據中心。
+                                  </div>
+                              </div>
+                          </label>
                       </div>
                       <div className="flex gap-2 mt-6">
                           <button onClick={handleSaveLoan} className="flex-1 bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700 shadow transition-colors">儲存 Save</button>

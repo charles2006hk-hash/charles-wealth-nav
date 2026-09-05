@@ -44,9 +44,11 @@ interface PrivateLoan {
   isInstallment?: boolean;    
   totalInstallments?: number; 
   installmentAmount?: number; 
-  isAutoRecord?: boolean; // 👈 新增：全自動入帳開關
+  isAutoRecord?: boolean;
+  /* 👇 新增：起始日與歷史金額 👇 */
+  startDate?: string;       // 合約起始日
+  historicalPaid?: number;  // 系統啟用前已收取的利息/本金
 }
-
 // 👇 升級：固定支出提醒 (支援季/年與詳細資料) 👇
 interface ScheduledExpense {
   id: string;
@@ -2974,16 +2976,20 @@ const PrivateLoanStatementModal = ({
 }) => {
     if (!loan) return null;
 
-    // 歷史交易動態計算遞減本金 (Running Balance)
+    // 歷史交易動態計算 (處理純收息與分期還款的差異)
     const history = useMemo(() => {
         const txs = transactions
             .filter(t => (t.merchant || '').includes(loan.name) && t.amount > 0)
             .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-        let currentRemaining = loan.principal;
+        // 如果有歷史已收，則分期貸款的初始本金需先扣除歷史金額；純收息則本金不變
+        let currentRemaining = loan.isInstallment ? Math.round((loan.principal - (loan.historicalPaid || 0)) * 100) / 100 : loan.principal;
+        
         return txs.map(t => {
-            // 處理浮點數四捨五入，精確至小數點後兩位
-            currentRemaining = Math.round((currentRemaining - Number(t.amount || 0)) * 100) / 100;
+            // 💡 只有「分期還本息」模式，入帳才會扣減本金；「純收息」本金永遠不變
+            if (loan.isInstallment) {
+                currentRemaining = Math.round((currentRemaining - Number(t.amount || 0)) * 100) / 100;
+            }
             return {
                 ...t,
                 remainingBalance: currentRemaining < 0 ? 0 : currentRemaining
@@ -2991,8 +2997,14 @@ const PrivateLoanStatementModal = ({
         });
     }, [loan, transactions]);
 
-    const totalRepaid = Math.round(history.reduce((sum, t) => sum + Number(t.amount || 0), 0) * 100) / 100;
-    const outstandingBalance = Math.max(0, Math.round((loan.principal - totalRepaid) * 100) / 100);
+    // 總實收 = 數據庫入帳 + 手動輸入的歷史已收
+    const dbRepaid = history.reduce((sum, t) => sum + Number(t.amount || 0), 0);
+    const totalRepaid = Math.round((dbRepaid + Number(loan.historicalPaid || 0)) * 100) / 100;
+    
+    // 尚餘本金：純收息始終顯示原貸款額；分期則顯示 總本金 - 總已還
+    const outstandingBalance = loan.isInstallment 
+        ? Math.max(0, Math.round((loan.principal - totalRepaid) * 100) / 100)
+        : loan.principal;
 
     const handlePrintStatement = () => {
         const printContent = document.getElementById('loan-statement-print');
@@ -3290,12 +3302,15 @@ const InvestmentDashboard = ({ transactions, settings, setEditingTx, setModalMod
                             </div>
 
                             {loans.map((loan: any) => {
-                                // 防止 t.merchant 為 undefined 造成整頁白屏，並精確處理浮點數
-                                const repaidAmount = Math.round(
+                                // 1. 撈取數據庫實收
+                                const dbRepaid = Math.round(
                                     transactions
                                         .filter((t: any) => (t.merchant || '').includes(loan.name) && t.amount > 0)
                                         .reduce((sum: number, t: any) => sum + Number(t.amount || 0), 0) * 100
                                 ) / 100;
+
+                                // 2. 總已收 = 數據庫實收 + 歷史已收 (解決總共收了多少不知道的問題)
+                                const repaidAmount = Math.round((dbRepaid + Number(loan.historicalPaid || 0)) * 100) / 100;
 
                                 const isInst = loan.isInstallment;
                                 const targetAmount = isInst && loan.installmentAmount && loan.totalInstallments 
@@ -3322,6 +3337,8 @@ const InvestmentDashboard = ({ transactions, settings, setEditingTx, setModalMod
                                                     </button>
                                                 </h4>
                                                 <div className="flex items-center gap-2 mt-1">
+                                                    {/* 👇 這裡補上了起始日的標籤 👇 */}
+                                                    {loan.startDate && <span className="text-[10px] bg-slate-100 border border-slate-200 px-2 py-1 rounded text-slate-500">起始: {loan.startDate}</span>}
                                                     <span className="text-xs bg-slate-100 px-2 py-1 rounded text-slate-600">年化 {(loan.rate * 100).toFixed(1)}%</span>
                                                     <span className="text-xs bg-blue-50 px-2 py-1 rounded text-blue-600 font-bold">
                                                         {loan.term === 'Monthly' ? '每月' : loan.term === 'Quarterly' ? '每季' : loan.term === 'Annually' ? '每年' : '每半年'}還款
@@ -5091,6 +5108,9 @@ useEffect(() => {
              totalInstallments: Number(editingLoan.totalInstallments || 0),
              installmentAmount: Number(editingLoan.installmentAmount || 0),
              isAutoRecord: !!(editingLoan as any).isAutoRecord,
+             /* 👇 寫入新增的欄位 👇 */
+             startDate: editingLoan.startDate || '',
+             historicalPaid: Number(editingLoan.historicalPaid || 0),
              familyId: currentFamilyId
         };
         if (editingLoan.id) {
@@ -6461,18 +6481,34 @@ useEffect(() => {
               </div>
           )}
 
-          {/* --- 3. 私人貸款編輯視窗 (Loan Modal) --- */}
+         {/* --- 3. 私人貸款編輯視窗 (Loan Modal) --- */}
           {modalMode === 'loan' && (
               <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
                   <div className="bg-white rounded-xl shadow-2xl p-6 w-[90%] md:w-[500px] animate-in fade-in zoom-in duration-200">
                       <h3 className="font-bold text-xl mb-6">{editingLoan?.id ? '編輯私人貸款' : '新增私人貸款'}</h3>
                       <div className="space-y-4">
                           <div><label className="text-xs font-bold text-slate-500 mb-1 block">項目名稱 Name</label><input className="border w-full p-2 rounded text-sm outline-none focus:ring-2 focus:ring-blue-400" placeholder="例如: 建設借款、Gordon" value={editingLoan?.name || ''} onChange={e => setEditingLoan({...editingLoan, name: e.target.value} as any)} /></div>
+                          
                           <div className="grid grid-cols-2 gap-4">
                               <div><label className="text-xs font-bold text-slate-500 mb-1 block">本金 Principal (HKD)</label><input type="number" className="border w-full p-2 rounded text-sm font-mono outline-none focus:ring-2 focus:ring-blue-400" value={editingLoan?.principal ?? ''} onChange={e => setEditingLoan({...editingLoan, principal: e.target.value === '' ? '' : Number(e.target.value)} as any)} /></div>
                               <div><label className="text-xs font-bold text-slate-500 mb-1 block">年利率 Rate (如 0.06 為 6%)</label><input type="number" step="0.001" className="border w-full p-2 rounded text-sm font-mono outline-none focus:ring-2 focus:ring-blue-400" value={editingLoan?.rate ?? ''} onChange={e => setEditingLoan({...editingLoan, rate: e.target.value === '' ? '' : Number(e.target.value)} as any)} /></div>
                           </div>
                           
+                         
+                          <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                  <label className="text-xs font-bold text-slate-500 mb-1 block">起始日/借出日 Start Date</label>
+                                  <input type="date" className="border w-full p-2 rounded text-sm font-mono outline-none focus:ring-2 focus:ring-blue-400" value={editingLoan?.startDate || ''} onChange={e => setEditingLoan({...editingLoan, startDate: e.target.value} as any)} />
+                              </div>
+                              <div>
+                                  <label className="text-xs font-bold text-slate-500 mb-1 flex justify-between items-center">
+                                      <span>系統啟用前已收金額</span>
+                                      <span className="text-[9px] bg-slate-100 px-1 rounded font-normal">歷史數據補足</span>
+                                  </label>
+                                  <input type="number" step="0.01" className="border w-full p-2 rounded text-sm font-mono outline-none focus:ring-2 focus:ring-blue-400" placeholder="例如: 90000" value={editingLoan?.historicalPaid ?? ''} onChange={e => setEditingLoan({...editingLoan, historicalPaid: e.target.value === '' ? '' : Number(e.target.value)} as any)} />
+                              </div>
+                          </div>
+                         
                           <div>
                               <label className="text-xs font-bold text-slate-500 mb-1 block">還款頻率 Term</label>
                               <select className="border w-full p-2 rounded text-sm font-bold text-indigo-700 outline-none focus:ring-2 focus:ring-indigo-400" value={editingLoan?.term || 'Monthly'} onChange={e => setEditingLoan({...editingLoan, term: e.target.value} as any)}>
@@ -6482,6 +6518,8 @@ useEffect(() => {
                                   <option value="Annually">每年 (Annually)</option>
                               </select>
                           </div>
+                          
+                
 
                           <label className="flex items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-100">
                               <input 

@@ -4016,6 +4016,14 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
         // 👇 新增：私人借貸 (收錢提醒) 👇
         loans.forEach((loan: any) => {
             if (loan.status === 'Active') {
+                // 💡 頻率過濾邏輯：從「下次結算日」提取目標月份
+                const dueMonth = loan.nextDeductionDate ? new Date(loan.nextDeductionDate).getMonth() + 1 : 1;
+                
+                // 攔截不屬於本月的提醒 (利用餘數 % 計算週期)
+                if (loan.term === 'Annually' && viewMonth !== dueMonth) return;
+                if (loan.term === 'Semi-annual' && (viewMonth % 6 !== dueMonth % 6)) return;
+                if (loan.term === 'Quarterly' && (viewMonth % 3 !== dueMonth % 3)) return;
+
                 const isInst = loan.isInstallment;
                 const amount = isInst && loan.installmentAmount ? loan.installmentAmount : (loan.principal * loan.rate / (loan.term === 'Monthly' ? 12 : loan.term === 'Quarterly' ? 4 : loan.term === 'Annually' ? 1 : 2));
                 const dueDay = loan.nextDeductionDate ? new Date(loan.nextDeductionDate).getDate() : 1;
@@ -4030,7 +4038,8 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
                         member: loan.name, 
                         paymentMethod: loan.isAutoRecord ? 'Autopay' : 'Manual', 
                         type: 'Auto',
-                        isIncome: true // 標記為收入，讓 UI 顯示為藍色/綠色
+                        isIncome: true, // 標記為收入
+                        frequency: loan.term // 補上 frequency 讓 UI 顯示正確的標籤 (季繳/半年繳/年繳)
                     });
                 }
             }
@@ -4580,13 +4589,20 @@ const App: React.FC = () => {
           // 4. 👇 巡邏私人借貸 (Private Loans - 收錢) 👇
           loans.forEach((loan: any) => {
               if (loan.status === 'Active' && loan.isAutoRecord) {
+                  // 💡 頻率過濾邏輯 (對齊當前真實月份 currentMonth)
+                  const dueMonth = loan.nextDeductionDate ? new Date(loan.nextDeductionDate).getMonth() + 1 : 1;
+                  
+                  if (loan.term === 'Annually' && currentMonth !== dueMonth) return;
+                  if (loan.term === 'Semi-annual' && (currentMonth % 6 !== dueMonth % 6)) return;
+                  if (loan.term === 'Quarterly' && (currentMonth % 3 !== dueMonth % 3)) return;
+
                   const isInst = loan.isInstallment;
                   // 動態判斷：如果是分期就用 PMT，純收息就用公式算
                   const amount = isInst && loan.installmentAmount ? loan.installmentAmount : (loan.principal * loan.rate / (loan.term === 'Monthly' ? 12 : loan.term === 'Quarterly' ? 4 : loan.term === 'Annually' ? 1 : 2));
                   const dueDay = loan.nextDeductionDate ? new Date(loan.nextDeductionDate).getDate() : 1;
                   
                   // 注意：分類名稱包含 "Income"，這樣系統才會將其識別為正數收入 (+)
-                  processAutoRecord(`priv_loan_${loan.id}`, dueDay, amount, `${loan.name} (借款還款)`, 'Loan Repayment Income (借貸還款收入)', loan.name, '私人借貸自動收帳');
+                  processAutoRecord(`priv_loan_${loan.id}`, dueDay, amount, `${loan.name} (借貸收款)`, 'Loan Repayment Income (借貸還款收入)', loan.name, '私人借貸自動收帳');
               }
           });
 

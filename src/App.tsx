@@ -5985,7 +5985,7 @@ useEffect(() => {
               )}
             
               {activeTab === 'data' && (
-                  <div className="bg-white p-4 md:p-10 rounded-xl shadow animate-in fade-in h-full flex flex-col">
+                  <div className="bg-white p-4 md:p-10 rounded-xl shadow animate-in fade-in flex flex-col min-h-[800px] md:h-full md:min-h-0">
                       <div className="flex flex-wrap justify-between items-center mb-6 gap-4">
                         <div>
                             <h2 className="text-xl md:text-2xl font-bold text-slate-800">數據中心 Data Hub</h2>
@@ -6046,7 +6046,7 @@ useEffect(() => {
                                     <select className="border rounded px-3 py-1.5 text-sm bg-white min-w-[100px]" value={filterYear} onChange={e=>setFilterYear(e.target.value)}><option value="All">所有年份</option>{uniqueYears.map(y=><option key={y} value={y}>{y}</option>)}</select>
                                   </div>
 
-                                  <div className="border rounded-lg overflow-hidden flex-1 flex flex-col bg-white">
+                                  <div className="border rounded-lg overflow-hidden flex-1 flex flex-col bg-white min-h-[400px] md:min-h-0">
                                       <div className="overflow-auto flex-1">
                                           <table className="w-full text-sm text-left border-collapse">
                                               <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0 z-10 shadow-sm">

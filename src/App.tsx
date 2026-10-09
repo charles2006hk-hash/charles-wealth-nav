@@ -26,7 +26,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
-const storage = getStorage(app);
 
 // --- 2. 類型定義 (Types) ---
 // --- 新增：投資模塊類型定義 ---
@@ -4501,7 +4500,7 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
 // ==========================================
 // 🗂️ 智能檔案資料庫中心 (Document Hub) 主視圖
 // ==========================================
-const DocumentHub = ({ documents, settings, currentFamilyId, setModalMode, deleteItem }: any) => {
+const DocumentHub = ({ documents, setModalMode, deleteItem }: any) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterCat, setFilterCat] = useState('All');
     
@@ -7287,7 +7286,7 @@ useEffect(() => {
           {modalMode === 'uploadDoc' && (
               <DocumentUploadModal isOpen={true} onClose={() => setModalMode('none')} currentFamilyId={currentFamilyId} settings={settings} />
           )}
-          
+
           <BulkClassifyModal 
               isOpen={isBulkModalOpen} 
               onClose={() => setIsBulkModalOpen(false)} 

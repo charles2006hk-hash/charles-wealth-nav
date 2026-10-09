@@ -9,6 +9,7 @@ import {
   getFirestore, collection, doc, addDoc, setDoc, deleteDoc, updateDoc, 
   onSnapshot, query, orderBy, writeBatch, getDocs, where, getDoc
 } from "firebase/firestore";
+import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword, sendPasswordResetEmail } from "firebase/auth";
 
 // --- 1. Firebase 設定 ---
@@ -25,6 +26,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
+const storage = getStorage(app);
 
 // --- 2. 類型定義 (Types) ---
 // --- 新增：投資模塊類型定義 ---
@@ -284,6 +286,22 @@ interface OtherInvestor {
   };
 }
 
+// --- 新增：檔案資料庫 (Document Hub) ---
+interface ArchiveDocument {
+    id: string;
+    familyId: string;
+    title: string;       // 檔案標題
+    category: string;    // 分類 (物業/投資/證件/教育/醫療...)
+    member: string;      // 相關成員
+    date: string;        // 文件建立或生效日期
+    fileUrl: string;     // Firebase Storage 下載連結
+    fileType: string;    // 'image/jpeg', 'application/pdf' 等
+    fileSize: number;    // 檔案大小 (KB)
+    tags: string[];      // 智能標籤
+    note: string;
+    uploadAt: number;    // 上傳時間戳
+}
+
 // --- 初始數據：從 CSV 解析而來 ---
 const INITIAL_OTHER_INVESTORS: OtherInvestor[] = [
   {
@@ -419,6 +437,8 @@ const ICONS = {
   Settings: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>,
   Briefcase: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>,
   TrendingUp: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>,
+  Folder: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>,
+  Wand2: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72Z"/><path d="m14 7 3 3"/><path d="M5 6v4"/><path d="M19 14v4"/><path d="M10 2v2"/><path d="M7 8H3"/><path d="M21 16h-4"/><path d="M11 3H9"/></svg>,
 
 };
 
@@ -4478,6 +4498,333 @@ const RemindersDashboard = ({ scheduledExpenses, bankLoans, properties, transact
     );
 };
 
+// ==========================================
+// 🗂️ 智能檔案資料庫中心 (Document Hub) 主視圖
+// ==========================================
+const DocumentHub = ({ documents, settings, currentFamilyId, setModalMode, deleteItem }: any) => {
+    const [searchTerm, setSearchTerm] = useState('');
+    const [filterCat, setFilterCat] = useState('All');
+    
+    // 系統預設支援的智能分類
+    const docCategories = ['物業文件 (Property)', '投資合約 (Investment)', '人員證件 (ID/Passports)', '學校文件 (Education)', '醫療保險 (Medical/Insurance)', '其他 (Others)'];
+
+    // 智能多維度過濾
+    const filteredDocs = useMemo(() => {
+        return documents.filter((doc: any) => {
+            const searchStr = (doc.title + doc.note + doc.tags.join(',')).toLowerCase();
+            const matchesSearch = searchStr.includes(searchTerm.toLowerCase());
+            const matchesCat = filterCat === 'All' || doc.category === filterCat;
+            return matchesSearch && matchesCat;
+        }).sort((a: any, b: any) => b.uploadAt - a.uploadAt); // 新上傳的排在前面
+    }, [documents, searchTerm, filterCat]);
+
+    return (
+        <div className="space-y-6 animate-in fade-in pb-10">
+            {/* 頂部操作列 */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-wrap justify-between items-center gap-4">
+                <div>
+                    <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+                        <ICONS.Folder /> 檔案庫 (Document Hub)
+                    </h2>
+                    <p className="text-slate-500 text-sm mt-1">支援 AI 視覺辨識，自動擷取 PDF 與圖片資訊，智能分類歸檔。</p>
+                </div>
+                <button onClick={() => setModalMode('uploadDoc')} className="px-5 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 shadow-sm flex items-center gap-2 transition-transform active:scale-95">
+                    <ICONS.Upload /> 上傳檔案 (Upload)
+                </button>
+            </div>
+
+            {/* 篩選器 */}
+            <div className="flex flex-wrap gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm items-center">
+                <div className="relative flex-1 min-w-[250px]">
+                    <div className="absolute left-3 top-2 text-slate-400"><ICONS.Search /></div>
+                    <input type="text" placeholder="搜尋檔名、備註或 AI 標籤..." className="pl-10 border border-slate-300 rounded-lg px-3 py-2 text-sm w-full outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                </div>
+                <select className="border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 font-bold text-slate-700" value={filterCat} onChange={e => setFilterCat(e.target.value)}>
+                    <option value="All">所有分類 (All)</option>
+                    {docCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+            </div>
+
+            {/* 檔案網格展示 */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                {filteredDocs.map((doc: any) => (
+                    <div key={doc.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow group flex flex-col">
+                        {/* 預覽縮圖區塊 */}
+                        <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer" className="h-40 bg-slate-100 relative block overflow-hidden flex-shrink-0">
+                            {doc.fileType === 'application/pdf' ? (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center text-red-500 bg-red-50">
+                                    <ICONS.FileText /> <span className="text-xs font-bold mt-2 text-red-800">PDF Document</span>
+                                </div>
+                            ) : (
+                                <img src={doc.fileUrl} alt={doc.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
+                            )}
+                            {/* 檔案大小標籤 */}
+                            <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm text-white text-[9px] px-1.5 py-0.5 rounded font-mono shadow-sm">
+                                {doc.fileSize} KB
+                            </div>
+                        </a>
+                        
+                        {/* 資訊與操作區塊 */}
+                        <div className="p-3 flex-1 flex flex-col">
+                            <h4 className="font-bold text-sm text-slate-800 line-clamp-1 mb-1" title={doc.title}>{doc.title}</h4>
+                            <p className="text-xs text-slate-500 mb-2 font-mono">{doc.date}</p>
+                            
+                            <div className="flex flex-wrap gap-1 mb-2">
+                                <span className="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100 truncate max-w-full">{doc.category.split(' ')[0]}</span>
+                                <span className="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border truncate max-w-full">👤 {doc.member}</span>
+                            </div>
+
+                            <div className="flex flex-wrap gap-1 mb-auto">
+                                {doc.tags?.slice(0,2).map((t: string) => <span key={t} className="text-[9px] bg-emerald-50 text-emerald-600 px-1 rounded border border-emerald-100">#{t}</span>)}
+                            </div>
+
+                            <div className="mt-3 pt-2 border-t border-slate-100 flex justify-between items-center">
+                                <a href={doc.fileUrl} download className="text-slate-400 hover:text-blue-600 p-1" title="下載此檔案"><ICONS.Download /></a>
+                                <button onClick={() => deleteItem('documents', doc.id)} className="text-slate-400 hover:text-red-500 p-1 transition-colors" title="刪除檔案自資料庫"><ICONS.Trash /></button>
+                            </div>
+                        </div>
+                    </div>
+                ))}
+                
+                {filteredDocs.length === 0 && (
+                    <div className="col-span-full py-24 flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-xl bg-slate-50 text-slate-400">
+                        <div className="p-4 bg-white rounded-full shadow-sm mb-3"><ICONS.Folder /></div>
+                        <p className="font-bold">尚無符合條件的檔案</p>
+                        <p className="text-xs mt-1 text-slate-500">點擊右上角的「上傳檔案」開始整理您的文件庫。</p>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+// ==========================================
+// 🗂️ 檔案上傳與 AI 解析模擬 Modal
+// ==========================================
+const DocumentUploadModal = ({ isOpen, onClose, currentFamilyId, settings }: any) => {
+    const [file, setFile] = useState<File | null>(null);
+    const [previewUrl, setPreviewUrl] = useState<string>('');
+    const [isUploading, setIsUploading] = useState(false);
+    const [isAiScanning, setIsAiScanning] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState(0);
+
+    const [docData, setDocData] = useState<Partial<ArchiveDocument>>({
+        title: '', category: '其他 (Others)', member: 'Family', date: new Date().toISOString().split('T')[0], note: '', tags: []
+    });
+
+    const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const selectedFile = e.target.files?.[0];
+        if (!selectedFile) return;
+
+        // 🖼️ 前端極限圖片壓縮引擎 (僅針對圖片)
+        if (selectedFile.type.startsWith('image/')) {
+            const reader = new FileReader();
+            reader.readAsDataURL(selectedFile);
+            reader.onload = (event) => {
+                const img = new Image();
+                img.src = event.target?.result as string;
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    // 鎖死最大寬度為 1200px，高度按比例縮放
+                    let scaleSize = 1200 / img.width; 
+                    if (scaleSize > 1) scaleSize = 1; // 如果本來就比較小就不放大
+                    
+                    canvas.width = img.width * scaleSize;
+                    canvas.height = img.height * scaleSize;
+                    
+                    const ctx = canvas.getContext('2d');
+                    ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    
+                    // 🎯 核心參數：品質係數設為 0.5 (大幅縮小體積，但依然清晰可辨識文字)
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.5); 
+                    
+                    fetch(dataUrl).then(res => res.blob()).then(blob => {
+                        // 建立壓縮後的新 File 物件
+                        const compressedFile = new File([blob], selectedFile.name, { type: 'image/jpeg', lastModified: Date.now() });
+                        setFile(compressedFile);
+                        setPreviewUrl(dataUrl);
+                    });
+                };
+            };
+        } 
+        // 📄 PDF 無法在前端無損重渲染，直接保留原檔準備上傳
+        else if (selectedFile.type === 'application/pdf') {
+            if (selectedFile.size > 5 * 1024 * 1024) {
+                alert("⚠️ 您選擇的 PDF 大於 5MB，建議您先自行壓縮後再上傳以節省空間。");
+            }
+            setFile(selectedFile);
+            setPreviewUrl('pdf-placeholder');
+        } else {
+            alert("僅支援上傳圖片 (Image) 或 PDF 格式");
+        }
+    };
+
+    // 🤖 模擬 AI 視覺解析 (Simulated OCR / GenAI Vision)
+    const runAiScan = () => {
+        if (!file) return;
+        setIsAiScanning(true);
+        
+        // 這裡設定一個 Timeout 模擬網路呼叫 OpenAI 的延遲
+        setTimeout(() => {
+            const nameLower = file.name.toLowerCase();
+            const isID = nameLower.includes('id') || nameLower.includes('passport');
+            const isProp = nameLower.includes('lease') || nameLower.includes('contract');
+            
+            // 根據檔名關鍵字給予「看似聰明」的預設值
+            setDocData(prev => ({
+                ...prev,
+                title: isID ? '香港身份證 Copy' : isProp ? '星匯居 租約合同' : '掃描檔案 ' + file.name.split('.')[0],
+                category: isID ? '人員證件 (ID/Passports)' : isProp ? '物業文件 (Property)' : '其他 (Others)',
+                date: new Date().toISOString().split('T')[0],
+                tags: isID ? ['HKID', '證件', '重要'] : ['AI擷取', '合約', '掃描件'],
+                note: '由 AI 視覺模型自動掃描與擷取內容。'
+            }));
+            setIsAiScanning(false);
+        }, 1500);
+    };
+
+    // ☁️ 上傳到 Firebase Storage 並將連結寫入 Firestore
+    const handleUploadAndSave = async () => {
+        if (!file || !docData.title) return alert("請確認已選擇檔案並填寫「標題」");
+        setIsUploading(true);
+
+        try {
+            const storage = getStorage();
+            const fileExt = file.type === 'application/pdf' ? 'pdf' : 'jpg';
+            // 安全路徑：依照 familyId 分隔資料夾
+            const storageRef = ref(storage, `documents/${currentFamilyId}/${Date.now()}_${Math.floor(Math.random()*1000)}.${fileExt}`);
+            
+            const uploadTask = uploadBytesResumable(storageRef, file);
+            
+            uploadTask.on('state_changed', 
+                (snapshot) => {
+                    const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                    setUploadProgress(progress);
+                },
+                (error) => { throw error; },
+                async () => {
+                    // 上傳成功，取得下載 URL
+                    const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+                    
+                    // 將 Metadata (包含下載 URL) 寫入 Firestore 的 documents 集合
+                    await addDoc(collection(getFirestore(), "documents"), {
+                        ...docData,
+                        fileUrl: downloadURL,
+                        fileType: file.type,
+                        fileSize: Math.round(file.size / 1024), // 換算為 KB 存入資料庫
+                        familyId: currentFamilyId,
+                        uploadAt: Date.now()
+                    });
+                    
+                    setIsUploading(false);
+                    onClose();
+                }
+            );
+        } catch (e) {
+            console.error(e);
+            alert("上傳失敗。請確認 Firebase Storage 規則是否設定正確。");
+            setIsUploading(false);
+        }
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center modal-overlay">
+            <div className="bg-white rounded-2xl shadow-2xl p-6 w-[95%] md:w-[750px] flex flex-col md:flex-row gap-6 animate-in fade-in zoom-in duration-200">
+                
+                {/* 左側面板：預覽與 AI 控制區 */}
+                <div className="w-full md:w-1/2 flex flex-col gap-4">
+                    <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2"><ICONS.Upload /> 上傳檔案至資料庫</h3>
+                    
+                    <div className="flex-1 bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl flex items-center justify-center relative overflow-hidden min-h-[220px]">
+                        {previewUrl ? (
+                            previewUrl === 'pdf-placeholder' ? (
+                                <div className="text-center text-red-500 font-bold bg-white p-6 rounded-xl shadow-sm border border-red-100">
+                                    <div className="flex justify-center mb-2"><ICONS.FileText /></div>
+                                    <p className="text-sm text-slate-600 truncate max-w-[200px]" title={file?.name}>{file?.name}</p>
+                                </div>
+                            ) : (
+                                <img src={previewUrl} className="w-full h-full object-contain" alt="preview" />
+                            )
+                        ) : (
+                            <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer hover:bg-slate-100 transition-colors text-slate-400 group">
+                                <div className="p-3 bg-white rounded-full shadow-sm group-hover:scale-110 transition-transform mb-3"><ICONS.Plus /></div>
+                                <span className="text-sm font-bold text-slate-600">點擊選擇檔案</span>
+                                <span className="text-xs text-slate-400 mt-1">支援 Image 與 PDF</span>
+                                <input type="file" className="hidden" accept="image/*,application/pdf" onChange={handleFileSelect} />
+                            </label>
+                        )}
+                    </div>
+                    
+                    {/* 一鍵 AI 掃描按鈕 */}
+                    <button 
+                        onClick={runAiScan} 
+                        disabled={!file || isAiScanning}
+                        className={`w-full py-3 rounded-lg font-bold flex justify-center items-center gap-2 transition-all ${!file ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md hover:shadow-lg active:scale-95'}`}
+                    >
+                        {isAiScanning ? '🤖 模型視覺解析中...' : <><ICONS.Wand2 /> AI 智能辨識與自動填單</>}
+                    </button>
+                    {file && <p className="text-center text-xs font-mono text-slate-500 bg-slate-100 py-1 rounded">檔案大小: {Math.round(file.size/1024)} KB</p>}
+                </div>
+
+                {/* 右側面板：表單資料編輯區 */}
+                <div className="w-full md:w-1/2 flex flex-col space-y-4">
+                    <div>
+                        <label className="text-xs font-bold text-slate-500 mb-1 block">檔案標題 Title <span className="text-red-500">*</span></label>
+                        <input type="text" className="w-full border border-slate-300 rounded-lg p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="例如: Gordon 借據副本" value={docData.title} onChange={e=>setDocData({...docData, title: e.target.value})} />
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="text-xs font-bold text-slate-500 mb-1 block">歸檔類別 Category</label>
+                            <select className="w-full border border-slate-300 rounded-lg p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" value={docData.category} onChange={e=>setDocData({...docData, category: e.target.value})}>
+                                {['物業文件 (Property)', '投資合約 (Investment)', '人員證件 (ID/Passports)', '學校文件 (Education)', '醫療保險 (Medical/Insurance)', '其他 (Others)'].map(c=><option key={c} value={c}>{c}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="text-xs font-bold text-slate-500 mb-1 block">所屬成員 Member</label>
+                            <select className="w-full border border-slate-300 rounded-lg p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" value={docData.member} onChange={e=>setDocData({...docData, member: e.target.value})}>
+                                {(settings?.members || ['Family']).map((m:string) => <option key={m} value={m}>{m}</option>)}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="text-xs font-bold text-slate-500 mb-1 block">文件生效日 Date</label>
+                            <input type="date" className="w-full border border-slate-300 rounded-lg p-2 text-sm font-mono outline-none focus:ring-2 focus:ring-blue-500" value={docData.date} onChange={e=>setDocData({...docData, date: e.target.value})} />
+                        </div>
+                        <div>
+                            <label className="text-xs font-bold text-slate-500 mb-1 block">智能標籤 Tags (逗號分隔)</label>
+                            <input type="text" className="w-full border border-slate-300 rounded-lg p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="續約, 押金" value={docData.tags?.join(', ')} onChange={e=>setDocData({...docData, tags: e.target.value.split(',').map(s=>s.trim()).filter(Boolean)})} />
+                        </div>
+                    </div>
+
+                    <div className="flex-1">
+                        <label className="text-xs font-bold text-slate-500 mb-1 block">備註摘要 Notes</label>
+                        <textarea className="w-full border border-slate-300 rounded-lg p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 h-20 resize-none bg-slate-50" placeholder="檔案內容的重點摘要..." value={docData.note} onChange={e=>setDocData({...docData, note: e.target.value})} />
+                    </div>
+
+                    {/* 進度條 */}
+                    {isUploading && (
+                        <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden mt-2">
+                            <div className="bg-blue-600 h-full transition-all duration-300" style={{width: `${uploadProgress}%`}}></div>
+                        </div>
+                    )}
+
+                    <div className="flex gap-2 pt-4 border-t border-slate-200 mt-auto">
+                        <button onClick={handleUploadAndSave} disabled={isUploading || !file} className="flex-1 bg-slate-800 text-white py-2.5 rounded-lg font-bold shadow hover:bg-slate-900 disabled:opacity-50 transition-colors">
+                            {isUploading ? '雲端入庫中...' : '確認上傳儲存'}
+                        </button>
+                        <button onClick={onClose} disabled={isUploading} className="bg-slate-100 text-slate-600 px-6 py-2.5 rounded-lg font-bold hover:bg-slate-200 transition-colors">取消</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 // --- 9. 主應用程式 ---
 const App: React.FC = () => {
   // --- 新增：用戶與家庭狀態 ---
@@ -4544,6 +4891,7 @@ const App: React.FC = () => {
   const [settings, setSettings] = useState<AppSettings>(INITIAL_SETTINGS);
   const [scheduledExpenses, setScheduledExpenses] = useState<ScheduledExpense[]>([]);
   const [dataLoaded, setDataLoaded] = useState(false);
+  const [documents, setDocuments] = useState<ArchiveDocument[]>([]);
 
 // 🤖 系統全自動巡邏入帳引擎 (Client-Side Auto-Pay Cron)
   useEffect(() => {
@@ -4642,7 +4990,7 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [propertyViewId, setPropertyViewId] = useState<string | null>(null);
   // ✅ 替換為這行：
-  const [modalMode, setModalMode] = useState<'none' | 'transaction' | 'property' | 'doc' | 'lease' | 'loan' | 'bankLoan' | 'reminder' | 'bankAccount' | 'topup'>('none');
+  const [modalMode, setModalMode] = useState<'none' | 'transaction' | 'property' | 'doc' | 'lease' | 'loan' | 'bankLoan' | 'reminder' | 'bankAccount' | 'topup' | 'uploadDoc'>('none');
   const [editingReminder, setEditingReminder] = useState<ScheduledExpense | null>(null); // 👈 加入這行狀態
   const [editingLease, setEditingLease] = useState<Lease | null>(null);
 
@@ -4767,6 +5115,10 @@ const getTxType = (catName: string) => {
     const unsubBankAcc = onSnapshot(query(collection(db, "bankAccounts"), where("familyId", "==", currentFamilyId)), s => 
         setBankAccounts(s.docs.map(d => ({...d.data(), id: d.id} as BankAccount))));
 
+    // 10. 👇 新增：檔案資料庫監聽 👇
+    const unsubDoc = onSnapshot(query(collection(db, "documents"), where("familyId", "==", currentFamilyId)), s => 
+        setDocuments(s.docs.map(d => ({...d.data(), id: d.id} as ArchiveDocument))));
+
     // 在同一個 useEffect 結尾的 return 中，把 unsubBankAcc() 加進去：
     // return () => { unsubTx(); unsubProp(); unsubLease(); unsubEdu(); unsubSettings(); unsubLoan(); unsubBankLoan(); unsubExpense(); unsubBankAcc(); };
     
@@ -4806,7 +5158,8 @@ const getTxType = (catName: string) => {
     });
 
     setDataLoaded(true);
-   return () => { unsubTx(); unsubProp(); unsubLease(); unsubEdu(); unsubSettings(); unsubLoan(); unsubBankLoan(); unsubExpense(); unsubBankAcc(); };
+   // 將 unsubDoc() 加進去
+   return () => { unsubTx(); unsubProp(); unsubLease(); unsubEdu(); unsubSettings(); unsubLoan(); unsubBankLoan(); unsubExpense(); unsubBankAcc(); unsubDoc(); };
   }, [currentFamilyId]); // 👈 依賴加入 currentFamilyId
 
     
@@ -5852,6 +6205,7 @@ useEffect(() => {
                           {id: 'overview', icon: 'LayoutDashboard', label: '總覽 Overview'},
                           {id: 'dashboard', icon: 'Home', label: '物業管理 Properties'}, 
                           {id: 'data', icon: 'Data', label: '數據中心 Data Hub'},
+                          {id: 'documents', icon: 'Folder', label: '📂 檔案中心 Doc Hub'}, // 👈 新增這行
                           {id: 'reminders', icon: 'FileText', label: '📅 繳費提醒 Reminders'},
                           // 👇 權限分流開始 👇
                           ...(isSuperAdmin ? [
@@ -6012,8 +6366,8 @@ useEffect(() => {
                             </button>
                             <button onClick={handleClearData} className="px-3 py-2 bg-white text-red-600 text-xs rounded hover:bg-red-50 flex items-center gap-2 border border-red-200 transition-colors"><ICONS.Trash /> 清空 Reset</button>
                             <button onClick={handleMigrateOldData} className="px-3 py-2 bg-amber-50 text-amber-700 text-xs font-bold rounded hover:bg-amber-100 flex items-center gap-2 border border-amber-200 transition-colors">
-    <ICONS.ShieldCheck /> 找回舊資料
-</button>
+                                <ICONS.ShieldCheck /> 找回舊資料
+                            </button>
                             <label className="flex items-center gap-2 px-3 py-2 bg-indigo-50 text-indigo-700 text-xs rounded hover:bg-indigo-100 cursor-pointer border border-indigo-200 transition-colors"><ICONS.Upload /> CSV<input type="file" className="hidden" onChange={handleCSVUpload} accept=".csv" /></label>
                             <label className="flex items-center gap-2 px-3 py-2 bg-green-50 text-green-700 text-xs rounded hover:bg-green-100 cursor-pointer border border-green-200 transition-colors"><ICONS.Upload /> JSON<input type="file" className="hidden" onChange={handleFileUpload} accept=".json" /></label>
                             <button onClick={handleExportJSON} className="px-3 py-2 bg-slate-100 text-slate-600 text-xs rounded hover:bg-slate-200 flex items-center gap-2 border border-slate-200 transition-colors"><ICONS.Download /> 導出</button>
@@ -6095,6 +6449,10 @@ useEffect(() => {
                   </div>
               )}
               
+              {activeTab === 'documents' && (
+                  <DocumentHub documents={documents} settings={settings} currentFamilyId={currentFamilyId} setModalMode={setModalMode} deleteItem={deleteItem} />
+              )}
+
               {activeTab === 'insurance' && (
                   <div className="space-y-6 animate-in fade-in">
                       <div className="bg-indigo-50 p-6 rounded-xl border border-indigo-100 text-indigo-900 text-sm"><h3 className="font-bold text-lg mb-2 flex items-center gap-2"><ICONS.ShieldCheck /> 保險 AI 深度透視</h3>系統已自動分析您導入的 <code>payment_data.json</code> 中的 CSV 備註欄位。</div>
@@ -6881,6 +7239,8 @@ useEffect(() => {
               </div>
           )}
 
+          
+
           {/* --- 6. 銀行專戶入金視窗 (Top-up Modal) --- */}
           {modalMode === 'topup' && topUpAccount && (
               <div className="fixed inset-0 z-[60] flex items-center justify-center modal-overlay">
@@ -6922,6 +7282,12 @@ useEffect(() => {
                   </div>
               </div>
           )}
+
+          {/* --- 8. 上傳檔案視窗 (Upload Doc Modal) --- */}
+          {modalMode === 'uploadDoc' && (
+              <DocumentUploadModal isOpen={true} onClose={() => setModalMode('none')} currentFamilyId={currentFamilyId} settings={settings} />
+          )}
+          
           <BulkClassifyModal 
               isOpen={isBulkModalOpen} 
               onClose={() => setIsBulkModalOpen(false)} 

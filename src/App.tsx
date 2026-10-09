@@ -4548,22 +4548,42 @@ const DocumentHub = ({ documents, setModalMode, deleteItem }: any) => {
                         {filteredDocs.map((doc: any) => (
                             <div 
                                 key={doc.id} 
-                                onClick={() => setSelectedDoc(doc)} // 👈 點擊設定預覽
+                                onClick={() => setSelectedDoc(doc)} 
                                 className={`bg-white rounded-xl border overflow-hidden shadow-sm hover:shadow-md transition-all group flex flex-col cursor-pointer 
                                 ${selectedDoc?.id === doc.id ? 'border-blue-500 ring-2 ring-blue-100 transform scale-[0.98]' : 'border-slate-200'}`}
                             >
+                                {/* 👇 完美支援 PDF 與圖片的高清縮圖區塊 👇 */}
                                 <div className="h-32 md:h-40 bg-slate-100 relative block overflow-hidden flex-shrink-0">
                                     {doc.fileType === 'application/pdf' ? (
-                                        <div className={`absolute inset-0 flex flex-col items-center justify-center ${selectedDoc?.id === doc.id ? 'bg-blue-50' : 'bg-red-50'}`}>
-                                            <ICONS.FileText /> <span className={`text-xs font-bold mt-2 ${selectedDoc?.id === doc.id ? 'text-blue-800' : 'text-red-800'}`}>PDF</span>
+                                        <div className="w-full h-full relative overflow-hidden bg-white">
+                                            {/* CSS 黑魔法：將 Iframe 放大 250% 後再等比例縮小，產生高清縮圖效果 */}
+                                            <iframe 
+                                                src={`${doc.fileUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`} 
+                                                className="absolute top-0 left-0 border-0 pointer-events-none"
+                                                style={{ width: '250%', height: '250%', transform: 'scale(0.4)', transformOrigin: 'top left' }}
+                                                loading="lazy"
+                                                title={doc.title}
+                                                tabIndex={-1}
+                                            />
+                                            {/* 絕對透明遮罩：阻擋所有的滾動與點擊，讓它表現得像一張靜態圖片 */}
+                                            <div className={`absolute inset-0 z-10 transition-colors ${selectedDoc?.id === doc.id ? 'bg-blue-500/10' : 'group-hover:bg-black/5'}`}></div>
+                                            
+                                            {/* 左上角標示這是一份 PDF */}
+                                            <div className="absolute top-2 left-2 bg-red-500 text-white text-[9px] px-1.5 py-0.5 rounded font-bold shadow-sm z-20 flex items-center gap-1">
+                                                <ICONS.FileText /> PDF
+                                            </div>
                                         </div>
                                     ) : (
                                         <img src={doc.fileUrl} alt={doc.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
                                     )}
-                                    <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm text-white text-[9px] px-1.5 py-0.5 rounded font-mono shadow-sm">
+                                    
+                                    {/* 檔案大小標籤 */}
+                                    <div className="absolute top-2 right-2 z-20 bg-black/60 backdrop-blur-sm text-white text-[9px] px-1.5 py-0.5 rounded font-mono shadow-sm">
                                         {doc.fileSize} KB
                                     </div>
                                 </div>
+                                {/* 👆 縮圖區塊結束 👆 */}
+
                                 <div className="p-3 flex-1 flex flex-col">
                                     <h4 className={`font-bold text-sm line-clamp-1 mb-1 ${selectedDoc?.id === doc.id ? 'text-blue-700' : 'text-slate-800'}`} title={doc.title}>{doc.title}</h4>
                                     <p className="text-[10px] text-slate-500 mb-2 font-mono">{doc.date}</p>

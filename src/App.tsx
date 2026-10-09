@@ -14,13 +14,13 @@ import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, updat
 
 // --- 1. Firebase 設定 ---
 const firebaseConfig = {
-  apiKey: "AIzaSyAeP-GggvT31EUY4TXEnX3GYVD8bcs8NJg",
-  authDomain: "charles-wealth-nav.firebaseapp.com",
-  projectId: "charles-wealth-nav",
-  storageBucket: "charles-wealth-nav.firebasestorage.app",
-  messagingSenderId: "1066128740156",
-  appId: "1:1066128740156:web:b69065931e28d7b4b59839",
-  measurementId: "G-82MQGSGT3B"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
 const app = initializeApp(firebaseConfig);
@@ -4610,6 +4610,21 @@ const DocumentUploadModal = ({ isOpen, onClose, currentFamilyId, settings }: any
     const [docData, setDocData] = useState<Partial<ArchiveDocument>>({
         title: '', category: '其他 (Others)', member: 'Family', date: new Date().toISOString().split('T')[0], note: '', tags: []
     });
+
+    // 👇 加入這個狀態重置引擎 👇
+    useEffect(() => {
+        if (isOpen) {
+            setFile(null);
+            setPreviewUrl('');
+            setIsUploading(false);
+            setIsAiScanning(false);
+            setUploadProgress(0);
+            setDocData({
+                title: '', category: '其他 (Others)', member: 'Family', date: new Date().toISOString().split('T')[0], note: '', tags: []
+            });
+        }
+    }, [isOpen]);
+    // 👆 加入結束 👆
 
     const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const selectedFile = e.target.files?.[0];

@@ -2897,33 +2897,33 @@ const PartnerClearingHub = ({ transactions, settings, setEditingTx, setModalMode
                                                     <td className="p-3 text-xs text-slate-500 font-mono">{t.date}</td>
                                                     <td className="p-3"><span className="px-2 py-1 bg-slate-100 rounded text-xs">{t.category}</span></td>
                                                     <td className="p-3 font-medium">
-                                                        <div className="flex flex-col gap-1">
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="text-slate-700">{t.merchant}</span>
-                                                                
-                                                                {/* 👇 提示 2：如果有上傳實體圖片/單據 (改為可點擊預覽) */}
-                                                                {t.attachments && t.attachments.length > 0 && (
-                                                                    <button 
-                                                                        onClick={(e) => { e.stopPropagation(); openPreview(t.attachments); }}
-                                                                        className="text-[10px] text-blue-600 bg-blue-50 hover:bg-blue-100 hover:border-blue-300 px-1.5 py-0.5 rounded border border-blue-200 font-bold flex items-center gap-1 whitespace-nowrap cursor-pointer transition-colors shadow-sm" 
-                                                                        title="點擊預覽單據大圖"
-                                                                    >
-                                                                        <ICONS.Image /> 附圖 ({t.attachments.length})
-                                                                    </button>
-                                                                )}
-
-                                                                {/* 👇 提示 2：如果有上傳實體圖片/單據 */}
-                                                                {t.attachments && t.attachments.length > 0 && (
-                                                                    <span className="text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 font-bold flex items-center gap-1 whitespace-nowrap" title="此紀錄附有圖片/單據">
-                                                                        <ICONS.Image /> 附圖 ({t.attachments.length})
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                            
-                                                            {/* 備註顯示在第二行，保持版面整潔 */}
-                                                            {t.note && <span className="text-xs text-slate-400 font-normal">({t.note})</span>}
-                                                        </div>
-                                                    </td>
+                                                          <div className="flex flex-col gap-1">
+                                                              <div className="flex items-center gap-2">
+                                                                  <span className="text-slate-700">{t.merchant}</span>
+                                                                  
+                                                                  {/* 👇 提示 1：如果有系統生成的收據編號 */}
+                                                                  {t.receiptNo && (
+                                                                      <span className="text-[10px] text-green-700 bg-green-100 px-1.5 py-0.5 rounded border border-green-200 font-bold whitespace-nowrap">
+                                                                          🧾 {t.receiptNo}
+                                                                      </span>
+                                                                  )}
+                                                      
+                                                                  {/* 👇 提示 2：如果有上傳實體圖片/單據 (可點擊的大圖預覽按鈕) */}
+                                                                  {t.attachments && t.attachments.length > 0 && (
+                                                                      <button 
+                                                                          onClick={(e) => { e.stopPropagation(); openPreview(t.attachments); }}
+                                                                          className="text-[10px] text-blue-600 bg-blue-50 hover:bg-blue-100 hover:border-blue-300 px-1.5 py-0.5 rounded border border-blue-200 font-bold flex items-center gap-1 whitespace-nowrap cursor-pointer transition-colors shadow-sm" 
+                                                                          title="點擊預覽單據大圖"
+                                                                      >
+                                                                          <ICONS.Image /> 附圖 ({t.attachments.length})
+                                                                      </button>
+                                                                  )}
+                                                              </div>
+                                                              
+                                                              {/* 備註顯示在第二行，保持版面整潔 */}
+                                                              {t.note && <span className="text-xs text-slate-400 font-normal">({t.note})</span>}
+                                                          </div>
+                                                      </td>
                                                     <td className={`p-3 text-right font-mono font-bold ${isIncome ? 'text-emerald-600' : 'text-red-500'}`}>{isIncome ? '+' : '-'}{formatCurrency(Math.abs(t.amount))}</td>
                                                     
                                                     {/* 👇 加入了編輯與刪除按鈕 👇 */}

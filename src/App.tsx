@@ -2743,7 +2743,30 @@ const InvestorDetailModal = ({ investor, onClose, transactions, settings }: { in
 // 👇 注意這裡多接收了 deleteItem 屬性
 const PartnerClearingHub = ({ transactions, settings, setEditingTx, setModalMode, deleteItem }: any) => {
     const [selectedPartner, setSelectedPartner] = useState('');
+    // 👇 新增：大圖預覽狀態管理 👇
+    const [previewImages, setPreviewImages] = useState<string[]>([]);
+    const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
+    const openPreview = (images: string[]) => {
+        setPreviewImages(images);
+        setCurrentImageIndex(0);
+    };
+
+    const closePreview = () => {
+        setPreviewImages([]);
+        setCurrentImageIndex(0);
+    };
+
+    const nextImage = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setCurrentImageIndex((prev) => (prev + 1) % previewImages.length);
+    };
+
+    const prevImage = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setCurrentImageIndex((prev) => (prev - 1 + previewImages.length) % previewImages.length);
+    };
+    // 👆 新增結束 👆
     const partnerTxs = useMemo(() => {
         if (!selectedPartner) return [];
         return transactions
@@ -2878,11 +2901,15 @@ const PartnerClearingHub = ({ transactions, settings, setEditingTx, setModalMode
                                                             <div className="flex items-center gap-2">
                                                                 <span className="text-slate-700">{t.merchant}</span>
                                                                 
-                                                                {/* 👇 提示 1：如果有系統生成的收據編號 */}
-                                                                {t.receiptNo && (
-                                                                    <span className="text-[10px] text-green-700 bg-green-100 px-1.5 py-0.5 rounded border border-green-200 font-bold whitespace-nowrap">
-                                                                        🧾 {t.receiptNo}
-                                                                    </span>
+                                                                {/* 👇 提示 2：如果有上傳實體圖片/單據 (改為可點擊預覽) */}
+                                                                {t.attachments && t.attachments.length > 0 && (
+                                                                    <button 
+                                                                        onClick={(e) => { e.stopPropagation(); openPreview(t.attachments); }}
+                                                                        className="text-[10px] text-blue-600 bg-blue-50 hover:bg-blue-100 hover:border-blue-300 px-1.5 py-0.5 rounded border border-blue-200 font-bold flex items-center gap-1 whitespace-nowrap cursor-pointer transition-colors shadow-sm" 
+                                                                        title="點擊預覽單據大圖"
+                                                                    >
+                                                                        <ICONS.Image /> 附圖 ({t.attachments.length})
+                                                                    </button>
                                                                 )}
 
                                                                 {/* 👇 提示 2：如果有上傳實體圖片/單據 */}
@@ -2979,9 +3006,52 @@ const PartnerClearingHub = ({ transactions, settings, setEditingTx, setModalMode
                     </div>
                 </div>
             </div>
+
+          {/* --- 👇 隱藏的 PDF 列印視圖保持不變 (省略顯示) ... --- */}
+            
+            {/* 🖼️ 大圖預覽 Modal (Lightbox) */}
+            {previewImages.length > 0 && (
+                <div 
+                    className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/90 backdrop-blur-sm transition-opacity animate-in fade-in" 
+                    onClick={closePreview}
+                >
+                    {/* 頂部控制列：關閉按鈕與進度 */}
+                    <div className="absolute top-0 left-0 w-full p-4 flex justify-between items-center z-50 bg-gradient-to-b from-black/50 to-transparent">
+                        <div className="text-white font-mono bg-black/50 px-3 py-1 rounded-full text-sm">
+                            {previewImages.length > 1 ? `${currentImageIndex + 1} / ${previewImages.length}` : '單據預覽'}
+                        </div>
+                        <button onClick={closePreview} className="text-white hover:text-red-400 p-2 bg-black/50 rounded-full transition-colors backdrop-blur-md">
+                            <ICONS.X />
+                        </button>
+                    </div>
+
+                    {/* 左右導航按鈕 (僅多圖時顯示) */}
+                    {previewImages.length > 1 && (
+                        <>
+                            <button onClick={prevImage} className="absolute left-2 md:left-6 top-1/2 -translate-y-1/2 text-white bg-black/50 hover:bg-blue-600 p-3 md:p-4 rounded-full transition-colors z-50 shadow-lg backdrop-blur-md">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                            </button>
+                            <button onClick={nextImage} className="absolute right-2 md:right-6 top-1/2 -translate-y-1/2 text-white bg-black/50 hover:bg-blue-600 p-3 md:p-4 rounded-full transition-colors z-50 shadow-lg backdrop-blur-md">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                            </button>
+                        </>
+                    )}
+
+                    {/* 主圖片顯示區 */}
+                    <div className="relative w-full h-full max-w-6xl max-h-[90vh] flex items-center justify-center p-4 mt-8" onClick={(e) => e.stopPropagation()}>
+                        <img
+                            src={previewImages[currentImageIndex]}
+                            alt={`Receipt Preview ${currentImageIndex + 1}`}
+                            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl animate-in zoom-in-95 duration-200"
+                        />
+                    </div>
+                </div>
+            )}
+            
         </div>
     );
 };
+        
 
 // 📄 私人借貸對帳單預覽與列印 Modal
 const PrivateLoanStatementModal = ({ 
